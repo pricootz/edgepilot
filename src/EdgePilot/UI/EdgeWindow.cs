@@ -543,7 +543,7 @@ public sealed class EdgeWindow : Window
     private Rect TooltipLiveRect()
     {
         if (!_tooltipCard.IsVisible || _hoveredMetric is null)
-            return Rect.Empty;
+            return default;
 
         var x = Canvas.GetLeft(_tooltipCard);
         var y = Canvas.GetTop(_tooltipCard);
@@ -553,7 +553,7 @@ public sealed class EdgeWindow : Window
     private Rect BridgeRect()
     {
         if (_hoveredMetric is null || !_tooltipCard.IsVisible)
-            return Rect.Empty;
+            return default;
 
         var tip = TooltipLiveRect();
         var shape = ShapeRect();
