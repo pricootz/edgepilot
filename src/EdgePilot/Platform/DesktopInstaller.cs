@@ -34,7 +34,7 @@ public static class DesktopInstaller
             Directory.CreateDirectory(applications);
             var entry = new LaunchCommand(executable, new[] { "--settings" }).DesktopEntry()
                 .Replace("X-GNOME-Autostart-enabled=true\n", "Categories=System;Monitor;\n");
-            entry += "Icon=" + Path.Combine(target, "Assets", "edgepilot.svg").Replace("\\", "\\\\") + "\n";
+            entry += "Icon=" + Path.Combine(target, "Assets", "edgepilot.png").Replace("\\", "\\\\") + "\n";
             File.WriteAllText(Path.Combine(applications, "io.github.pricootz.EdgePilot.desktop"), entry);
         }
         else throw new PlatformNotSupportedException();
