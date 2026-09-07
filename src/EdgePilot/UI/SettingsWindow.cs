@@ -6,11 +6,11 @@ namespace EdgePilot.UI;
 
 public sealed class SettingsWindow : Window
 {
-    public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null)
+    public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null, string? storagePath = null)
     {
         Title = "EdgePilot · Settings";
         Width = 420;
-        Height = 390;
+        Height = 460;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         var edge = new ComboBox
@@ -36,7 +36,7 @@ public sealed class SettingsWindow : Window
             var value = new NotchPreferences((EdgeSide)edge.SelectedIndex, (NotchDisplayMode)mode.SelectedIndex);
             try
             {
-                PreferenceStore.Save(PreferenceStore.DefaultPath, value);
+                PreferenceStore.Save(storagePath ?? PreferenceStore.DefaultPath, value);
                 apply(value);
                 message.Text = value.Mode == NotchDisplayMode.Hidden
                     ? "Notch hidden. Choose another mode to show it. Closing Settings now exits EdgePilot; reopening EdgePilot returns here."
@@ -47,7 +47,7 @@ public sealed class SettingsWindow : Window
                 message.Text = "Could not save settings. Your current settings are unchanged. " + ex.Message;
             }
         };
-        Content = new StackPanel
+        Content = new ScrollViewer { Content = new StackPanel
         {
             Margin = new Thickness(24),
             Spacing = 12,
@@ -58,6 +58,6 @@ public sealed class SettingsWindow : Window
                 new TextBlock { Text = "Display" }, mode,
                 message, applyButton
             }
-        };
+        } };
     }
 }
