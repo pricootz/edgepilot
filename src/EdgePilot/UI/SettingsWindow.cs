@@ -102,7 +102,7 @@ public sealed class SettingsWindow : Window
                         : "Pannello nascosto. Scegli un’altra modalità per mostrarlo. Chiudendo le impostazioni esci da EdgePilot; al prossimo avvio tornerai qui.")
                     : "Impostazioni salvate. Fai clic destro sul pannello per riaprirle.";
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException)
             {
                 System.Diagnostics.Trace.WriteLine(ex);
                 message.Text = "Impossibile salvare le impostazioni. Le preferenze attive non sono cambiate. Verifica i permessi di scrittura e lo spazio disponibile, poi riprova.";

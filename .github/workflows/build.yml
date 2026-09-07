@@ -9,14 +9,21 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
     runs-on: ${{ matrix.os }}
-
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,11 +33,66 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore
-        run: dotnet restore src/EdgePilot/EdgePilot.csproj
-
       - name: Build
-        run: dotnet build src/EdgePilot/EdgePilot.csproj --configuration Release --no-restore
+        run: dotnet build src/EdgePilot/EdgePilot.csproj --configuration Release
 
       - name: Notch UX regression checks
         run: dotnet run --project tests/EdgePilot.UxChecks --configuration Release
+
+      - name: Publish self-contained package
+        run: dotnet publish src/EdgePilot/EdgePilot.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:DebugType=None -p:DebugSymbols=false -o dist/EdgePilot
+
+      - name: Prepare and verify Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item packaging/Installa.ps1 dist/EdgePilot/
+          Copy-Item packaging/LEGGIMI.md dist/EdgePilot/
+          $exe = (Resolve-Path dist/EdgePilot/EdgePilot.exe).Path
+          $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
+          if (-not $smoke.WaitForExit(20000)) {
+            $smoke.Kill()
+            throw 'Il pacchetto non termina il controllo di avvio.'
+          }
+          if ($smoke.ExitCode -ne 0) { throw "Avvio fallito: $($smoke.ExitCode)" }
+          $install = Start-Process -FilePath $exe -ArgumentList '--install' -Wait -PassThru -WindowStyle Hidden
+          if ($install.ExitCode -ne 0) { throw 'Installazione per utente fallita.' }
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs/EdgePilot/EdgePilot.exe'
+          if (-not (Test-Path $installed)) { throw 'Eseguibile installato assente.' }
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'EdgePilot.lnk'
+          if (-not (Test-Path $shortcut)) { throw 'Collegamento Start assente.' }
+          Compress-Archive -Path dist/EdgePilot/* -DestinationPath dist/EdgePilot-win-x64.zip
+          (Get-FileHash dist/EdgePilot-win-x64.zip -Algorithm SHA256).Hash | Set-Content dist/EdgePilot-win-x64.sha256
+
+      - name: Prepare and verify Ubuntu package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cp packaging/installa.sh packaging/LEGGIMI.md dist/EdgePilot/
+          chmod +x dist/EdgePilot/EdgePilot dist/EdgePilot/installa.sh
+          timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test
+          dist/EdgePilot/EdgePilot --install
+          test -x "$HOME/.local/share/edgepilot/EdgePilot"
+          test -f "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
+          tar -czf dist/EdgePilot-linux-x64.tar.gz -C dist/EdgePilot .
+          sha256sum dist/EdgePilot-linux-x64.tar.gz > dist/EdgePilot-linux-x64.sha256
+
+      - name: Upload Windows package
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgePilot-win-x64
+          path: |
+            dist/EdgePilot-win-x64.zip
+            dist/EdgePilot-win-x64.sha256
+          retention-days: 30
+
+      - name: Upload Ubuntu package
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgePilot-linux-x64
+          path: |
+            dist/EdgePilot-linux-x64.tar.gz
+            dist/EdgePilot-linux-x64.sha256
+          retention-days: 30

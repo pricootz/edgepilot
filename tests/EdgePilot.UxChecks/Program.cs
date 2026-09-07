@@ -256,7 +256,7 @@ try
     var selectors = settingsPanel.Children.OfType<ComboBox>().ToArray();
     selectors[0].SelectedIndex = (int)EdgeSide.Bottom;
     selectors[1].SelectedIndex = (int)NotchDisplayMode.Always;
-    settingsPanel.Children.OfType<Button>().Single().RaiseEvent(
+    settingsPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(
         new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied == new NotchPreferences(EdgeSide.Bottom, NotchDisplayMode.Always),
         "settings Apply invokes live update");
@@ -266,10 +266,10 @@ try
     var checks = settingsPanel.Children.OfType<WrapPanel>().Single().Children.OfType<CheckBox>().ToArray();
     foreach (var checkbox in checks) checkbox.IsChecked = false;
     applied = null;
-    settingsPanel.Children.OfType<Button>().Single().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    settingsPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied is null, "empty metric selection is not applied");
     checks[3].IsChecked = true;
-    settingsPanel.Children.OfType<Button>().Single().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    settingsPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied?.Metrics == VisibleMetrics.Network && applied.RefreshIntervalMs == 5000 &&
         applied.Sensitivity == HoverSensitivity.Wide, "new UI selections apply");
     Check(PreferenceStore.Load(settingsPath) == applied, "new UI selections persist");
@@ -279,17 +279,21 @@ try
     var failingSettings = new SettingsWindow(new NotchPreferences(), value => applied = value,
         storagePath: temporaryDirectory);
     var failingPanel = (StackPanel)((ScrollViewer)failingSettings.Content!).Content!;
-    failingPanel.Children.OfType<Button>().Single().RaiseEvent(
+    failingPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(
         new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied is null, "save failure does not apply changes");
     Check(failingPanel.Children.OfType<TextBlock>().Any(x => x.Text?.StartsWith("Impossibile salvare") == true),
         "save failure is visible");
     failingSettings.Close();
     var diskSettings = new SettingsWindow(new NotchPreferences { SelectedDrive = "/mnt/dati16" },
-        _ => { }, drives: drives);
+        value => applied = value, storagePath: settingsPath, drives: drives);
     var diskPanel = (StackPanel)((ScrollViewer)diskSettings.Content!).Content!;
     var diskSelector = diskPanel.Children.OfType<ComboBox>().Last();
     Check(((DriveChoice)diskSelector.SelectedItem!).Name == "/mnt/dati16", "saved disk selected in settings");
+    diskPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(
+        new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(applied?.SelectedDrive == "/mnt/dati16" && PreferenceStore.Load(settingsPath).SelectedDrive == "/mnt/dati16",
+        "disk picker selection persists");
     diskSelector.SelectedItem = ((IReadOnlyList<DriveChoice>)diskSelector.ItemsSource!)[0];
     diskSettings.UpdateDrives(drives);
     Check(((DriveChoice)diskSelector.SelectedItem!).Name is null, "refresh preserves unsaved automatic choice");
