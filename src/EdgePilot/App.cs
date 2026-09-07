@@ -11,6 +11,11 @@ public sealed class App : Application
 {
     public override void Initialize()
     {
+        var italian = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
+        System.Globalization.CultureInfo.DefaultThreadCurrentCulture = italian;
+        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = italian;
+        System.Globalization.CultureInfo.CurrentCulture = italian;
+        System.Globalization.CultureInfo.CurrentUICulture = italian;
         Styles.Add(new FluentTheme());
         RequestedThemeVariant = ThemeVariant.Dark;
     }
@@ -27,7 +32,8 @@ public sealed class App : Application
                 or System.Text.Json.JsonException or ArgumentException)
             {
                 preferences = new();
-                warning = "Could not read saved settings. Defaults are active; Apply replaces the file. " + ex.Message;
+                System.Diagnostics.Trace.WriteLine(ex);
+                warning = "Impossibile leggere le impostazioni salvate. Sono attive quelle predefinite. Premi Applica per salvare nuovamente le preferenze.";
             }
             // Preserve the existing development override without writing it to disk.
             if (Environment.GetEnvironmentVariable("EDGEPILOT_EDGE") is { Length: > 0 })

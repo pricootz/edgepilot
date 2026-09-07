@@ -23,14 +23,14 @@ public static class PreferenceStore
     public static void Validate(NotchPreferences value)
     {
         if (!Enum.IsDefined(value.Edge) || !Enum.IsDefined(value.Mode))
-            throw new InvalidDataException("Unsupported edge or display mode.");
+            throw new InvalidDataException("Bordo o modalità di visualizzazione non supportati.");
     }
 
     public static NotchPreferences Load(string path)
     {
         if (!File.Exists(path)) return new();
         var value = JsonSerializer.Deserialize<NotchPreferences>(File.ReadAllText(path), Options)
-            ?? throw new InvalidDataException("The settings file is empty.");
+            ?? throw new InvalidDataException("Il file delle impostazioni è vuoto.");
         Validate(value);
         return value;
     }

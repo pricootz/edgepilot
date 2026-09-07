@@ -23,8 +23,8 @@ internal static class DisplayFormat
 
     public static string Uptime(TimeSpan uptime)
     {
-        if (uptime.TotalDays >= 1) return $"{(int)uptime.TotalDays}d {uptime.Hours}h {uptime.Minutes}m";
-        if (uptime.TotalHours >= 1) return $"{uptime.Hours}h {uptime.Minutes}m";
-        return $"{uptime.Minutes}m {uptime.Seconds}s";
+        if (uptime.TotalDays >= 1) return $"{(int)uptime.TotalDays} g {uptime.Hours} h {uptime.Minutes} min";
+        if (uptime.TotalHours >= 1) return $"{uptime.Hours} h {uptime.Minutes} min";
+        return $"{uptime.Minutes} min {uptime.Seconds} s";
     }
 }
