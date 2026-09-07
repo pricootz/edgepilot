@@ -11,7 +11,7 @@
 - [x] Disk capacity.
 - [x] Active network and throughput.
 - [x] Uptime and machine identity.
-- [ ] Verify build on CI.
+- [x] Verify build on CI (Windows + Ubuntu).
 - [ ] Hands-on Windows test.
 - [ ] Hands-on Ubuntu test.
 - [ ] Tune dimensions and interaction after real use.
