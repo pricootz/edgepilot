@@ -19,7 +19,8 @@ internal sealed class MetricRing : StackPanel
     public MetricRing(string glyph, string caption)
     {
         Width = 62;
-        Spacing = 5;
+        Height = 78;
+        Spacing = 4;
         HorizontalAlignment = HorizontalAlignment.Center;
 
         _glyph = new TextBlock
@@ -44,10 +45,12 @@ internal sealed class MetricRing : StackPanel
 
         var track = new Ellipse
         {
-            Width = Diameter,
-            Height = Diameter,
+            Width = Diameter - TrackInset * 2 + 3,
+            Height = Diameter - TrackInset * 2 + 3,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Stroke = Brush("#323741"),
-            StrokeThickness = 5
+            StrokeThickness = 3
         };
 
         var ring = new Grid
@@ -64,6 +67,7 @@ internal sealed class MetricRing : StackPanel
         {
             Text = "—",
             FontSize = 11,
+            Height = 14,
             FontWeight = FontWeight.SemiBold,
             Foreground = Brush("#F4F6F8"),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -74,6 +78,7 @@ internal sealed class MetricRing : StackPanel
         {
             Text = caption,
             FontSize = 8,
+            Height = 10,
             FontWeight = FontWeight.SemiBold,
             Foreground = Brush("#777F8C"),
             HorizontalAlignment = HorizontalAlignment.Center,

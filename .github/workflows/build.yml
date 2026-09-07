@@ -31,3 +31,6 @@ jobs:
 
       - name: Build
         run: dotnet build src/EdgePilot/EdgePilot.csproj --configuration Release --no-restore
+
+      - name: Notch UX regression checks
+        run: dotnet run --project tests/EdgePilot.UxChecks --configuration Release
