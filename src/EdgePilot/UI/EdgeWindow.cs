@@ -20,14 +20,17 @@ public sealed class EdgeWindow : Window
     private const double CollapsedDepth = 10;
     private const double CollapsedLength = 82;
     private const double ExpandedDepth = 88;
-    private const double ExpandedLength = 408;
-    private const double HotZoneDepth = 36;
-    private const double HotZoneLength = 120;
+    private double ExpandedLength => StackHeight + 66;
+    private double HotZoneDepth => _sensitivity switch { HoverSensitivity.Precise => 18, HoverSensitivity.Wide => 54, _ => 36 };
+    private double HotZoneLength => _sensitivity switch { HoverSensitivity.Precise => 96, HoverSensitivity.Wide => 152, _ => 120 };
 
     private const double FoldDelayMs = 450;
     private const double CellHeight = 78;
     private const double CellGap = 10;
-    private const double StackHeight = 4 * CellHeight + 3 * CellGap;
+    private int[] _visibleMetricIndices = [0, 1, 2, 3];
+    private double StackHeight => _visibleMetricIndices.Length * CellHeight + (_visibleMetricIndices.Length - 1) * CellGap;
+    private HoverSensitivity _sensitivity = HoverSensitivity.Normal;
+    private VisibleMetrics _metrics = VisibleMetrics.All;
 
     private EdgeSide _edge = EdgePlacement.FromEnvironment();
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
@@ -392,11 +395,11 @@ public sealed class EdgeWindow : Window
         const double cell = CellHeight;
         const double gap = CellGap;
 
-        for (var index = 0; index < 4; index++)
+        for (var index = 0; index < _visibleMetricIndices.Length; index++)
         {
             var top = stackTop + index * (cell + gap);
             if (point.Y >= top && point.Y <= top + cell)
-                return index;
+                return _visibleMetricIndices[index];
         }
 
         return null;
@@ -481,7 +484,11 @@ public sealed class EdgeWindow : Window
         }
     }
 
-    public NotchPreferences Preferences => new(_edge, _mode);
+    public NotchPreferences Preferences => new(_edge, _mode)
+    {
+        Metrics = _metrics, Sensitivity = _sensitivity,
+        RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds
+    };
 
     public void ApplyPreferences(NotchPreferences preferences)
     {
@@ -491,6 +498,13 @@ public sealed class EdgeWindow : Window
         _pinned = false;
         _edge = preferences.Edge;
         _mode = preferences.Mode;
+        _metrics = preferences.Metrics;
+        _sensitivity = preferences.Sensitivity;
+        _monitor.RefreshInterval = TimeSpan.FromMilliseconds(preferences.RefreshIntervalMs);
+        _visibleMetricIndices = Enumerable.Range(0, 4).Where(i => ((int)_metrics & (1 << i)) != 0).ToArray();
+        _metricStack.Children.Clear();
+        MetricRing[] rings = [_cpuRing, _ramRing, _diskRing, _networkRing];
+        foreach (var index in _visibleMetricIndices) _metricStack.Children.Add(rings[index]);
         ConfigureLayout();
         _expanded = _mode == NotchDisplayMode.Always;
         StartMotion(_expanded ? 1 : 0);
@@ -561,7 +575,7 @@ public sealed class EdgeWindow : Window
         _tooltipCard.Measure(new Size(tooltipWidth, double.PositiveInfinity));
         var height = Math.Max(174, _tooltipCard.DesiredSize.Height);
         var center = NotchLayout.ToScreen(new Point(WindowWidth - ExpandedDepth / 2,
-            (WindowHeight - StackHeight) / 2 + index * (CellHeight + CellGap) + CellHeight / 2), _edge);
+            (WindowHeight - StackHeight) / 2 + Array.IndexOf(_visibleMetricIndices, index) * (CellHeight + CellGap) + CellHeight / 2), _edge);
         var x = _edge switch
         {
             EdgeSide.Right => Width - ExpandedDepth - gap - tooltipWidth,

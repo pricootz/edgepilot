@@ -5,8 +5,17 @@ namespace EdgePilot.UI;
 
 public enum NotchDisplayMode { Hover, Always, Hidden }
 
+public enum HoverSensitivity { Precise, Normal, Wide }
+[Flags]
+public enum VisibleMetrics { Cpu = 1, Memory = 2, Disk = 4, Network = 8, All = 15 }
+
 public sealed record NotchPreferences(EdgeSide Edge = EdgeSide.Right,
-    NotchDisplayMode Mode = NotchDisplayMode.Hover);
+    NotchDisplayMode Mode = NotchDisplayMode.Hover)
+{
+    public int RefreshIntervalMs { get; init; } = 1000;
+    public HoverSensitivity Sensitivity { get; init; } = HoverSensitivity.Normal;
+    public VisibleMetrics Metrics { get; init; } = VisibleMetrics.All;
+}
 
 public static class PreferenceStore
 {
@@ -24,6 +33,12 @@ public static class PreferenceStore
     {
         if (!Enum.IsDefined(value.Edge) || !Enum.IsDefined(value.Mode))
             throw new InvalidDataException("Bordo o modalità di visualizzazione non supportati.");
+        if (value.RefreshIntervalMs is not (500 or 1000 or 2000 or 5000))
+            throw new InvalidDataException("Intervallo di aggiornamento non supportato.");
+        if (!Enum.IsDefined(value.Sensitivity))
+            throw new InvalidDataException("Sensibilità non supportata.");
+        if (value.Metrics == 0 || (value.Metrics & ~VisibleMetrics.All) != 0)
+            throw new InvalidDataException("Seleziona almeno una metrica valida.");
     }
 
     public static NotchPreferences Load(string path)

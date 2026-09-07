@@ -147,6 +147,38 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     Check((bool)Field(window, "_expanded")!, "hover restored " + edge);
 }
 
+foreach (var edge in Enum.GetValues<EdgeSide>())
+foreach (var mask in Enumerable.Range(1, 15))
+{
+    var preferences = new NotchPreferences(edge) { Metrics = (VisibleMetrics)mask, RefreshIntervalMs = 2000,
+        Sensitivity = HoverSensitivity.Precise };
+    window.ApplyPreferences(preferences);
+    Set(window, "_expansion", 1d);
+    Call(window, "UpdateNotchVisual");
+    Check(window.Preferences == preferences, "live preferences round trip");
+    var indices = Enumerable.Range(0, 4).Where(i => (mask & (1 << i)) != 0).ToArray();
+    var span = indices.Length * 78 + (indices.Length - 1) * 10;
+    Check(stack.Children.Count == indices.Length, "selected rings only");
+    for (var slot = 0; slot < indices.Length; slot++)
+    {
+        var point = NotchLayout.ToScreen(new Point(366, (620 - span) / 2d + slot * 88 + 39), edge);
+        Check((int)Call(window, "MetricIndexAt", point)! == indices[slot], "filtered metric identity");
+    }
+    var bounds = shape.Data!.Bounds;
+    Check(Math.Abs((NotchLayout.Horizontal(edge) ? bounds.Width : bounds.Height) - (span + 66)) < 0.001,
+        "notch shrinks to selected metrics");
+}
+foreach (var edge in Enum.GetValues<EdgeSide>())
+{
+    window.ApplyPreferences(new NotchPreferences(edge) { Sensitivity = HoverSensitivity.Precise });
+    var small = (Rect)Call(window, "HotZoneRect")!;
+    window.ApplyPreferences(new NotchPreferences(edge) { Sensitivity = HoverSensitivity.Wide });
+    var large = (Rect)Call(window, "HotZoneRect")!;
+    Check(large.Contains(small) && large.Width * large.Height > small.Width * small.Height,
+        "sensitivity grows hit area on " + edge);
+}
+window.ApplyPreferences(new NotchPreferences());
+
 var temporaryDirectory = Path.Combine(Path.GetTempPath(), "edgepilot-checks-" + Guid.NewGuid().ToString("N"));
 var settingsPath = Path.Combine(temporaryDirectory, "settings.json");
 try
@@ -159,7 +191,25 @@ try
         PreferenceStore.Save(settingsPath, saved);
         Check(PreferenceStore.Load(settingsPath) == saved, "settings round trip " + edge + mode);
     }
+    File.WriteAllText(settingsPath, "{\"Edge\":\"Left\",\"Mode\":\"Hover\"}");
+    Check(PreferenceStore.Load(settingsPath) == new NotchPreferences(EdgeSide.Left), "old settings retain defaults");
+    foreach (var interval in new[] { 500, 1000, 2000, 5000 })
+    {
+        var extended = new NotchPreferences(EdgeSide.Top) { Metrics = VisibleMetrics.Network,
+            Sensitivity = HoverSensitivity.Wide, RefreshIntervalMs = interval };
+        PreferenceStore.Save(settingsPath, extended);
+        Check(PreferenceStore.Load(settingsPath) == extended, "extended settings persist");
+    }
     var lastGood = File.ReadAllText(settingsPath);
+    foreach (var invalid in new[]
+    {
+        new NotchPreferences { Metrics = 0 }, new NotchPreferences { Metrics = (VisibleMetrics)16 },
+        new NotchPreferences { RefreshIntervalMs = 0 }, new NotchPreferences { Sensitivity = (HoverSensitivity)999 }
+    })
+    {
+        try { PreferenceStore.Save(settingsPath, invalid); Check(false, "invalid preference rejected"); }
+        catch (InvalidDataException) { Check(File.ReadAllText(settingsPath) == lastGood, "invalid preferences preserve file"); }
+    }
     try
     {
         PreferenceStore.Save(settingsPath, new NotchPreferences((EdgeSide)999));
@@ -185,6 +235,18 @@ try
     Check(applied == new NotchPreferences(EdgeSide.Bottom, NotchDisplayMode.Always),
         "settings Apply invokes live update");
     Check(PreferenceStore.Load(settingsPath) == applied, "settings Apply persists chosen values");
+    selectors[2].SelectedIndex = 3;
+    selectors[3].SelectedIndex = (int)HoverSensitivity.Wide;
+    var checks = settingsPanel.Children.OfType<WrapPanel>().Single().Children.OfType<CheckBox>().ToArray();
+    foreach (var checkbox in checks) checkbox.IsChecked = false;
+    applied = null;
+    settingsPanel.Children.OfType<Button>().Single().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(applied is null, "empty metric selection is not applied");
+    checks[3].IsChecked = true;
+    settingsPanel.Children.OfType<Button>().Single().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(applied?.Metrics == VisibleMetrics.Network && applied.RefreshIntervalMs == 5000 &&
+        applied.Sensitivity == HoverSensitivity.Wide, "new UI selections apply");
+    Check(PreferenceStore.Load(settingsPath) == applied, "new UI selections persist");
     settings.Close();
 
     applied = null;
