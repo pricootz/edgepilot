@@ -1,9 +1,11 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Path = Avalonia.Controls.Shapes.Path;
 using EdgePilot.Core;
 using EdgePilot.Core.Monitoring;
 using EdgePilot.Platform;
@@ -12,46 +14,54 @@ namespace EdgePilot.UI;
 
 public sealed class EdgeWindow : Window
 {
-    private const double CollapsedWidth = 12;
-    private const double CollapsedHeight = 82;
-    private const double ExpandedWidth = 352;
-    private const double ExpandedHeight = 508;
+    private const double WindowWidth = 410;
+    private const double WindowHeight = 620;
+
+    private const double CollapsedDepth = 10;
+    private const double CollapsedLength = 82;
+    private const double ExpandedDepth = 88;
+    private const double ExpandedLength = 430;
+    private const double HotZoneDepth = 36;
+    private const double HotZoneLength = 120;
+
     private const double FoldDelayMs = 450;
-    private const double MotionDurationMs = 300;
+    private const double MotionDurationMs = 420;
 
     private readonly EdgeSide _edge = EdgePlacement.FromEnvironment();
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly DispatcherTimer _cursorTimer;
 
-    private readonly Border _root;
-    private readonly Control _collapsedView;
-    private readonly Control _expandedView;
-    private readonly TextBlock _hostText;
-    private readonly TextBlock _osText;
-    private readonly TextBlock _cpuValue;
-    private readonly TextBlock _cpuDetail;
-    private readonly ProgressBar _cpuBar;
-    private readonly TextBlock _ramValue;
-    private readonly TextBlock _ramDetail;
-    private readonly ProgressBar _ramBar;
-    private readonly Border _networkDot;
-    private readonly TextBlock _networkName;
-    private readonly TextBlock _networkSpeed;
-    private readonly TextBlock _uptimeText;
-    private readonly TextBlock _updatedText;
-    private readonly StackPanel _drivePanel;
-    private readonly Button _pinButton;
+    private readonly Path _notchShape;
+    private readonly Canvas _notchContent;
+    private readonly StackPanel _metricStack;
+    private readonly MetricRing _cpuRing;
+    private readonly MetricRing _ramRing;
+    private readonly MetricRing _diskRing;
+    private readonly MetricRing _networkRing;
+
+    private readonly Border _tooltipCard;
+    private readonly TextBlock _tooltipTitle;
+    private readonly TextBlock _tooltipValue;
+    private readonly TextBlock _tooltipLine1;
+    private readonly TextBlock _tooltipLine2;
+    private readonly TextBlock _tooltipLine3;
 
     private CancellationTokenSource? _foldDelay;
     private CancellationTokenSource? _motion;
+    private SystemSnapshot? _latestSnapshot;
+    private double _expansion;
     private bool _expanded;
     private bool _pinned;
+    private int? _hoveredMetric;
+
+    private readonly Win32Properties.CustomWndProcHookCallback? _wndProcHook;
 
     public EdgeWindow()
     {
         Title = "EdgePilot";
-        Width = CollapsedWidth;
-        Height = CollapsedHeight;
+        Width = WindowWidth;
+        Height = WindowHeight;
         CanResize = false;
         WindowDecorations = WindowDecorations.None;
         ShowInTaskbar = false;
@@ -61,47 +71,82 @@ public sealed class EdgeWindow : Window
         TransparencyBackgroundFallback = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
 
-        _hostText = Text("EdgePilot", 18, FontWeight.SemiBold, "#F5F7FA");
-        _osText = Text("Starting system monitor…", 11, FontWeight.Normal, "#8B93A1");
-        _cpuValue = Text("--%", 30, FontWeight.SemiBold, "#F5F7FA");
-        _cpuDetail = Text("CPU", 11, FontWeight.Normal, "#8B93A1");
-        _cpuBar = Meter();
-        _ramValue = Text("--%", 30, FontWeight.SemiBold, "#F5F7FA");
-        _ramDetail = Text("Memory", 11, FontWeight.Normal, "#8B93A1");
-        _ramBar = Meter();
-        _networkDot = StatusDot(false);
-        _networkName = Text("Network", 12, FontWeight.SemiBold, "#F5F7FA");
-        _networkSpeed = Text("Waiting for sample…", 11, FontWeight.Normal, "#8B93A1");
-        _uptimeText = Text("--", 12, FontWeight.SemiBold, "#F5F7FA");
-        _updatedText = Text("--", 10, FontWeight.Normal, "#646C78");
-        _drivePanel = new StackPanel { Spacing = 10 };
-        _pinButton = SmallButton("PIN");
-
-        _collapsedView = BuildCollapsedView();
-        _expandedView = BuildExpandedView();
-        _expandedView.IsVisible = false;
-        _expandedView.Opacity = 0;
-
-        var content = new Grid { ClipToBounds = true };
-        content.Children.Add(_collapsedView);
-        content.Children.Add(_expandedView);
-
-        _root = new Border
+        _notchShape = new Path
         {
-            Background = Brush("#050608"),
-            BorderBrush = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            CornerRadius = CornerRadiusForEdge(_edge, 8),
-            Padding = new Thickness(0),
-            ClipToBounds = true,
-            Child = content
+            Fill = Brush("#050608"),
+            StrokeThickness = 0,
+            IsHitTestVisible = false
         };
 
-        Content = _root;
+        _cpuRing = new MetricRing("C", "CPU");
+        _ramRing = new MetricRing("M", "MEM");
+        _diskRing = new MetricRing("D", "DISK");
+        _networkRing = new MetricRing("↕", "NET");
 
-        PointerEntered += (_, _) => Expand();
-        PointerExited += (_, _) => ScheduleFold();
-        _pinButton.Click += (_, _) => TogglePin();
+        _metricStack = new StackPanel
+        {
+            Width = ExpandedDepth,
+            Spacing = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _metricStack.Children.Add(_cpuRing);
+        _metricStack.Children.Add(_ramRing);
+        _metricStack.Children.Add(_diskRing);
+        _metricStack.Children.Add(_networkRing);
+
+        _notchContent = new Canvas
+        {
+            Width = WindowWidth,
+            Height = WindowHeight,
+            Opacity = 0,
+            IsHitTestVisible = false
+        };
+        _notchContent.Children.Add(_metricStack);
+        Canvas.SetLeft(_metricStack, WindowWidth - ExpandedDepth);
+        Canvas.SetTop(_metricStack, (WindowHeight - 350) / 2);
+
+        _tooltipTitle = Text("CPU", 10, FontWeight.Bold, "#858E9B");
+        _tooltipValue = Text("—", 28, FontWeight.SemiBold, "#F5F7FA");
+        _tooltipLine1 = Text("", 11, FontWeight.Normal, "#C9D0D8");
+        _tooltipLine2 = Text("", 11, FontWeight.Normal, "#8B93A1");
+        _tooltipLine3 = Text("", 10, FontWeight.Normal, "#68717E");
+
+        var tooltipStack = new StackPanel { Spacing = 7 };
+        tooltipStack.Children.Add(_tooltipTitle);
+        tooltipStack.Children.Add(_tooltipValue);
+        tooltipStack.Children.Add(_tooltipLine1);
+        tooltipStack.Children.Add(_tooltipLine2);
+        tooltipStack.Children.Add(_tooltipLine3);
+
+        _tooltipCard = new Border
+        {
+            Width = 270,
+            MinHeight = 148,
+            Padding = new Thickness(16),
+            Background = Brush("#101318"),
+            BorderBrush = Brush("#2A3039"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(18),
+            Child = tooltipStack,
+            IsVisible = false,
+            Opacity = 0
+        };
+
+        var root = new Canvas
+        {
+            Width = WindowWidth,
+            Height = WindowHeight
+        };
+        root.Children.Add(_notchShape);
+        root.Children.Add(_notchContent);
+        root.Children.Add(_tooltipCard);
+        Content = root;
+
+        UpdateNotchVisual();
+
+        PointerMoved += OnPointerMoved;
+        PointerPressed += OnPointerPressed;
 
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
         _monitor.CaptureFailed += OnCaptureFailed;
@@ -109,174 +154,41 @@ public sealed class EdgeWindow : Window
         Opened += OnOpened;
         Closed += OnClosed;
         ScalingChanged += (_, _) => Relocate();
-    }
 
-    private Control BuildCollapsedView() => new Border
-    {
-        Background = Brush("#050608"),
-        CornerRadius = CornerRadiusForEdge(_edge, 8),
-        HorizontalAlignment = HorizontalAlignment.Stretch,
-        VerticalAlignment = VerticalAlignment.Stretch
-    };
-
-    private Control BuildExpandedView()
-    {
-        var main = new StackPanel { Spacing = 14 };
-
-        var header = new DockPanel { LastChildFill = true };
-        var headerButtons = new StackPanel
+        _cursorTimer = new DispatcherTimer
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            HorizontalAlignment = HorizontalAlignment.Right
+            Interval = TimeSpan.FromMilliseconds(40)
         };
-        var quitButton = SmallButton("×");
-        quitButton.Width = 34;
-        quitButton.Click += (_, _) => Close();
-        headerButtons.Children.Add(_pinButton);
-        headerButtons.Children.Add(quitButton);
-        DockPanel.SetDock(headerButtons, Dock.Right);
-        header.Children.Add(headerButtons);
+        _cursorTimer.Tick += (_, _) => PollCursor();
 
-        var identity = new StackPanel { Spacing = 2 };
-        identity.Children.Add(_hostText);
-        identity.Children.Add(_osText);
-        header.Children.Add(identity);
-        main.Children.Add(header);
-
-        var metrics = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        metrics.Children.Add(MetricCard("CPU", _cpuValue, _cpuDetail, _cpuBar));
-        metrics.Children.Add(MetricCard("MEMORY", _ramValue, _ramDetail, _ramBar));
-        main.Children.Add(metrics);
-
-        main.Children.Add(SectionLabel("NETWORK"));
-        var networkRow = new StackPanel { Spacing = 5 };
-        var networkTitle = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        networkTitle.Children.Add(_networkDot);
-        networkTitle.Children.Add(_networkName);
-        networkRow.Children.Add(networkTitle);
-        networkRow.Children.Add(_networkSpeed);
-        main.Children.Add(Card(networkRow));
-
-        var uptimeRow = new DockPanel();
-        var uptimeLabel = Text("Uptime", 11, FontWeight.Normal, "#8B93A1");
-        DockPanel.SetDock(uptimeLabel, Dock.Left);
-        DockPanel.SetDock(_uptimeText, Dock.Right);
-        uptimeRow.Children.Add(uptimeLabel);
-        uptimeRow.Children.Add(_uptimeText);
-        main.Children.Add(Card(uptimeRow));
-
-        main.Children.Add(SectionLabel("STORAGE"));
-        main.Children.Add(_drivePanel);
-
-        var footer = new DockPanel { Margin = new Thickness(0, 2, 0, 0) };
-        var edgeText = Text($"{_edge.ToString().ToUpperInvariant()} EDGE · v0.1", 9, FontWeight.SemiBold, "#535B67");
-        DockPanel.SetDock(edgeText, Dock.Left);
-        DockPanel.SetDock(_updatedText, Dock.Right);
-        footer.Children.Add(edgeText);
-        footer.Children.Add(_updatedText);
-        main.Children.Add(footer);
-
-        return main;
-    }
-
-    private static Border MetricCard(string label, TextBlock value, TextBlock detail, ProgressBar bar)
-    {
-        var stack = new StackPanel { Spacing = 6 };
-        stack.Children.Add(Text(label, 9, FontWeight.Bold, "#6E7683"));
-        stack.Children.Add(value);
-        stack.Children.Add(detail);
-        stack.Children.Add(bar);
-
-        return new Border
+        if (OperatingSystem.IsWindows())
         {
-            Width = 153,
-            Background = Brush("#11151B"),
-            BorderBrush = Brush("#242A33"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(14),
-            Child = stack
-        };
+            _wndProcHook = WndProc;
+            Win32Properties.AddWndProcHookCallback(this, _wndProcHook);
+        }
     }
-
-    private static Border Card(Control child) => new()
-    {
-        Background = Brush("#0F1318"),
-        BorderBrush = Brush("#222832"),
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(12),
-        Padding = new Thickness(12),
-        Child = child
-    };
-
-    private static ProgressBar Meter() => new()
-    {
-        Minimum = 0,
-        Maximum = 100,
-        Value = 0,
-        Height = 5,
-        Foreground = Brush("#DDE3EA"),
-        Background = Brush("#252B34")
-    };
-
-    private static Button SmallButton(string text) => new()
-    {
-        Content = text,
-        Height = 30,
-        MinWidth = 48,
-        Padding = new Thickness(9, 3),
-        FontSize = 10,
-        FontWeight = FontWeight.SemiBold,
-        Background = Brush("#171C23"),
-        Foreground = Brush("#C9D0D8"),
-        BorderBrush = Brush("#2C333E")
-    };
-
-    private static TextBlock SectionLabel(string text) => Text(text, 9, FontWeight.Bold, "#68717E");
-
-    private static TextBlock Text(
-        string value,
-        double size,
-        FontWeight weight,
-        string color,
-        TextAlignment alignment = TextAlignment.Left) => new()
-    {
-        Text = value,
-        FontSize = size,
-        FontWeight = weight,
-        Foreground = Brush(color),
-        TextAlignment = alignment,
-        TextWrapping = TextWrapping.NoWrap
-    };
-
-    private static Border StatusDot(bool online) => new()
-    {
-        Width = 8,
-        Height = 8,
-        HorizontalAlignment = HorizontalAlignment.Center,
-        VerticalAlignment = VerticalAlignment.Center,
-        CornerRadius = new CornerRadius(4),
-        Background = Brush(online ? "#4AE39A" : "#59616D")
-    };
-
-    private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
 
     private void OnOpened(object? sender, EventArgs e)
     {
         Relocate();
         Screens.Changed += OnScreensChanged;
+        _cursorTimer.Start();
         _ = Task.Run(() => _monitor.RunAsync(_lifetime.Token));
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _cursorTimer.Stop();
         _foldDelay?.Cancel();
         _motion?.Cancel();
         _lifetime.Cancel();
         Screens.Changed -= OnScreensChanged;
         _monitor.SnapshotUpdated -= OnSnapshotUpdated;
         _monitor.CaptureFailed -= OnCaptureFailed;
+
+        if (_wndProcHook is not null)
+            Win32Properties.RemoveWndProcHookCallback(this, _wndProcHook);
+
         _foldDelay?.Dispose();
         _motion?.Dispose();
         _lifetime.Dispose();
@@ -291,85 +203,110 @@ public sealed class EdgeWindow : Window
 
     private void OnCaptureFailed(Exception exception)
     {
-        Dispatcher.UIThread.Post(() => _osText.Text = $"Monitor error · {exception.GetType().Name}");
+        Dispatcher.UIThread.Post(() =>
+        {
+            _tooltipTitle.Text = "SYSTEM MONITOR";
+            _tooltipValue.Text = "ERROR";
+            _tooltipLine1.Text = exception.GetType().Name;
+        });
     }
 
     private void RenderSnapshot(SystemSnapshot snapshot)
     {
+        _latestSnapshot = snapshot;
+
         var cpu = Math.Clamp(snapshot.CpuPercent, 0, 100);
         var ram = Math.Clamp(snapshot.MemoryUsedPercent, 0, 100);
+        var drive = snapshot.Drives.FirstOrDefault();
 
-        _hostText.Text = snapshot.HostName;
-        _osText.Text = snapshot.OperatingSystem;
+        _cpuRing.SetValue(cpu, $"{cpu:0}%");
+        _ramRing.SetValue(ram, $"{ram:0}%");
+        _diskRing.SetValue(drive?.UsedPercent, drive is null ? "—" : $"{drive.UsedPercent:0}%");
+        _networkRing.SetValue(null, snapshot.Network.Connected ? "ON" : "OFF");
 
-        _cpuValue.Text = $"{cpu:0}%";
-        _cpuDetail.Text = Environment.ProcessorCount == 1 ? "1 logical CPU" : $"{Environment.ProcessorCount} logical CPUs";
-        _cpuBar.Value = cpu;
-
-        _ramValue.Text = $"{ram:0}%";
-        _ramDetail.Text = snapshot.MemoryTotalBytes > 0
-            ? $"{DisplayFormat.Bytes(snapshot.MemoryUsedBytes)} / {DisplayFormat.Bytes(snapshot.MemoryTotalBytes)}"
-            : "Memory unavailable";
-        _ramBar.Value = ram;
-
-        SetDot(_networkDot, snapshot.Network.Connected);
-        _networkName.Text = snapshot.Network.Connected ? snapshot.Network.InterfaceName : "Offline";
-        _networkSpeed.Text = snapshot.Network.Connected
-            ? $"↓ {DisplayFormat.Rate(snapshot.Network.ReceiveBytesPerSecond)}    ↑ {DisplayFormat.Rate(snapshot.Network.SendBytesPerSecond)}"
-            : "No active network interface";
-
-        _uptimeText.Text = DisplayFormat.Uptime(snapshot.Uptime);
-        _updatedText.Text = snapshot.CapturedAt.ToString("HH:mm:ss");
-        RenderDrives(snapshot.Drives);
+        if (_hoveredMetric is not null)
+            RenderTooltip(_hoveredMetric.Value);
     }
 
-    private void RenderDrives(IReadOnlyList<DriveSnapshot> drives)
+    private void PollCursor()
     {
-        _drivePanel.Children.Clear();
+        if (!TryGetCursorLocal(out var point))
+            return;
 
-        if (drives.Count == 0)
+        if (!_expanded)
         {
-            _drivePanel.Children.Add(Card(Text("No fixed drives detected", 11, FontWeight.Normal, "#8B93A1")));
+            SetHoveredMetric(null);
+            if (HotZoneRect().Contains(point))
+                Expand();
             return;
         }
 
-        foreach (var drive in drives)
+        var hovered = MetricIndexAt(point);
+        if (hovered is not null)
+            SetHoveredMetric(hovered);
+        else if (!TooltipLiveRect().Contains(point))
+            SetHoveredMetric(null);
+
+        if (ExpandedLiveRect().Contains(point) || TooltipLiveRect().Contains(point) || BridgeRect().Contains(point))
         {
-            var titleRow = new DockPanel();
-            var name = Text(drive.Label, 11, FontWeight.SemiBold, "#E8ECF1");
-            var space = Text($"{DisplayFormat.Bytes(drive.FreeBytes)} free", 10, FontWeight.Normal, "#858E9B");
-            DockPanel.SetDock(name, Dock.Left);
-            DockPanel.SetDock(space, Dock.Right);
-            titleRow.Children.Add(name);
-            titleRow.Children.Add(space);
-
-            var bar = Meter();
-            bar.Value = Math.Clamp(drive.UsedPercent, 0, 100);
-
-            var stack = new StackPanel { Spacing = 6 };
-            stack.Children.Add(titleRow);
-            stack.Children.Add(bar);
-            _drivePanel.Children.Add(Card(stack));
+            CancelFold();
+        }
+        else
+        {
+            ScheduleFold();
         }
     }
 
-    private static void SetDot(Border dot, bool online)
+    private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        dot.Background = Brush(online ? "#4AE39A" : "#59616D");
+        var point = e.GetPosition(this);
+        if (!_expanded)
+        {
+            if (HotZoneRect().Contains(point))
+                Expand();
+            return;
+        }
+
+        var hovered = MetricIndexAt(point);
+        if (hovered is not null)
+            SetHoveredMetric(hovered);
+    }
+
+    private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+
+        var point = e.GetPosition(this);
+        if (!ShapeRect().Contains(point))
+            return;
+
+        if (!_expanded)
+        {
+            Expand();
+            return;
+        }
+
+        _pinned = !_pinned;
+        if (_pinned)
+            CancelFold();
+        else
+            ScheduleFold();
     }
 
     private void Expand()
     {
-        _foldDelay?.Cancel();
+        CancelFold();
         if (_expanded) return;
-        SetExpanded(true);
+        _expanded = true;
+        _ = AnimateExpansionAsync(1);
     }
 
     private void ScheduleFold()
     {
-        if (_pinned || !_expanded) return;
-        _foldDelay?.Cancel();
-        _foldDelay?.Dispose();
+        if (_pinned || !_expanded || _foldDelay is not null)
+            return;
+
         _foldDelay = new CancellationTokenSource();
         var token = _foldDelay.Token;
 
@@ -379,51 +316,42 @@ public sealed class EdgeWindow : Window
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(FoldDelayMs), token).ConfigureAwait(false);
                 if (!token.IsCancellationRequested)
-                    Dispatcher.UIThread.Post(() => SetExpanded(false));
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (_pinned) return;
+                        _expanded = false;
+                        SetHoveredMetric(null);
+                        _ = AnimateExpansionAsync(0);
+                    });
+                }
             }
             catch (OperationCanceledException)
             {
             }
+            finally
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _foldDelay?.Dispose();
+                    _foldDelay = null;
+                });
+            }
         }, token);
     }
 
-    private void TogglePin()
+    private void CancelFold()
     {
-        _pinned = !_pinned;
-        _pinButton.Content = _pinned ? "UNPIN" : "PIN";
-        if (_pinned) Expand();
-        else ScheduleFold();
+        _foldDelay?.Cancel();
     }
 
-    private void SetExpanded(bool expanded)
-    {
-        if (_expanded == expanded) return;
-        _expanded = expanded;
-        _ = AnimateExpandedAsync(expanded);
-    }
-
-    private async Task AnimateExpandedAsync(bool expanded)
+    private async Task AnimateExpansionAsync(double target)
     {
         _motion?.Cancel();
         _motion?.Dispose();
         _motion = new CancellationTokenSource();
         var token = _motion.Token;
-
-        var startWidth = Width;
-        var startHeight = Height;
-        var targetWidth = expanded ? ExpandedWidth : CollapsedWidth;
-        var targetHeight = expanded ? ExpandedHeight : CollapsedHeight;
-        var startExpandedOpacity = _expandedView.Opacity;
-        var targetExpandedOpacity = expanded ? 1d : 0d;
-        var startCollapsedOpacity = _collapsedView.Opacity;
-        var targetCollapsedOpacity = expanded ? 0d : 1d;
-
-        _collapsedView.IsVisible = true;
-        _expandedView.IsVisible = true;
-
-        if (expanded)
-            ApplyExpandedChrome();
-
+        var start = _expansion;
         var started = DateTime.UtcNow;
 
         try
@@ -432,58 +360,248 @@ public sealed class EdgeWindow : Window
             {
                 token.ThrowIfCancellationRequested();
                 var elapsed = (DateTime.UtcNow - started).TotalMilliseconds;
-                var progress = Math.Clamp(elapsed / MotionDurationMs, 0, 1);
-                var eased = EaseOutCubic(progress);
+                var time = Math.Clamp(elapsed / MotionDurationMs, 0, 1);
+                var eased = Springish(time);
+                _expansion = Lerp(start, target, eased);
+                _expansion = Math.Clamp(_expansion, -0.02, 1.04);
+                UpdateNotchVisual();
 
-                Width = Lerp(startWidth, targetWidth, eased);
-                Height = Lerp(startHeight, targetHeight, eased);
-                _expandedView.Opacity = Lerp(startExpandedOpacity, targetExpandedOpacity, eased);
-                _collapsedView.Opacity = Lerp(startCollapsedOpacity, targetCollapsedOpacity, eased);
-                Relocate();
+                if (time >= 1)
+                    break;
 
-                if (progress >= 1) break;
                 await Task.Delay(16, token);
             }
 
-            Width = targetWidth;
-            Height = targetHeight;
-            _expandedView.Opacity = targetExpandedOpacity;
-            _collapsedView.Opacity = targetCollapsedOpacity;
-
-            if (expanded)
-            {
-                _collapsedView.IsVisible = false;
-            }
-            else
-            {
-                _expandedView.IsVisible = false;
-                ApplyCollapsedChrome();
-            }
-
-            Relocate();
-            Dispatcher.UIThread.Post(Relocate, DispatcherPriority.Background);
+            _expansion = target;
+            UpdateNotchVisual();
         }
         catch (OperationCanceledException)
         {
         }
     }
 
-    private void ApplyExpandedChrome()
+    private void UpdateNotchVisual()
     {
-        _root.Background = Brush("#0B0D11");
-        _root.BorderBrush = Brush("#252A33");
-        _root.BorderThickness = new Thickness(1);
-        _root.CornerRadius = CornerRadiusForEdge(_edge, 22);
-        _root.Padding = new Thickness(16);
+        var p = Math.Clamp(_expansion, 0, 1);
+        var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
+        var length = Lerp(CollapsedLength, ExpandedLength, p);
+        var geometry = EdgeNotchGeometry.BuildRight(WindowWidth, WindowHeight, depth, length);
+
+        _notchShape.Data = geometry;
+        _notchContent.Clip = geometry;
+
+        var contentProgress = Math.Clamp((p - 0.16) / 0.72, 0, 1);
+        _notchContent.Opacity = contentProgress;
+        _metricStack.RenderTransform = new TranslateTransform(12 * (1 - contentProgress), 0);
+
+        if (p < 0.78)
+        {
+            _tooltipCard.Opacity = 0;
+            if (p < 0.5)
+                _tooltipCard.IsVisible = false;
+        }
+        else if (_hoveredMetric is not null)
+        {
+            _tooltipCard.IsVisible = true;
+            _tooltipCard.Opacity = Math.Clamp((p - 0.78) / 0.22, 0, 1);
+        }
     }
 
-    private void ApplyCollapsedChrome()
+    private int? MetricIndexAt(Point point)
     {
-        _root.Background = Brush("#050608");
-        _root.BorderBrush = Brushes.Transparent;
-        _root.BorderThickness = new Thickness(0);
-        _root.CornerRadius = CornerRadiusForEdge(_edge, 8);
-        _root.Padding = new Thickness(0);
+        if (_expansion < 0.82)
+            return null;
+
+        var xMin = WindowWidth - ExpandedDepth;
+        if (point.X < xMin || point.X > WindowWidth)
+            return null;
+
+        var stackTop = (WindowHeight - 350) / 2;
+        const double cell = 75;
+        const double gap = 12;
+
+        for (var index = 0; index < 4; index++)
+        {
+            var top = stackTop + index * (cell + gap);
+            if (point.Y >= top && point.Y <= top + cell)
+                return index;
+        }
+
+        return null;
+    }
+
+    private void SetHoveredMetric(int? index)
+    {
+        if (_hoveredMetric == index)
+            return;
+
+        _hoveredMetric = index;
+        if (index is null || !_expanded || _expansion < 0.78)
+        {
+            _tooltipCard.Opacity = 0;
+            _tooltipCard.IsVisible = false;
+            return;
+        }
+
+        RenderTooltip(index.Value);
+        PositionTooltip(index.Value);
+        _tooltipCard.IsVisible = true;
+        _tooltipCard.Opacity = 1;
+    }
+
+    private void RenderTooltip(int index)
+    {
+        var snapshot = _latestSnapshot;
+        if (snapshot is null)
+            return;
+
+        var cpu = Math.Clamp(snapshot.CpuPercent, 0, 100);
+        var ram = Math.Clamp(snapshot.MemoryUsedPercent, 0, 100);
+        var drive = snapshot.Drives.FirstOrDefault();
+
+        switch (index)
+        {
+            case 0:
+                _tooltipTitle.Text = "CPU";
+                _tooltipValue.Text = $"{cpu:0}%";
+                _tooltipLine1.Text = $"{Environment.ProcessorCount} logical processors";
+                _tooltipLine2.Text = snapshot.HostName;
+                _tooltipLine3.Text = snapshot.OperatingSystem;
+                break;
+
+            case 1:
+                _tooltipTitle.Text = "MEMORY";
+                _tooltipValue.Text = $"{ram:0}%";
+                _tooltipLine1.Text = $"{DisplayFormat.Bytes(snapshot.MemoryUsedBytes)} used";
+                _tooltipLine2.Text = $"{DisplayFormat.Bytes(snapshot.MemoryAvailableBytes)} available";
+                _tooltipLine3.Text = $"{DisplayFormat.Bytes(snapshot.MemoryTotalBytes)} total";
+                break;
+
+            case 2:
+                _tooltipTitle.Text = "STORAGE";
+                if (drive is null)
+                {
+                    _tooltipValue.Text = "—";
+                    _tooltipLine1.Text = "No fixed drive detected";
+                    _tooltipLine2.Text = "";
+                    _tooltipLine3.Text = "";
+                }
+                else
+                {
+                    _tooltipValue.Text = $"{drive.UsedPercent:0}%";
+                    _tooltipLine1.Text = drive.Label;
+                    _tooltipLine2.Text = $"{DisplayFormat.Bytes(drive.FreeBytes)} free";
+                    _tooltipLine3.Text = $"{DisplayFormat.Bytes(drive.TotalBytes)} total";
+                }
+                break;
+
+            default:
+                _tooltipTitle.Text = "NETWORK";
+                _tooltipValue.Text = snapshot.Network.Connected ? "ONLINE" : "OFFLINE";
+                _tooltipLine1.Text = snapshot.Network.Connected ? snapshot.Network.InterfaceName : "No active interface";
+                _tooltipLine2.Text = snapshot.Network.Connected
+                    ? $"↓ {DisplayFormat.Rate(snapshot.Network.ReceiveBytesPerSecond)}   ↑ {DisplayFormat.Rate(snapshot.Network.SendBytesPerSecond)}"
+                    : "";
+                _tooltipLine3.Text = snapshot.Network.LinkSpeedBitsPerSecond > 0
+                    ? $"Link {snapshot.Network.LinkSpeedBitsPerSecond / 1_000_000d:0} Mbps"
+                    : $"Uptime {DisplayFormat.Uptime(snapshot.Uptime)}";
+                break;
+        }
+    }
+
+    private void PositionTooltip(int index)
+    {
+        const double tooltipWidth = 270;
+        const double gap = 16;
+        var x = WindowWidth - ExpandedDepth - gap - tooltipWidth;
+        var stackTop = (WindowHeight - 350) / 2;
+        var cellCenter = stackTop + index * 87 + 37;
+        var y = Math.Clamp(cellCenter - 82, 24, WindowHeight - 190);
+        Canvas.SetLeft(_tooltipCard, x);
+        Canvas.SetTop(_tooltipCard, y);
+    }
+
+    private Rect HotZoneRect()
+    {
+        return new Rect(
+            WindowWidth - HotZoneDepth,
+            (WindowHeight - HotZoneLength) / 2,
+            HotZoneDepth,
+            HotZoneLength);
+    }
+
+    private Rect ShapeRect()
+    {
+        var p = Math.Clamp(_expansion, 0, 1);
+        var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
+        var length = Lerp(CollapsedLength, ExpandedLength, p);
+        return new Rect(WindowWidth - depth, (WindowHeight - length) / 2, depth, length);
+    }
+
+    private Rect ExpandedLiveRect() => ShapeRect();
+
+    private Rect TooltipLiveRect()
+    {
+        if (!_tooltipCard.IsVisible || _hoveredMetric is null)
+            return Rect.Empty;
+
+        var x = Canvas.GetLeft(_tooltipCard);
+        var y = Canvas.GetTop(_tooltipCard);
+        return new Rect(x, y, _tooltipCard.Width, Math.Max(_tooltipCard.Bounds.Height, 170));
+    }
+
+    private Rect BridgeRect()
+    {
+        if (_hoveredMetric is null || !_tooltipCard.IsVisible)
+            return Rect.Empty;
+
+        var tip = TooltipLiveRect();
+        var shape = ShapeRect();
+        var y = tip.Y + tip.Height / 2 - 30;
+        return new Rect(tip.Right, y, Math.Max(0, shape.Left - tip.Right), 60);
+    }
+
+    private bool IsInteractive(Point point)
+    {
+        if (!_expanded)
+            return ShapeRect().Contains(point);
+
+        return ExpandedLiveRect().Contains(point)
+            || TooltipLiveRect().Contains(point)
+            || BridgeRect().Contains(point);
+    }
+
+    private bool TryGetCursorLocal(out Point point)
+    {
+        if (OperatingSystem.IsWindows() && GetCursorPos(out var cursor))
+        {
+            var scaling = RenderScaling <= 0 ? 1 : RenderScaling;
+            point = new Point(
+                (cursor.X - Position.X) / scaling,
+                (cursor.Y - Position.Y) / scaling);
+            return true;
+        }
+
+        point = default;
+        return false;
+    }
+
+    private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const uint WmNcHitTest = 0x0084;
+        const int HtTransparent = -1;
+        const int HtClient = 1;
+
+        if (msg != WmNcHitTest || !GetCursorPos(out var cursor))
+            return IntPtr.Zero;
+
+        var scaling = RenderScaling <= 0 ? 1 : RenderScaling;
+        var point = new Point(
+            (cursor.X - Position.X) / scaling,
+            (cursor.Y - Position.Y) / scaling);
+
+        handled = true;
+        return new IntPtr(IsInteractive(point) ? HtClient : HtTransparent);
     }
 
     private void Relocate()
@@ -495,20 +613,35 @@ public sealed class EdgeWindow : Window
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
     }
 
+    private static TextBlock Text(string value, double size, FontWeight weight, string color) => new()
+    {
+        Text = value,
+        FontSize = size,
+        FontWeight = weight,
+        Foreground = Brush(color),
+        TextWrapping = TextWrapping.Wrap
+    };
+
+    private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
+
     private static double Lerp(double from, double to, double amount) => from + (to - from) * amount;
 
-    private static double EaseOutCubic(double value)
+    private static double Springish(double t)
     {
-        var inverse = 1 - value;
-        return 1 - inverse * inverse * inverse;
+        const double c1 = 1.15;
+        var c3 = c1 + 1;
+        var x = t - 1;
+        return 1 + c3 * x * x * x + c1 * x * x;
     }
 
-    private static CornerRadius CornerRadiusForEdge(EdgeSide edge, double radius) => edge switch
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
     {
-        EdgeSide.Right => new CornerRadius(radius, 0, 0, radius),
-        EdgeSide.Left => new CornerRadius(0, radius, radius, 0),
-        EdgeSide.Top => new CornerRadius(0, 0, radius, radius),
-        EdgeSide.Bottom => new CornerRadius(radius, radius, 0, 0),
-        _ => new CornerRadius(radius)
-    };
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
 }
