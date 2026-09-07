@@ -173,6 +173,30 @@ try
     File.WriteAllText(settingsPath, "{\"Edge\":999,\"Mode\":0}");
     try { PreferenceStore.Load(settingsPath); Check(false, "unknown enum rejected"); }
     catch (InvalidDataException) { Check(true, "unknown enum reported"); }
+    NotchPreferences? applied = null;
+    var settings = new SettingsWindow(new NotchPreferences(), value => applied = value,
+        storagePath: settingsPath);
+    var settingsPanel = (StackPanel)((ScrollViewer)settings.Content!).Content!;
+    var selectors = settingsPanel.Children.OfType<ComboBox>().ToArray();
+    selectors[0].SelectedIndex = (int)EdgeSide.Bottom;
+    selectors[1].SelectedIndex = (int)NotchDisplayMode.Always;
+    settingsPanel.Children.OfType<Button>().Single().RaiseEvent(
+        new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(applied == new NotchPreferences(EdgeSide.Bottom, NotchDisplayMode.Always),
+        "settings Apply invokes live update");
+    Check(PreferenceStore.Load(settingsPath) == applied, "settings Apply persists chosen values");
+    settings.Close();
+
+    applied = null;
+    var failingSettings = new SettingsWindow(new NotchPreferences(), value => applied = value,
+        storagePath: temporaryDirectory);
+    var failingPanel = (StackPanel)((ScrollViewer)failingSettings.Content!).Content!;
+    failingPanel.Children.OfType<Button>().Single().RaiseEvent(
+        new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(applied is null, "save failure does not apply changes");
+    Check(failingPanel.Children.OfType<TextBlock>().Any(x => x.Text?.StartsWith("Could not save") == true),
+        "save failure is visible");
+    failingSettings.Close();
     // Replacing an invalid file via Apply restores usable settings.
     PreferenceStore.Save(settingsPath, new NotchPreferences());
     Check(PreferenceStore.Load(settingsPath) == new NotchPreferences(), "corrupt file can be recovered");
@@ -182,4 +206,11 @@ finally
     if (Directory.Exists(temporaryDirectory)) Directory.Delete(temporaryDirectory, true);
 }
 window.Close();
+var recovery = new EdgeWindow();
+recovery.ApplyPreferences(new NotchPreferences(EdgeSide.Right, NotchDisplayMode.Hidden));
+recovery.ShowSettings();
+Check(((SettingsWindow)Field(recovery, "_settingsWindow")!).IsVisible, "hidden has settings recovery");
+((SettingsWindow)Field(recovery, "_settingsWindow")!).Close();
+Check(((CancellationTokenSource)Field(recovery, "_lifetime")!).IsCancellationRequested,
+    "closing hidden settings exits the notch");
 Console.WriteLine($"{passed} checks passed.");
