@@ -1,0 +1,38 @@
+name: brand-assets
+
+on:
+  push:
+    branches:
+      - feat/v0.1-system-monitor
+    paths:
+      - docs/assets/edgepilot-master.png
+      - scripts/prepare_brand_assets.py
+      - .github/workflows/brand-assets.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install Pillow==12.3.0
+      - run: python scripts/prepare_brand_assets.py
+      - name: Commit generated application assets
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/EdgePilot/Assets/edgepilot.ico src/EdgePilot/Assets/edgepilot.png docs/assets/icon-size-check.png
+          if ! git diff --cached --quiet; then
+            git commit -m "Prepare application icon formats from approved artwork"
+            git push
+          fi

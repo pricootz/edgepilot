@@ -1,62 +1,33 @@
-# EdgePilot architecture
+# Architecture
 
-## Reference lessons from Codenotch
+EdgePilot uses C#/.NET 10 and Avalonia. The UI and platform sampling are separated so the shell does not depend on one operating system's APIs.
 
-`pricootz/codenotch-reference` is a design and architecture reference, not the EdgePilot codebase.
+## Core
 
-The first EdgePilot version intentionally carries forward these ideas:
+SystemSnapshot holds immutable sampled data. ISystemMetricsProvider describes capture; SystemMonitorService centralizes refresh and error delivery.
 
-1. **Placement is its own concern.** Codenotch maps an edge-independent coordinate model to the real screen only in its placement layer. EdgePilot starts with the same separation in `UI/EdgePlacement.cs`.
-2. **The shell owns interaction state.** Expand/fold/pin behavior is independent from the data source.
-3. **Polling is centralized.** Providers do not create their own UI timers. `SystemMonitorService` controls cadence and prevents the UI from owning sampling logic.
-4. **Failures degrade visibly.** A capture exception is surfaced to the shell while the app remains alive.
-5. **Use the working area.** Placement uses the OS usable screen rectangle rather than blindly covering the taskbar/dock.
+## Platform
 
-## v0.1 layers
+SystemMetricsProvider combines CPU, memory, drive and network readers. Windows CPU/RAM use Win32 APIs; Linux uses /proc. DriveInfo and network APIs provide volume capacity and throughput sampling.
 
-```text
-UI
-  EdgeWindow
-  EdgePlacement
-  DisplayFormat
+AutostartRegistration manages current-user startup entries. DesktopInstaller copies packages into a stable per-user directory and creates a launcher. SingleInstance owns the per-user mutex and activation pipe.
 
-Core
-  SystemSnapshot
-  ISystemMetricsProvider
-  SystemMonitorService
+## UI
 
-Platform
-  SystemMetricsProvider
-  CpuUsageReader
-  MemoryReader
-  NetworkSampler
-```
+EdgeWindow owns interaction state and rendering. EdgeNotchGeometry supplies the shared silhouette and clip; NotchLayout maps geometry and hit targets to all four edges while preserving upright text. NotchSpring retains motion continuity when a transition reverses. MetricRing and DisplayFormat present snapshots.
 
-### Core
+SettingsWindow edits NotchPreferences, saved atomically by PreferenceStore. DriveSelection resolves the explicit mount path without a silent substitute.
 
-Contains data contracts and orchestration that do not know about Avalonia, Windows APIs, Linux `/proc`, or any future module UI.
+## Boundaries
 
-### Platform
+- Sampling does not create UI timers.
+- Platform details remain outside Core.
+- Placement uses the OS working area.
+- Failure should leave settings and recovery accessible.
+- Extend a module contract only when another real module establishes its requirements.
 
-Contains the OS-facing implementation. Windows CPU/RAM use Win32 APIs; Linux CPU/RAM read `/proc`; storage and network use cross-platform .NET APIs where practical.
+## Verification
 
-### UI
+The executable headless suite covers geometry, motion, interaction, settings and disk selection. CI adds native packaged launch, second-instance activation and per-user installation on disposable runners. Compositor behavior and actual login sessions require hands-on testing.
 
-Owns the screen-edge window, hover/pin behavior, rendering, placement and display formatting.
-
-## Next architectural step
-
-After v0.1 is stable, generalize `ISystemMetricsProvider` into the first implementation of an EdgePilot module contract:
-
-```text
-Module
-  id
-  status
-  summary
-  details
-  actions
-  events
-  settings
-```
-
-Do not build that abstraction before the local system module gives us real requirements.
+The edge-attached interaction was informed by prior notch-style UI exploration. EdgePilot is maintained as its own codebase.

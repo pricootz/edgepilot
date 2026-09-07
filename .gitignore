@@ -9,3 +9,14 @@ obj/
 *.log
 .DS_Store
 Thumbs.db
+dist/
+artifacts/
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+*.pem
+settings.json
+__pycache__/

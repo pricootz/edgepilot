@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/v0.1-system-monitor
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -13,6 +14,24 @@ permissions:
   contents: read
 
 jobs:
+  repository-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check documentation and private commit attribution
+        run: python scripts/check_repository.py
+      - name: Scan reachable branch history for secrets
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz' | sha256sum -c -
+          mkdir -p /tmp/edgepilot-gitleaks
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp/edgepilot-gitleaks gitleaks
+          /tmp/edgepilot-gitleaks/gitleaks git . --log-opts="HEAD" --redact --no-banner
+
   build:
     strategy:
       fail-fast: false
@@ -33,6 +52,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set up Python for asset and package checks
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare application icon
+        run: |
+          python -m pip install Pillow==12.3.0
+          python scripts/prepare_brand_assets.py
+
       - name: Build
         run: dotnet build src/EdgePilot/EdgePilot.csproj --configuration Release
 
@@ -42,42 +71,45 @@ jobs:
       - name: Publish self-contained package
         run: dotnet publish src/EdgePilot/EdgePilot.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:DebugType=None -p:DebugSymbols=false -o dist/EdgePilot
 
+      - name: Collect third-party notices
+        run: python scripts/collect_notices.py
+
       - name: Prepare and verify Windows package
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Copy-Item packaging/Installa.ps1 dist/EdgePilot/
-          Copy-Item packaging/LEGGIMI.md dist/EdgePilot/
+          Copy-Item packaging/Install.ps1 dist/EdgePilot/
+          Copy-Item packaging/README.md dist/EdgePilot/
           $exe = (Resolve-Path dist/EdgePilot/EdgePilot.exe).Path
           $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
           Start-Sleep -Milliseconds 1500
-          if ($smoke.HasExited) { throw 'Avvio primario terminato prematuramente.' }
+          if ($smoke.HasExited) { throw 'Primary instance exited prematurely.' }
           $second = Start-Process -FilePath $exe -ArgumentList '--settings' -PassThru -WindowStyle Hidden
           if (-not $second.WaitForExit(10000)) {
             $second.Kill()
-            throw 'Secondo avvio: rilevata istanza duplicata.'
+            throw 'Duplicate instance remained running.'
           }
-          if ($second.ExitCode -ne 0) { throw 'Attivazione istanza esistente fallita.' }
+          if ($second.ExitCode -ne 0) { throw 'Existing instance activation failed.' }
           if (-not $smoke.WaitForExit(20000)) {
             $smoke.Kill()
-            throw 'Il pacchetto non termina il controllo di avvio.'
+            throw 'Package smoke check timed out.'
           }
-          if ($smoke.ExitCode -ne 0) { throw "Avvio fallito: $($smoke.ExitCode)" }
+          if ($smoke.ExitCode -ne 0) { throw "Launch failed: $($smoke.ExitCode)" }
           $install = Start-Process -FilePath $exe -ArgumentList '--install' -Wait -PassThru -WindowStyle Hidden
-          if ($install.ExitCode -ne 0) { throw 'Installazione per utente fallita.' }
+          if ($install.ExitCode -ne 0) { throw 'Per-user installation failed.' }
           $installed = Join-Path $env:LOCALAPPDATA 'Programs/EdgePilot/EdgePilot.exe'
-          if (-not (Test-Path $installed)) { throw 'Eseguibile installato assente.' }
+          if (-not (Test-Path $installed)) { throw 'Installed executable missing.' }
           $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'EdgePilot.lnk'
-          if (-not (Test-Path $shortcut)) { throw 'Collegamento Start assente.' }
+          if (-not (Test-Path $shortcut)) { throw 'Start menu shortcut missing.' }
           Compress-Archive -Path dist/EdgePilot/* -DestinationPath dist/EdgePilot-win-x64.zip
-          (Get-FileHash dist/EdgePilot-win-x64.zip -Algorithm SHA256).Hash | Set-Content dist/EdgePilot-win-x64.sha256
+          ((Get-FileHash dist/EdgePilot-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant() + "  EdgePilot-win-x64.zip") | Set-Content dist/EdgePilot-win-x64.sha256
 
       - name: Prepare and verify Ubuntu package
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          cp packaging/installa.sh packaging/LEGGIMI.md dist/EdgePilot/
-          chmod +x dist/EdgePilot/EdgePilot dist/EdgePilot/installa.sh
+          cp packaging/install.sh packaging/README.md dist/EdgePilot/
+          chmod +x dist/EdgePilot/EdgePilot dist/EdgePilot/install.sh
           timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test &
           smoke_pid=$!
           sleep 2
@@ -87,7 +119,7 @@ jobs:
           test -x "$HOME/.local/share/edgepilot/EdgePilot"
           test -f "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
           tar -czf dist/EdgePilot-linux-x64.tar.gz -C dist/EdgePilot .
-          sha256sum dist/EdgePilot-linux-x64.tar.gz > dist/EdgePilot-linux-x64.sha256
+          (cd dist && sha256sum EdgePilot-linux-x64.tar.gz > EdgePilot-linux-x64.sha256)
 
       - name: Upload Windows package
         if: runner.os == 'Windows'

@@ -1,0 +1,54 @@
+name: draft-preview
+
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  draft:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: preview-draft
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: release-assets
+          pattern: EdgePilot-*
+          merge-multiple: true
+      - name: Verify archives and prepare draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          cd release-assets
+          sha256sum -c EdgePilot-win-x64.sha256
+          sha256sum -c EdgePilot-linux-x64.sha256
+          cd ..
+          tag=v0.1.0-preview.1
+          if state=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
+            test "$state" = true || { echo 'Refusing to modify a published release.'; exit 1; }
+            gh release edit "$tag" --draft --prerelease --target "$RELEASE_SHA" --notes-file docs/releases/v0.1.0-preview.1.md
+          else
+            gh release create "$tag" --draft --prerelease --target "$RELEASE_SHA" --title "EdgePilot $tag" --notes-file docs/releases/v0.1.0-preview.1.md
+          fi
+          gh release upload "$tag" release-assets/EdgePilot-win-x64.zip release-assets/EdgePilot-win-x64.sha256 release-assets/EdgePilot-linux-x64.tar.gz release-assets/EdgePilot-linux-x64.sha256 --clobber

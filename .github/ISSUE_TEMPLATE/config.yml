@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security reporting guidance
+    url: https://github.com/pricootz/edgepilot/blob/main/SECURITY.md
+    about: Do not post vulnerability details in public issues.

@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible EdgePilot problem.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "Review screenshots and logs for private hostnames, paths and credentials before attaching them."
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Include whether you used a package or built from source.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and desktop
+      description: Windows version, or Linux distribution and X11/Wayland session; include scaling and monitor setup.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or relevant diagnostics

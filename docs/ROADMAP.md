@@ -1,49 +1,37 @@
-# EdgePilot roadmap
+# Roadmap
 
-## v0.1 — Local system shell
+This roadmap is directional, not a delivery schedule.
 
-- [x] Repository and architecture baseline.
-- [x] Avalonia/.NET desktop skeleton.
-- [x] Edge-attached topmost window.
-- [x] Collapse / hover expand / delayed fold / pin.
-- [x] CPU provider for Windows and Linux.
-- [x] RAM provider for Windows and Linux.
-- [x] Disk capacity.
-- [x] Active network and throughput.
-- [x] Uptime and machine identity.
-- [x] Verify build on CI (Windows + Ubuntu).
-- [x] First hands-on Windows launch.
-- [x] Replace oversized idle monitor with Codenotch-style slim hover pill.
-- [x] Resolve initial Avalonia compile warnings in EdgeWindow.
-- [ ] Validate refined pill behaviour on Windows.
-- [ ] Hands-on Ubuntu test.
-- [ ] Tune dimensions and interaction after real use.
+## v0.1 preview — implemented
 
-## v0.2 — Desktop quality
+- [x] Local CPU, memory, disk, network and machine details.
+- [x] Four-edge notch, rounded pill, spring motion, clipping and tooltips.
+- [x] Hover, delayed fold, pin and visibility modes.
+- [x] Persistent settings, refresh, sensitivity and visible metrics.
+- [x] Persistent volume selection and unavailable-volume handling.
+- [x] Linux settings theme integration.
+- [x] Tray, optional start at login and single-instance recovery.
+- [x] Self-contained x64 packages and per-user installation.
+- [x] Windows/Ubuntu build, UX and package checks.
 
-- Settings UI.
-- Visibility modes: Show on hover / Always show / Hide.
-- Edge and monitor selector.
-- Start with OS.
-- Tray/menu integration.
-- Persist pin/visibility/placement.
-- Smooth motion and reduced-motion mode.
-- Better network interface selection.
-- Resource warning thresholds and attention state.
-- Enlarged invisible wake hot-zone without blocking unrelated desktop input.
+## Before calling v0.1 stable
 
-## v0.3 — Power user layer
+- [ ] Broader Windows 11 and Ubuntu desktop testing.
+- [ ] Verify real logout/login startup and tray behavior.
+- [ ] Confirm disk selection persists across restarts and mount changes.
+- [ ] Test all edges, scaling levels and monitor changes.
+- [ ] Check Ubuntu light/dark settings on supported sessions.
+- [ ] Add current settings screenshots and Ubuntu screenshots.
+- [ ] Publish a preview release and gather feedback.
 
-- Quick Actions.
-- Global command palette.
-- Configurable shortcuts.
-- Local event center.
+## Next priorities
 
-## Later modules
+- Explicit network interface selection.
+- More useful CPU, memory and disk details.
+- Keyboard access, reduced motion and accessibility review.
+- English application localization.
+- Evaluate GPU/temperature/fan providers separately for each OS.
 
-- Clipboard.
-- Focus timer.
-- Server/Docker/Tailscale.
-- AUC context.
-- School context.
-- AI/agent activity.
+## Later exploration
+
+Remote monitoring, Docker and quick actions may become separate modules. No implementation or release date is promised.
