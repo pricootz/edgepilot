@@ -13,15 +13,21 @@
 
 ## See it in action
 
+<p align="center">
+  <img src="docs/assets/windows11-overview.png" width="520" alt="EdgePilot on Windows 11 with the complete settings window and expanded right-edge notch">
+</p>
+<p align="center">Windows 11 · Settings and expanded notch.</p>
+
 <table>
+<tr><th>Settings</th><th>Expanded notch</th><th>Collapsed pill</th></tr>
 <tr>
-<td align="center"><img src="docs/assets/windows11-notch.png" width="260" alt="EdgePilot expanded on the right edge of Windows 11, showing CPU, RAM and disk usage"></td>
-<td align="center"><img src="docs/assets/windows11-settings-early.png" width="300" alt="An earlier Windows 11 settings screen with Italian labels"></td>
+<td valign="top"><img src="docs/assets/windows11-settings.png" width="360" alt="Complete Windows 11 settings with disk selection and start at login"></td>
+<td valign="top"><img src="docs/assets/windows11-notch.png" width="136" alt="Expanded right-edge notch showing CPU, memory and disk usage on Windows 11"></td>
+<td valign="top"><img src="docs/assets/windows11-pill.png" width="48" alt="Compact collapsed pill attached to the right screen edge on Windows 11"></td>
 </tr>
-<tr><td>Windows 11 · Expanded notch, three metrics selected.</td><td>Windows 11 · Earlier settings screen; current builds also include disk selection and start at login.</td></tr>
 </table>
 
-These are real Windows 11 screenshots supplied by the maintainer, not mockups. Ubuntu screenshots are still to come.
+These are real, unaltered Windows 11 screenshots supplied by the maintainer. The application interface is Italian; CPU, memory and disk are enabled in these captures. Ubuntu screenshots are still to come.
 
 ## What works today
 

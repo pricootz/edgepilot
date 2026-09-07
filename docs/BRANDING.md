@@ -15,6 +15,13 @@ The packaging script converts the approved master into PNG and ICO sizes on GitH
 
 ## Screenshots
 
-The Windows 11 screenshots are maintainer-supplied, unaltered application captures. The settings image predates disk selection and start-at-login controls and is labeled accordingly. Do not present it as a complete current settings reference.
+The Windows 11 screenshots are maintainer-supplied, unaltered application captures of the current preview:
 
-Add Ubuntu captures and updated Windows settings when available. Capture both light and dark settings themes and a collapsed/expanded notch pair. Avoid private hostnames and drive labels.
+- [Settings and expanded notch](assets/windows11-overview.png)
+- [Complete settings](assets/windows11-settings.png), including disk selection and start at login
+- [Expanded notch](assets/windows11-notch.png), with CPU, memory and disk enabled
+- [Collapsed pill](assets/windows11-pill.png)
+
+The interface remains Italian. These captures replace the earlier Windows settings image.
+
+Add Ubuntu captures when available, including light/dark settings themes and a collapsed/expanded notch pair. Avoid private hostnames and drive labels. A checked startup option in a screenshot does not replace verification after an actual login.

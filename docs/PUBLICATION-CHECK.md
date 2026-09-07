@@ -4,7 +4,7 @@
 
 - English README, installation and developer documentation.
 - MIT license, contribution and security guidance, issue and pull request templates.
-- Maintainer-supplied Windows 11 screenshots, with the earlier settings screen clearly labeled.
+- Four current, maintainer-supplied Windows 11 screenshots: overview, complete settings, expanded notch and collapsed pill.
 - Original icon preserved; adapted transparent master and generated PNG/multi-resolution ICO.
 - Dependency metadata and available license/notice files included in packages.
 - Relative documentation link checks and private commit-attribution checks.
@@ -16,7 +16,7 @@
 
 The pre-preparation review inspected 24 development commits, 96 unique file blobs (95 text files and one ICO), both branch tips, and existing pull-request references. Pattern checks did not identify credential formats in the inspected text. One personal commit email was replaced in both active branch histories at the maintainer's request.
 
-The two screenshot PNGs and original icon contain no text or EXIF metadata chunks. The adapted master retains generation provenance metadata; application PNG/ICO exports contain pixel data.
+The two initial screenshot PNGs and original icon inspected during the pre-preparation review contained no text or EXIF metadata chunks. The screenshot gallery was subsequently replaced with four current Windows 11 captures. The adapted master retains generation provenance metadata; application PNG/ICO exports contain pixel data.
 
 These checks reduce risk; they are not a guarantee that every possible secret format, external cache, fork or local clone has been examined.
 
@@ -30,4 +30,4 @@ Follow [GitHub's removal guidance](https://docs.github.com/en/authentication/kee
 
 ## Still useful before a stable release
 
-Current Windows settings screenshots, Ubuntu screenshots, real login/startup checks, multiple-display/DPI checks and wider desktop feedback. See [the release checklist](RELEASING.md).
+Ubuntu screenshots, real login/startup checks, multiple-display/DPI checks and wider desktop feedback. See [the release checklist](RELEASING.md).

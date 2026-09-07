@@ -21,7 +21,8 @@ This roadmap is directional, not a delivery schedule.
 - [ ] Confirm disk selection persists across restarts and mount changes.
 - [ ] Test all edges, scaling levels and monitor changes.
 - [ ] Check Ubuntu light/dark settings on supported sessions.
-- [ ] Add current settings screenshots and Ubuntu screenshots.
+- [x] Add current Windows 11 settings and expanded/collapsed notch screenshots.
+- [ ] Add Ubuntu screenshots.
 - [ ] Publish a preview release and gather feedback.
 
 ## Next priorities
