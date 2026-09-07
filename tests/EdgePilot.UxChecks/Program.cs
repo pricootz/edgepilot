@@ -194,7 +194,7 @@ try
     failingPanel.Children.OfType<Button>().Single().RaiseEvent(
         new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied is null, "save failure does not apply changes");
-    Check(failingPanel.Children.OfType<TextBlock>().Any(x => x.Text?.StartsWith("Could not save") == true),
+    Check(failingPanel.Children.OfType<TextBlock>().Any(x => x.Text?.StartsWith("Impossibile salvare") == true),
         "save failure is visible");
     failingSettings.Close();
     // Replacing an invalid file via Apply restores usable settings.

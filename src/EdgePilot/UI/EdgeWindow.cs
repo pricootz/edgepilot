@@ -87,9 +87,9 @@ public sealed class EdgeWindow : Window
         };
 
         _cpuRing = new MetricRing("C", "CPU");
-        _ramRing = new MetricRing("M", "MEM");
-        _diskRing = new MetricRing("D", "DISK");
-        _networkRing = new MetricRing("↕", "NET");
+        _ramRing = new MetricRing("M", "RAM");
+        _diskRing = new MetricRing("D", "DISCO");
+        _networkRing = new MetricRing("↕", "RETE");
 
         _metricStack = new StackPanel
         {
@@ -240,9 +240,12 @@ public sealed class EdgeWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            _tooltipTitle.Text = "SYSTEM MONITOR";
-            _tooltipValue.Text = "ERROR";
-            _tooltipLine1.Text = exception.GetType().Name;
+            _tooltipTitle.Text = "MONITORAGGIO SISTEMA";
+            _tooltipValue.Text = "ERRORE";
+            System.Diagnostics.Trace.WriteLine(exception);
+            _tooltipLine1.Text = "Impossibile aggiornare i dati del sistema.";
+            _tooltipLine2.Text = "Nuovo tentativo al prossimo aggiornamento.";
+            _tooltipLine3.Text = "";
         });
     }
 
@@ -257,7 +260,7 @@ public sealed class EdgeWindow : Window
         _cpuRing.SetValue(cpu, $"{cpu:0}%");
         _ramRing.SetValue(ram, $"{ram:0}%");
         _diskRing.SetValue(drive?.UsedPercent, drive is null ? "—" : $"{drive.UsedPercent:0}%");
-        _networkRing.SetValue(null, snapshot.Network.Connected ? "ON" : "OFF");
+        _networkRing.SetValue(null, snapshot.Network.Connected ? "SÌ" : "NO");
 
         if (_hoveredMetric is not null)
         {
@@ -433,25 +436,25 @@ public sealed class EdgeWindow : Window
             case 0:
                 _tooltipTitle.Text = "CPU";
                 _tooltipValue.Text = $"{cpu:0}%";
-                _tooltipLine1.Text = $"{Environment.ProcessorCount} logical processors";
+                _tooltipLine1.Text = $"{Environment.ProcessorCount} processori logici";
                 _tooltipLine2.Text = snapshot.HostName;
                 _tooltipLine3.Text = snapshot.OperatingSystem;
                 break;
 
             case 1:
-                _tooltipTitle.Text = "MEMORY";
+                _tooltipTitle.Text = "MEMORIA";
                 _tooltipValue.Text = $"{ram:0}%";
-                _tooltipLine1.Text = $"{DisplayFormat.Bytes(snapshot.MemoryUsedBytes)} used";
-                _tooltipLine2.Text = $"{DisplayFormat.Bytes(snapshot.MemoryAvailableBytes)} available";
-                _tooltipLine3.Text = $"{DisplayFormat.Bytes(snapshot.MemoryTotalBytes)} total";
+                _tooltipLine1.Text = $"{DisplayFormat.Bytes(snapshot.MemoryUsedBytes)} utilizzati";
+                _tooltipLine2.Text = $"{DisplayFormat.Bytes(snapshot.MemoryAvailableBytes)} disponibili";
+                _tooltipLine3.Text = $"{DisplayFormat.Bytes(snapshot.MemoryTotalBytes)} totali";
                 break;
 
             case 2:
-                _tooltipTitle.Text = "STORAGE";
+                _tooltipTitle.Text = "ARCHIVIAZIONE";
                 if (drive is null)
                 {
                     _tooltipValue.Text = "—";
-                    _tooltipLine1.Text = "No fixed drive detected";
+                    _tooltipLine1.Text = "Nessun disco fisso rilevato";
                     _tooltipLine2.Text = "";
                     _tooltipLine3.Text = "";
                 }
@@ -459,21 +462,21 @@ public sealed class EdgeWindow : Window
                 {
                     _tooltipValue.Text = $"{drive.UsedPercent:0}%";
                     _tooltipLine1.Text = drive.Label;
-                    _tooltipLine2.Text = $"{DisplayFormat.Bytes(drive.FreeBytes)} free";
-                    _tooltipLine3.Text = $"{DisplayFormat.Bytes(drive.TotalBytes)} total";
+                    _tooltipLine2.Text = $"{DisplayFormat.Bytes(drive.FreeBytes)} liberi";
+                    _tooltipLine3.Text = $"{DisplayFormat.Bytes(drive.TotalBytes)} totali";
                 }
                 break;
 
             default:
-                _tooltipTitle.Text = "NETWORK";
-                _tooltipValue.Text = snapshot.Network.Connected ? "ONLINE" : "OFFLINE";
-                _tooltipLine1.Text = snapshot.Network.Connected ? snapshot.Network.InterfaceName : "No active interface";
+                _tooltipTitle.Text = "RETE";
+                _tooltipValue.Text = snapshot.Network.Connected ? "CONNESSA" : "DISCONNESSA";
+                _tooltipLine1.Text = snapshot.Network.Connected ? snapshot.Network.InterfaceName : "Nessuna interfaccia di rete attiva";
                 _tooltipLine2.Text = snapshot.Network.Connected
                     ? $"↓ {DisplayFormat.Rate(snapshot.Network.ReceiveBytesPerSecond)}   ↑ {DisplayFormat.Rate(snapshot.Network.SendBytesPerSecond)}"
                     : "";
                 _tooltipLine3.Text = snapshot.Network.LinkSpeedBitsPerSecond > 0
-                    ? $"Link {snapshot.Network.LinkSpeedBitsPerSecond / 1_000_000d:0} Mbps"
-                    : $"Uptime {DisplayFormat.Uptime(snapshot.Uptime)}";
+                    ? $"Velocità collegamento: {snapshot.Network.LinkSpeedBitsPerSecond / 1_000_000d:0} Mbps"
+                    : $"Tempo di attività: {DisplayFormat.Uptime(snapshot.Uptime)}";
                 break;
         }
     }
