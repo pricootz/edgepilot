@@ -5,12 +5,22 @@ namespace EdgePilot.Core.Monitoring;
 public sealed class SystemMonitorService
 {
     private readonly ISystemMetricsProvider _provider;
-    private readonly TimeSpan _interval;
+    private int _intervalMs = 1000;
+    public TimeSpan RefreshInterval
+    {
+        get => TimeSpan.FromMilliseconds(Volatile.Read(ref _intervalMs));
+        set
+        {
+            if (value.TotalMilliseconds < 100 || value.TotalMilliseconds > 60000)
+                throw new ArgumentOutOfRangeException(nameof(value));
+            Volatile.Write(ref _intervalMs, (int)value.TotalMilliseconds);
+        }
+    }
 
     public SystemMonitorService(ISystemMetricsProvider provider, TimeSpan? interval = null)
     {
         _provider = provider;
-        _interval = interval ?? TimeSpan.FromSeconds(1);
+        RefreshInterval = interval ?? TimeSpan.FromSeconds(1);
     }
 
     public event Action<SystemSnapshot>? SnapshotUpdated;
@@ -32,7 +42,7 @@ public sealed class SystemMonitorService
 
             try
             {
-                await Task.Delay(_interval, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(RefreshInterval, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
