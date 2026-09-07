@@ -29,7 +29,7 @@ public sealed class EdgeWindow : Window
     private const double CellGap = 10;
     private const double StackHeight = 4 * CellHeight + 3 * CellGap;
 
-    private readonly EdgeSide _edge = EdgePlacement.FromEnvironment();
+    private EdgeSide _edge = EdgePlacement.FromEnvironment();
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer _cursorTimer;
@@ -150,6 +150,7 @@ public sealed class EdgeWindow : Window
         root.Children.Add(_tooltipCard);
         Content = root;
 
+        ConfigureLayout();
         UpdateNotchVisual();
 
         PointerMoved += OnPointerMoved;
@@ -338,6 +339,7 @@ public sealed class EdgeWindow : Window
         var length = Lerp(CollapsedLength, ExpandedLength, p);
         var geometry = EdgeNotchGeometry.BuildRight(WindowWidth, WindowHeight, depth, length);
 
+        geometry.Transform = new MatrixTransform(NotchLayout.Transform(_edge));
         _notchShape.Data = geometry;
         _notchContent.Clip = geometry;
 
@@ -360,6 +362,7 @@ public sealed class EdgeWindow : Window
 
     private int? MetricIndexAt(Point point)
     {
+        point = NotchLayout.ToDesign(point, _edge);
         if (_expansion < 0.82)
             return null;
 
@@ -460,35 +463,65 @@ public sealed class EdgeWindow : Window
         }
     }
 
+    private void ConfigureLayout()
+    {
+        var size = NotchLayout.WindowSize(_edge);
+        Width = size.Width;
+        Height = size.Height;
+        var root = (Canvas)Content!;
+        root.Width = _notchContent.Width = size.Width;
+        root.Height = _notchContent.Height = size.Height;
+        var horizontal = NotchLayout.Horizontal(_edge);
+        _metricStack.Orientation = horizontal ? Orientation.Horizontal : Orientation.Vertical;
+        _metricStack.Width = horizontal ? StackHeight : ExpandedDepth;
+        _metricStack.Height = horizontal ? ExpandedDepth : StackHeight;
+        foreach (var ring in _metricStack.Children)
+        {
+            ring.Width = horizontal ? CellHeight : 62;
+            ring.VerticalAlignment = VerticalAlignment.Center;
+        }
+        var bounds = NotchLayout.ToScreen(new Rect(WindowWidth - ExpandedDepth,
+            (WindowHeight - StackHeight) / 2, ExpandedDepth, StackHeight), _edge);
+        Canvas.SetLeft(_metricStack, bounds.X);
+        Canvas.SetTop(_metricStack, bounds.Y);
+    }
+
     private void PositionTooltip(int index)
     {
         const double tooltipWidth = 270;
         const double gap = 16;
-        var x = WindowWidth - ExpandedDepth - gap - tooltipWidth;
-        var stackTop = (WindowHeight - StackHeight) / 2;
-        var cellCenter = stackTop + index * (CellHeight + CellGap) + CellHeight / 2;
+        // Measure while visible; invisible controls otherwise report zero desired size.
+        _tooltipCard.IsVisible = true;
         _tooltipCard.Measure(new Size(tooltipWidth, double.PositiveInfinity));
         var height = Math.Max(174, _tooltipCard.DesiredSize.Height);
-        var y = Math.Clamp(cellCenter - height / 2, 16, Math.Max(16, WindowHeight - height - 16));
+        var center = NotchLayout.ToScreen(new Point(WindowWidth - ExpandedDepth / 2,
+            (WindowHeight - StackHeight) / 2 + index * (CellHeight + CellGap) + CellHeight / 2), _edge);
+        var x = _edge switch
+        {
+            EdgeSide.Right => Width - ExpandedDepth - gap - tooltipWidth,
+            EdgeSide.Left => ExpandedDepth + gap,
+            _ => Math.Clamp(center.X - tooltipWidth / 2, 16, Width - tooltipWidth - 16)
+        };
+        var y = _edge switch
+        {
+            EdgeSide.Top => ExpandedDepth + gap,
+            EdgeSide.Bottom => Height - ExpandedDepth - gap - height,
+            _ => Math.Clamp(center.Y - height / 2, 16, Math.Max(16, Height - height - 16))
+        };
         Canvas.SetLeft(_tooltipCard, x);
-        Canvas.SetTop(_tooltipCard, y);
+        Canvas.SetTop(_tooltipCard, Math.Max(0, y));
     }
 
-    private Rect HotZoneRect()
-    {
-        return new Rect(
-            WindowWidth - HotZoneDepth,
-            (WindowHeight - HotZoneLength) / 2,
-            HotZoneDepth,
-            HotZoneLength);
-    }
+    private Rect HotZoneRect() => NotchLayout.ToScreen(new Rect(
+        WindowWidth - HotZoneDepth, (WindowHeight - HotZoneLength) / 2,
+        HotZoneDepth, HotZoneLength), _edge);
 
     private Rect ShapeRect()
     {
         var p = Math.Clamp(_expansion, 0, 1.025);
         var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
         var length = Lerp(CollapsedLength, ExpandedLength, p);
-        return new Rect(WindowWidth - depth, (WindowHeight - length) / 2, depth, length);
+        return NotchLayout.ToScreen(new Rect(WindowWidth - depth, (WindowHeight - length) / 2, depth, length), _edge);
     }
 
     private Rect ExpandedLiveRect() => ShapeRect();
@@ -510,8 +543,13 @@ public sealed class EdgeWindow : Window
 
         var tip = TooltipLiveRect();
         var shape = ShapeRect();
-        var y = tip.Y;
-        return new Rect(tip.Right, y, Math.Max(0, shape.Left - tip.Right), tip.Height);
+        return _edge switch
+        {
+            EdgeSide.Left => new Rect(shape.Right, tip.Y, Math.Max(0, tip.Left - shape.Right), tip.Height),
+            EdgeSide.Top => new Rect(tip.X, shape.Bottom, tip.Width, Math.Max(0, tip.Top - shape.Bottom)),
+            EdgeSide.Bottom => new Rect(tip.X, tip.Bottom, tip.Width, Math.Max(0, shape.Top - tip.Bottom)),
+            _ => new Rect(tip.Right, tip.Y, Math.Max(0, shape.Left - tip.Right), tip.Height)
+        };
     }
 
     private bool IsInteractive(Point point)
