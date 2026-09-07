@@ -20,12 +20,14 @@ public sealed class EdgeWindow : Window
     private const double CollapsedDepth = 10;
     private const double CollapsedLength = 82;
     private const double ExpandedDepth = 88;
-    private const double ExpandedLength = 430;
+    private const double ExpandedLength = 408;
     private const double HotZoneDepth = 36;
     private const double HotZoneLength = 120;
 
     private const double FoldDelayMs = 450;
-    private const double MotionDurationMs = 420;
+    private const double CellHeight = 78;
+    private const double CellGap = 10;
+    private const double StackHeight = 4 * CellHeight + 3 * CellGap;
 
     private readonly EdgeSide _edge = EdgePlacement.FromEnvironment();
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
@@ -47,12 +49,15 @@ public sealed class EdgeWindow : Window
     private readonly TextBlock _tooltipLine2;
     private readonly TextBlock _tooltipLine3;
 
-    private CancellationTokenSource? _foldDelay;
-    private CancellationTokenSource? _motion;
+    private readonly DispatcherTimer _foldTimer = new();
+    private readonly DispatcherTimer _motionTimer = new();
+    private readonly NotchSpring _spring = new();
+    private readonly System.Diagnostics.Stopwatch _motionClock = new();
     private SystemSnapshot? _latestSnapshot;
     private double _expansion;
     private bool _expanded;
     private bool _pinned;
+    private bool _screensSubscribed;
     private int? _hoveredMetric;
 
     private readonly Win32Properties.CustomWndProcHookCallback? _wndProcHook;
@@ -86,7 +91,8 @@ public sealed class EdgeWindow : Window
         _metricStack = new StackPanel
         {
             Width = ExpandedDepth,
-            Spacing = 12,
+            Spacing = CellGap,
+            Height = StackHeight,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -104,7 +110,7 @@ public sealed class EdgeWindow : Window
         };
         _notchContent.Children.Add(_metricStack);
         Canvas.SetLeft(_metricStack, WindowWidth - ExpandedDepth);
-        Canvas.SetTop(_metricStack, (WindowHeight - 350) / 2);
+        Canvas.SetTop(_metricStack, (WindowHeight - StackHeight) / 2);
 
         _tooltipTitle = Text("CPU", 10, FontWeight.Bold, "#858E9B");
         _tooltipValue = Text("—", 28, FontWeight.SemiBold, "#F5F7FA");
@@ -122,12 +128,12 @@ public sealed class EdgeWindow : Window
         _tooltipCard = new Border
         {
             Width = 270,
-            MinHeight = 148,
+            MinHeight = 174,
             Padding = new Thickness(16),
             Background = Brush("#101318"),
             BorderBrush = Brush("#2A3039"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(18),
+            CornerRadius = new CornerRadius(14),
             Child = tooltipStack,
             IsVisible = false,
             Opacity = 0
@@ -135,6 +141,7 @@ public sealed class EdgeWindow : Window
 
         var root = new Canvas
         {
+            Background = Brushes.Transparent,
             Width = WindowWidth,
             Height = WindowHeight
         };
@@ -146,6 +153,25 @@ public sealed class EdgeWindow : Window
         UpdateNotchVisual();
 
         PointerMoved += OnPointerMoved;
+        PointerExited += (_, _) => ScheduleFold();
+        _foldTimer.Interval = TimeSpan.FromMilliseconds(FoldDelayMs);
+        _foldTimer.Tick += (_, _) =>
+        {
+            _foldTimer.Stop();
+            if (_pinned || !_expanded) return;
+            _expanded = false;
+            SetHoveredMetric(null);
+            StartMotion(0);
+        };
+        _motionTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _motionTimer.Tick += (_, _) =>
+        {
+            _spring.Advance(_motionClock.Elapsed.TotalSeconds);
+            _motionClock.Restart();
+            _expansion = _spring.Position;
+            UpdateNotchVisual();
+            if (_spring.IsSettled) _motionTimer.Stop();
+        };
         PointerPressed += OnPointerPressed;
 
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
@@ -172,6 +198,7 @@ public sealed class EdgeWindow : Window
     {
         Relocate();
         Screens.Changed += OnScreensChanged;
+        _screensSubscribed = true;
         _cursorTimer.Start();
         _ = Task.Run(() => _monitor.RunAsync(_lifetime.Token));
     }
@@ -179,18 +206,18 @@ public sealed class EdgeWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _cursorTimer.Stop();
-        _foldDelay?.Cancel();
-        _motion?.Cancel();
+        _foldTimer.Stop();
+        _motionTimer.Stop();
         _lifetime.Cancel();
-        Screens.Changed -= OnScreensChanged;
+        if (_screensSubscribed) Screens.Changed -= OnScreensChanged;
         _monitor.SnapshotUpdated -= OnSnapshotUpdated;
         _monitor.CaptureFailed -= OnCaptureFailed;
 
         if (_wndProcHook is not null)
             Win32Properties.RemoveWndProcHookCallback(this, _wndProcHook);
 
-        _foldDelay?.Dispose();
-        _motion?.Dispose();
+
+
         _lifetime.Dispose();
     }
 
@@ -225,44 +252,27 @@ public sealed class EdgeWindow : Window
         _networkRing.SetValue(null, snapshot.Network.Connected ? "ON" : "OFF");
 
         if (_hoveredMetric is not null)
+        {
             RenderTooltip(_hoveredMetric.Value);
+            PositionTooltip(_hoveredMetric.Value);
+        }
     }
 
     private void PollCursor()
     {
-        if (!TryGetCursorLocal(out var point))
-            return;
-
-        if (!_expanded)
-        {
-            SetHoveredMetric(null);
-            if (HotZoneRect().Contains(point))
-                Expand();
-            return;
-        }
-
-        var hovered = MetricIndexAt(point);
-        if (hovered is not null)
-            SetHoveredMetric(hovered);
-        else if (!TooltipLiveRect().Contains(point))
-            SetHoveredMetric(null);
-
-        if (ExpandedLiveRect().Contains(point) || TooltipLiveRect().Contains(point) || BridgeRect().Contains(point))
-        {
-            CancelFold();
-        }
-        else
-        {
-            ScheduleFold();
-        }
+        if (TryGetCursorLocal(out var point))
+            UpdatePointer(point);
     }
 
-    private void OnPointerMoved(object? sender, PointerEventArgs e)
+    private void OnPointerMoved(object? sender, PointerEventArgs e) =>
+        UpdatePointer(e.GetPosition(this));
+
+    private void UpdatePointer(Point point)
     {
-        var point = e.GetPosition(this);
         if (!_expanded)
         {
-            if (HotZoneRect().Contains(point))
+            if (HotZoneRect().Contains(point) ||
+                (_expansion > 0.05 && ShapeRect().Contains(point)))
                 Expand();
             return;
         }
@@ -270,8 +280,16 @@ public sealed class EdgeWindow : Window
         var hovered = MetricIndexAt(point);
         if (hovered is not null)
             SetHoveredMetric(hovered);
-    }
+        else if (!TooltipLiveRect().Contains(point) && !BridgeRect().Contains(point)
+                 && !ExpandedLiveRect().Contains(point))
+            SetHoveredMetric(null);
 
+        if (ExpandedLiveRect().Contains(point) || HotZoneRect().Contains(point)
+            || TooltipLiveRect().Contains(point) || BridgeRect().Contains(point))
+            CancelFold();
+        else
+            ScheduleFold();
+    }
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
@@ -288,10 +306,7 @@ public sealed class EdgeWindow : Window
         }
 
         _pinned = !_pinned;
-        if (_pinned)
-            CancelFold();
-        else
-            ScheduleFold();
+        CancelFold(); // The click is inside the notch; fold only after leaving.
     }
 
     private void Expand()
@@ -299,90 +314,26 @@ public sealed class EdgeWindow : Window
         CancelFold();
         if (_expanded) return;
         _expanded = true;
-        _ = AnimateExpansionAsync(1);
+        StartMotion(1);
     }
 
     private void ScheduleFold()
     {
-        if (_pinned || !_expanded || _foldDelay is not null)
-            return;
-
-        _foldDelay = new CancellationTokenSource();
-        var token = _foldDelay.Token;
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(FoldDelayMs), token).ConfigureAwait(false);
-                if (!token.IsCancellationRequested)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (_pinned) return;
-                        _expanded = false;
-                        SetHoveredMetric(null);
-                        _ = AnimateExpansionAsync(0);
-                    });
-                }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            finally
-            {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    _foldDelay?.Dispose();
-                    _foldDelay = null;
-                });
-            }
-        }, token);
+        if (!_pinned && _expanded && !_foldTimer.IsEnabled)
+            _foldTimer.Start();
     }
 
-    private void CancelFold()
+    private void CancelFold() => _foldTimer.Stop();
+
+    private void StartMotion(double target)
     {
-        _foldDelay?.Cancel();
+        _spring.Target = target;
+        _motionClock.Restart();
+        _motionTimer.Start();
     }
-
-    private async Task AnimateExpansionAsync(double target)
-    {
-        _motion?.Cancel();
-        _motion?.Dispose();
-        _motion = new CancellationTokenSource();
-        var token = _motion.Token;
-        var start = _expansion;
-        var started = DateTime.UtcNow;
-
-        try
-        {
-            while (true)
-            {
-                token.ThrowIfCancellationRequested();
-                var elapsed = (DateTime.UtcNow - started).TotalMilliseconds;
-                var time = Math.Clamp(elapsed / MotionDurationMs, 0, 1);
-                var eased = Springish(time);
-                _expansion = Lerp(start, target, eased);
-                _expansion = Math.Clamp(_expansion, -0.02, 1.04);
-                UpdateNotchVisual();
-
-                if (time >= 1)
-                    break;
-
-                await Task.Delay(16, token);
-            }
-
-            _expansion = target;
-            UpdateNotchVisual();
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
     private void UpdateNotchVisual()
     {
-        var p = Math.Clamp(_expansion, 0, 1);
+        var p = Math.Clamp(_expansion, 0, 1.025);
         var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
         var length = Lerp(CollapsedLength, ExpandedLength, p);
         var geometry = EdgeNotchGeometry.BuildRight(WindowWidth, WindowHeight, depth, length);
@@ -392,7 +343,7 @@ public sealed class EdgeWindow : Window
 
         var contentProgress = Math.Clamp((p - 0.16) / 0.72, 0, 1);
         _notchContent.Opacity = contentProgress;
-        _metricStack.RenderTransform = new TranslateTransform(12 * (1 - contentProgress), 0);
+        // Cells stay at their final positions; the shared silhouette reveals them.
 
         if (p < 0.78)
         {
@@ -416,9 +367,9 @@ public sealed class EdgeWindow : Window
         if (point.X < xMin || point.X > WindowWidth)
             return null;
 
-        var stackTop = (WindowHeight - 350) / 2;
-        const double cell = 75;
-        const double gap = 12;
+        var stackTop = (WindowHeight - StackHeight) / 2;
+        const double cell = CellHeight;
+        const double gap = CellGap;
 
         for (var index = 0; index < 4; index++)
         {
@@ -514,9 +465,11 @@ public sealed class EdgeWindow : Window
         const double tooltipWidth = 270;
         const double gap = 16;
         var x = WindowWidth - ExpandedDepth - gap - tooltipWidth;
-        var stackTop = (WindowHeight - 350) / 2;
-        var cellCenter = stackTop + index * 87 + 37;
-        var y = Math.Clamp(cellCenter - 82, 24, WindowHeight - 190);
+        var stackTop = (WindowHeight - StackHeight) / 2;
+        var cellCenter = stackTop + index * (CellHeight + CellGap) + CellHeight / 2;
+        _tooltipCard.Measure(new Size(tooltipWidth, double.PositiveInfinity));
+        var height = Math.Max(174, _tooltipCard.DesiredSize.Height);
+        var y = Math.Clamp(cellCenter - height / 2, 16, Math.Max(16, WindowHeight - height - 16));
         Canvas.SetLeft(_tooltipCard, x);
         Canvas.SetTop(_tooltipCard, y);
     }
@@ -532,7 +485,7 @@ public sealed class EdgeWindow : Window
 
     private Rect ShapeRect()
     {
-        var p = Math.Clamp(_expansion, 0, 1);
+        var p = Math.Clamp(_expansion, 0, 1.025);
         var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
         var length = Lerp(CollapsedLength, ExpandedLength, p);
         return new Rect(WindowWidth - depth, (WindowHeight - length) / 2, depth, length);
@@ -547,7 +500,7 @@ public sealed class EdgeWindow : Window
 
         var x = Canvas.GetLeft(_tooltipCard);
         var y = Canvas.GetTop(_tooltipCard);
-        return new Rect(x, y, _tooltipCard.Width, Math.Max(_tooltipCard.Bounds.Height, 170));
+        return new Rect(x, y, _tooltipCard.Width, Math.Max(_tooltipCard.Bounds.Height, 174));
     }
 
     private Rect BridgeRect()
@@ -557,14 +510,14 @@ public sealed class EdgeWindow : Window
 
         var tip = TooltipLiveRect();
         var shape = ShapeRect();
-        var y = tip.Y + tip.Height / 2 - 30;
-        return new Rect(tip.Right, y, Math.Max(0, shape.Left - tip.Right), 60);
+        var y = tip.Y;
+        return new Rect(tip.Right, y, Math.Max(0, shape.Left - tip.Right), tip.Height);
     }
 
     private bool IsInteractive(Point point)
     {
         if (!_expanded)
-            return ShapeRect().Contains(point);
+            return HotZoneRect().Contains(point) || ShapeRect().Contains(point);
 
         return ExpandedLiveRect().Contains(point)
             || TooltipLiveRect().Contains(point)
@@ -625,14 +578,6 @@ public sealed class EdgeWindow : Window
     private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
 
     private static double Lerp(double from, double to, double amount) => from + (to - from) * amount;
-
-    private static double Springish(double t)
-    {
-        const double c1 = 1.15;
-        var c3 = c1 + 1;
-        var x = t - 1;
-        return 1 + c3 * x * x * x + c1 * x * x;
-    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativePoint
