@@ -79,6 +79,39 @@ foreach (var p in new[] { 0d, 0.25, 0.5, 0.75, 1, 1.025 })
     Check(ReferenceEquals(shape.Data, content.Clip), "shape and clip share geometry " + p);
     Check(Math.Abs(shape.Data!.Bounds.Center.Y - 310) < 0.001, "geometry remains centered " + p);
 }
+foreach (var edge in Enum.GetValues<EdgeSide>())
+{
+    Set(window, "_edge", edge);
+    Call(window, "ConfigureLayout");
+    Set(window, "_expansion", 1d);
+    Call(window, "UpdateNotchVisual");
+    var size = NotchLayout.WindowSize(edge);
+    Check(window.Width == size.Width && window.Height == size.Height, "window orientation " + edge);
+    foreach (var point in new[] { new Point(410, 310), new Point(366, 181), new Point(0, 0) })
+        Check(NotchLayout.ToDesign(NotchLayout.ToScreen(point, edge), edge) == point, "coordinate round trip " + edge);
+    for (var i = 0; i < 4; i++)
+    {
+        var point = NotchLayout.ToScreen(new Point(366, (620 - 342) / 2d + i * 88 + 39), edge);
+        Check((int)Call(window, "MetricIndexAt", point)! == i, "oriented metric " + edge + i);
+        Call(window, "UpdatePointer", point);
+        var tip = (Rect)Call(window, "TooltipLiveRect")!;
+        Check(new Rect(size).Contains(tip), "tooltip within window " + edge + i);
+        var corridor = (Rect)Call(window, "BridgeRect")!;
+        Check(corridor.Width > 0 && corridor.Height > 0, "tooltip bridge " + edge + i);
+        Call(window, "UpdatePointer", corridor.Center);
+        Check((int?)Field(window, "_hoveredMetric") == i, "bridge retains tooltip " + edge + i);
+    }
+    var silhouette = shape.Data!.Bounds;
+    Check(edge switch
+    {
+        EdgeSide.Left => Math.Abs(silhouette.Left) < 0.001,
+        EdgeSide.Top => Math.Abs(silhouette.Top) < 0.001,
+        EdgeSide.Bottom => Math.Abs(silhouette.Bottom - size.Height) < 0.001,
+        _ => Math.Abs(silhouette.Right - size.Width) < 0.001
+    }, "silhouette anchored " + edge);
+}
+Set(window, "_edge", EdgeSide.Right);
+Call(window, "ConfigureLayout");
 if (args.Length > 0)
 {
     Directory.CreateDirectory(args[0]);
