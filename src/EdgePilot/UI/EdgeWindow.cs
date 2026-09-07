@@ -12,10 +12,11 @@ namespace EdgePilot.UI;
 
 public sealed class EdgeWindow : Window
 {
-    private const double CollapsedWidth = 76;
-    private const double CollapsedHeight = 182;
-    private const double ExpandedWidth = 372;
-    private const double ExpandedHeight = 548;
+    private const double CollapsedWidth = 12;
+    private const double CollapsedHeight = 82;
+    private const double ExpandedWidth = 352;
+    private const double ExpandedHeight = 508;
+    private const double FoldDelayMs = 450;
 
     private readonly EdgeSide _edge = EdgePlacement.FromEnvironment();
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
@@ -24,9 +25,6 @@ public sealed class EdgeWindow : Window
     private readonly Border _root;
     private readonly Control _collapsedView;
     private readonly Control _expandedView;
-    private readonly TextBlock _collapsedCpu;
-    private readonly TextBlock _collapsedRam;
-    private readonly Border _collapsedNetworkDot;
     private readonly TextBlock _hostText;
     private readonly TextBlock _osText;
     private readonly TextBlock _cpuValue;
@@ -53,17 +51,14 @@ public sealed class EdgeWindow : Window
         Width = CollapsedWidth;
         Height = CollapsedHeight;
         CanResize = false;
-        SystemDecorations = WindowDecorations.None;
+        WindowDecorations = WindowDecorations.None;
         ShowInTaskbar = false;
         Topmost = true;
         ShowActivated = false;
         Background = Brushes.Transparent;
-        TransparencyBackgroundFallback = Brush("#0B0D11");
+        TransparencyBackgroundFallback = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
 
-        _collapsedCpu = ValueText("--");
-        _collapsedRam = ValueText("--");
-        _collapsedNetworkDot = StatusDot(false);
         _hostText = Text("EdgePilot", 18, FontWeight.SemiBold, "#F5F7FA");
         _osText = Text("Starting system monitor…", 11, FontWeight.Normal, "#8B93A1");
         _cpuValue = Text("--%", 30, FontWeight.SemiBold, "#F5F7FA");
@@ -90,18 +85,18 @@ public sealed class EdgeWindow : Window
 
         _root = new Border
         {
-            Background = Brush("#0B0D11"),
-            BorderBrush = Brush("#252A33"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = CornerRadiusForEdge(_edge, 22),
-            Padding = new Thickness(10),
+            Background = Brush("#050608"),
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = CornerRadiusForEdge(_edge, 8),
+            Padding = new Thickness(0),
             Child = content
         };
 
         Content = _root;
 
-        _root.PointerEntered += (_, _) => Expand();
-        _root.PointerExited += (_, _) => ScheduleFold();
+        PointerEntered += (_, _) => Expand();
+        PointerExited += (_, _) => ScheduleFold();
         _pinButton.Click += (_, _) => TogglePin();
 
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
@@ -114,21 +109,13 @@ public sealed class EdgeWindow : Window
 
     private Control BuildCollapsedView()
     {
-        var stack = new StackPanel
+        return new Border
         {
-            Spacing = 7,
+            Background = Brush("#050608"),
+            CornerRadius = CornerRadiusForEdge(_edge, 8),
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Stretch
         };
-
-        stack.Children.Add(Text("EP", 11, FontWeight.Bold, "#7F8A9A", TextAlignment.Center));
-        stack.Children.Add(_collapsedNetworkDot);
-        stack.Children.Add(Text("CPU", 9, FontWeight.SemiBold, "#6E7683", TextAlignment.Center));
-        stack.Children.Add(_collapsedCpu);
-        stack.Children.Add(Divider());
-        stack.Children.Add(Text("RAM", 9, FontWeight.SemiBold, "#6E7683", TextAlignment.Center));
-        stack.Children.Add(_collapsedRam);
-        return stack;
     }
 
     private Control BuildExpandedView()
@@ -202,9 +189,9 @@ public sealed class EdgeWindow : Window
 
         return new Border
         {
-            Width = 163,
-            Background = Brush("#12161C"),
-            BorderBrush = Brush("#252A33"),
+            Width = 153,
+            Background = Brush("#11151B"),
+            BorderBrush = Brush("#242A33"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(14),
             Padding = new Thickness(14),
@@ -214,7 +201,7 @@ public sealed class EdgeWindow : Window
 
     private static Border Card(Control child) => new()
     {
-        Background = Brush("#10141A"),
+        Background = Brush("#0F1318"),
         BorderBrush = Brush("#222832"),
         BorderThickness = new Thickness(1),
         CornerRadius = new CornerRadius(12),
@@ -247,8 +234,6 @@ public sealed class EdgeWindow : Window
 
     private static TextBlock SectionLabel(string text) => Text(text, 9, FontWeight.Bold, "#68717E");
 
-    private static TextBlock ValueText(string value) => Text(value, 17, FontWeight.SemiBold, "#F5F7FA", TextAlignment.Center);
-
     private static TextBlock Text(
         string value,
         double size,
@@ -262,13 +247,6 @@ public sealed class EdgeWindow : Window
         Foreground = Brush(color),
         TextAlignment = alignment,
         TextWrapping = TextWrapping.NoWrap
-    };
-
-    private static Border Divider() => new()
-    {
-        Height = 1,
-        Margin = new Thickness(8, 1),
-        Background = Brush("#242A32")
     };
 
     private static Border StatusDot(bool online) => new()
@@ -312,7 +290,6 @@ public sealed class EdgeWindow : Window
         Dispatcher.UIThread.Post(() =>
         {
             _osText.Text = $"Monitor error · {exception.GetType().Name}";
-            SetDot(_collapsedNetworkDot, false);
         });
     }
 
@@ -320,10 +297,6 @@ public sealed class EdgeWindow : Window
     {
         var cpu = Math.Clamp(snapshot.CpuPercent, 0, 100);
         var ram = Math.Clamp(snapshot.MemoryUsedPercent, 0, 100);
-
-        _collapsedCpu.Text = $"{cpu:0}%";
-        _collapsedRam.Text = $"{ram:0}%";
-        SetDot(_collapsedNetworkDot, snapshot.Network.Connected);
 
         _hostText.Text = snapshot.HostName;
         _osText.Text = snapshot.OperatingSystem;
@@ -403,13 +376,12 @@ public sealed class EdgeWindow : Window
         {
             try
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(450), token).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromMilliseconds(FoldDelayMs), token).ConfigureAwait(false);
                 if (!token.IsCancellationRequested)
                     Dispatcher.UIThread.Post(() => SetExpanded(false));
             }
             catch (OperationCanceledException)
             {
-                // Pointer came back before the fold grace elapsed.
             }
         }, token);
     }
@@ -428,7 +400,13 @@ public sealed class EdgeWindow : Window
         _expanded = expanded;
         _collapsedView.IsVisible = !expanded;
         _expandedView.IsVisible = expanded;
-        _root.Padding = expanded ? new Thickness(16) : new Thickness(10);
+
+        _root.Background = expanded ? Brush("#0B0D11") : Brush("#050608");
+        _root.BorderBrush = expanded ? Brush("#252A33") : Brushes.Transparent;
+        _root.BorderThickness = expanded ? new Thickness(1) : new Thickness(0);
+        _root.CornerRadius = expanded ? CornerRadiusForEdge(_edge, 22) : CornerRadiusForEdge(_edge, 8);
+        _root.Padding = expanded ? new Thickness(16) : new Thickness(0);
+
         Width = expanded ? ExpandedWidth : CollapsedWidth;
         Height = expanded ? ExpandedHeight : CollapsedHeight;
         Relocate();
@@ -439,6 +417,8 @@ public sealed class EdgeWindow : Window
     {
         if (!IsVisible) return;
         var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is null) return;
+
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
     }
 
