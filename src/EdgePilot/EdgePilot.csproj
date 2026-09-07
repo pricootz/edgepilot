@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <ApplicationIcon>Assets/edgepilot.ico</ApplicationIcon>
+    <Version>0.1.0</Version>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -9,6 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets/edgepilot.ico" />
+    <Content Include="Assets/edgepilot.svg" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />

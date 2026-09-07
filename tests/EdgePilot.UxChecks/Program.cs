@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using EdgePilot.UI;
+using EdgePilot.Core;
+using EdgePilot.Platform;
 
 AppBuilder.Configure<Application>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
 var passed = 0;
@@ -42,6 +44,19 @@ Check(reversing.Position == position && reversing.Velocity == velocity, "retarge
 for (var i = 0; i < 200; i++) reversing.Advance(0.016);
 Check(reversing.IsSettled, "reversal settles");
 
+var drives = new[]
+{
+    new DriveSnapshot("/mnt/parity", "Parity", 20_000_000_000_000, 1_000_000_000_000),
+    new DriveSnapshot("/mnt/dati16", "Dati 16 TB", 16_000_000_000_000, 12_000_000_000_000)
+};
+Check(DriveSelection.Resolve(drives, "/mnt/dati16") == drives[1], "explicit disk overrides parity");
+Check(DriveSelection.Resolve(drives, "/missing") is null, "missing disk never falls back");
+Check(DriveSelection.Choices(drives, "/missing").Any(x => x.Name == "/missing"), "missing choice is retained");
+var manyDrives = Enumerable.Range(0, 12).Select(i => new DriveSnapshot("/disk" + i, "Disco", 1000, 500)).ToArray();
+Check(DriveSelection.Choices(manyDrives, null).Count == 13, "selector does not truncate disk list");
+Check(DriveSelection.Choices(drives, null)[2].Caption.Contains("16 TB"), "decimal disk capacity is recognizable");
+_ = AppIcon.Load();
+Check(true, "embedded tray icon decodes");
 var window = new EdgeWindow();
 Call(window, "UpdatePointer", new Point(405, 310));
 Check((bool)Field(window, "_expanded")!, "hot-zone opens");
@@ -179,6 +194,17 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
 }
 window.ApplyPreferences(new NotchPreferences());
 
+window.ApplyPreferences(new NotchPreferences { SelectedDrive = "/mnt/dati16" });
+var snapshot = new SystemSnapshot("host", "Ubuntu", 10, 1000, 500, TimeSpan.FromMinutes(10),
+    new NetworkSnapshot("eth0", true, 0, 0, 1000), drives, DateTimeOffset.Now);
+Call(window, "RenderSnapshot", snapshot);
+Call(window, "RenderTooltip", 2);
+Check(((TextBlock)Field(window, "_tooltipValue")!).Text == "25%", "disk tooltip uses selected disk");
+Call(window, "RenderSnapshot", snapshot with { Drives = new[] { drives[0] } });
+Call(window, "RenderTooltip", 2);
+Check(((TextBlock)Field(window, "_tooltipValue")!).Text == "—", "unmounted disk shows unavailable");
+window.ApplyPreferences(new NotchPreferences());
+
 var temporaryDirectory = Path.Combine(Path.GetTempPath(), "edgepilot-checks-" + Guid.NewGuid().ToString("N"));
 var settingsPath = Path.Combine(temporaryDirectory, "settings.json");
 try
@@ -259,6 +285,35 @@ try
     Check(failingPanel.Children.OfType<TextBlock>().Any(x => x.Text?.StartsWith("Impossibile salvare") == true),
         "save failure is visible");
     failingSettings.Close();
+    var diskSettings = new SettingsWindow(new NotchPreferences { SelectedDrive = "/mnt/dati16" },
+        _ => { }, drives: drives);
+    var diskPanel = (StackPanel)((ScrollViewer)diskSettings.Content!).Content!;
+    var diskSelector = diskPanel.Children.OfType<ComboBox>().Last();
+    Check(((DriveChoice)diskSelector.SelectedItem!).Name == "/mnt/dati16", "saved disk selected in settings");
+    diskSelector.SelectedItem = ((IReadOnlyList<DriveChoice>)diskSelector.ItemsSource!)[0];
+    diskSettings.UpdateDrives(drives);
+    Check(((DriveChoice)diskSelector.SelectedItem!).Name is null, "refresh preserves unsaved automatic choice");
+    diskSettings.Close();
+
+    var registration = new MemoryRegistration();
+    var command = new LaunchCommand("/opt/Edge Pilot/EdgePilot", new[] { "--autostart" });
+    var launchPreferences = new NotchPreferences { StartAtLogin = true, SelectedDrive = "/mnt/dati16" };
+    DesktopPreferences.Save(settingsPath, launchPreferences, registration, command, windows: false);
+    Check(registration.Content?.Contains("Exec=") == true, "autostart registration created");
+    Check(PreferenceStore.Load(settingsPath) == launchPreferences, "disk and startup preferences persist");
+    var previousRegistration = registration.Content;
+    try
+    {
+        DesktopPreferences.Save(temporaryDirectory, new NotchPreferences(), registration, command, windows: false);
+        Check(false, "failed save rejected");
+    }
+    catch (IOException) { Check(registration.Content == previousRegistration, "registration rolled back on save failure"); }
+    catch (UnauthorizedAccessException) { Check(registration.Content == previousRegistration, "registration rolled back on denied save"); }
+    DesktopPreferences.Save(settingsPath, new NotchPreferences(), registration, command, windows: false);
+    Check(registration.Content is null, "autostart registration removed");
+    Check(command.WindowsCommand().StartsWith("\"/opt/Edge Pilot/EdgePilot\""), "startup command quotes spaces");
+    Check(new LaunchCommand("/opt/100%/EdgePilot", Array.Empty<string>()).DesktopEntry().Contains("100%%"),
+        "desktop entry escapes percent field codes");
     // Replacing an invalid file via Apply restores usable settings.
     PreferenceStore.Save(settingsPath, new NotchPreferences());
     Check(PreferenceStore.Load(settingsPath) == new NotchPreferences(), "corrupt file can be recovered");
@@ -276,3 +331,10 @@ Check(((SettingsWindow)Field(recovery, "_settingsWindow")!).IsVisible, "hidden h
 Check(((CancellationTokenSource)Field(recovery, "_lifetime")!).IsCancellationRequested,
     "closing hidden settings exits the notch");
 Console.WriteLine($"{passed} checks passed.");
+
+public sealed class MemoryRegistration : IAutostartRegistration
+{
+    public string? Content { get; private set; }
+    public string? Read() => Content;
+    public void Write(string? content) => Content = content;
+}

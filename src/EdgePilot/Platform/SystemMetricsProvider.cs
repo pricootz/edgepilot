@@ -33,7 +33,7 @@ public sealed class SystemMetricsProvider : ISystemMetricsProvider
         {
             try
             {
-                if (!drive.IsReady || drive.DriveType != DriveType.Fixed || drive.TotalSize <= 0) continue;
+                if (!drive.IsReady || drive.DriveType is not (DriveType.Fixed or DriveType.Removable or DriveType.Network) || drive.TotalSize <= 0) continue;
 
                 result.Add(new DriveSnapshot(
                     drive.Name,
@@ -49,7 +49,6 @@ public sealed class SystemMetricsProvider : ISystemMetricsProvider
 
         return result
             .OrderByDescending(static drive => drive.TotalBytes)
-            .Take(5)
             .ToArray();
     }
 }

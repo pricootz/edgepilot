@@ -63,6 +63,11 @@ public sealed class EdgeWindow : Window
     private bool _screensSubscribed;
     private bool _started;
     private NotchDisplayMode _mode;
+    private string? _selectedDrive;
+    private bool _startAtLogin;
+    public bool HasTray { get; set; }
+    public event Action? ExitRequested;
+    public Action<NotchPreferences>? SavePreferences { get; set; }
     private SettingsWindow? _settingsWindow;
     private int? _hoveredMetric;
 
@@ -71,6 +76,7 @@ public sealed class EdgeWindow : Window
     public EdgeWindow()
     {
         Title = "EdgePilot";
+        RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
         Width = WindowWidth;
         Height = WindowHeight;
         CanResize = false;
@@ -255,10 +261,11 @@ public sealed class EdgeWindow : Window
     private void RenderSnapshot(SystemSnapshot snapshot)
     {
         _latestSnapshot = snapshot;
+        _settingsWindow?.UpdateDrives(snapshot.Drives);
 
         var cpu = Math.Clamp(snapshot.CpuPercent, 0, 100);
         var ram = Math.Clamp(snapshot.MemoryUsedPercent, 0, 100);
-        var drive = snapshot.Drives.FirstOrDefault();
+        var drive = DriveSelection.Resolve(snapshot.Drives, _selectedDrive);
 
         _cpuRing.SetValue(cpu, $"{cpu:0}%");
         _ramRing.SetValue(ram, $"{ram:0}%");
@@ -432,7 +439,7 @@ public sealed class EdgeWindow : Window
 
         var cpu = Math.Clamp(snapshot.CpuPercent, 0, 100);
         var ram = Math.Clamp(snapshot.MemoryUsedPercent, 0, 100);
-        var drive = snapshot.Drives.FirstOrDefault();
+        var drive = DriveSelection.Resolve(snapshot.Drives, _selectedDrive);
 
         switch (index)
         {
@@ -457,9 +464,9 @@ public sealed class EdgeWindow : Window
                 if (drive is null)
                 {
                     _tooltipValue.Text = "—";
-                    _tooltipLine1.Text = "Nessun disco fisso rilevato";
-                    _tooltipLine2.Text = "";
-                    _tooltipLine3.Text = "";
+                    _tooltipLine1.Text = _selectedDrive is null ? "Nessun disco disponibile" : "Il disco scelto non è disponibile";
+                    _tooltipLine2.Text = _selectedDrive ?? "";
+                    _tooltipLine3.Text = "Scegli il disco nelle impostazioni.";
                 }
                 else
                 {
@@ -486,6 +493,7 @@ public sealed class EdgeWindow : Window
 
     public NotchPreferences Preferences => new(_edge, _mode)
     {
+        SelectedDrive = _selectedDrive, StartAtLogin = _startAtLogin,
         Metrics = _metrics, Sensitivity = _sensitivity,
         RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds
     };
@@ -498,6 +506,8 @@ public sealed class EdgeWindow : Window
         _pinned = false;
         _edge = preferences.Edge;
         _mode = preferences.Mode;
+        _selectedDrive = preferences.SelectedDrive;
+        _startAtLogin = preferences.StartAtLogin;
         _metrics = preferences.Metrics;
         _sensitivity = preferences.Sensitivity;
         _monitor.RefreshInterval = TimeSpan.FromMilliseconds(preferences.RefreshIntervalMs);
@@ -522,7 +532,20 @@ public sealed class EdgeWindow : Window
                 _cursorTimer.Start();
             }
         }
+        if (_latestSnapshot is not null) RenderSnapshot(_latestSnapshot);
         Relocate();
+    }
+
+    public void RequestExit()
+    {
+        if (ExitRequested is not null) ExitRequested();
+        else Close();
+    }
+
+    public void ToggleVisibility()
+    {
+        ApplyPreferences(Preferences with { Mode = _mode == NotchDisplayMode.Hidden ? NotchDisplayMode.Hover : NotchDisplayMode.Hidden });
+        if (_mode == NotchDisplayMode.Hidden && !HasTray) ShowSettings();
     }
 
     public void ShowSettings(string? warning = null)
@@ -533,11 +556,13 @@ public sealed class EdgeWindow : Window
             return;
         }
         CancelFold();
-        _settingsWindow = new SettingsWindow(Preferences, ApplyPreferences, warning);
+        _settingsWindow = new SettingsWindow(Preferences, ApplyPreferences, warning,
+            drives: _latestSnapshot?.Drives, savePreferences: SavePreferences,
+            exit: RequestExit, hasTray: HasTray);
         _settingsWindow.Closed += (_, _) =>
         {
             _settingsWindow = null;
-            if (_mode == NotchDisplayMode.Hidden && !_lifetime.IsCancellationRequested)
+            if (_mode == NotchDisplayMode.Hidden && !HasTray && !_lifetime.IsCancellationRequested)
                 Close();
         };
         _settingsWindow.Show();
