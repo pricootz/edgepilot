@@ -131,5 +131,55 @@ if (args.Length > 0)
     }
     preview.Close();
 }
+foreach (var edge in Enum.GetValues<EdgeSide>())
+{
+    window.ApplyPreferences(new NotchPreferences(edge, NotchDisplayMode.Always));
+    Check(window.Preferences.Edge == edge && (bool)Field(window, "_expanded")!, "always opens " + edge);
+    Call(window, "ScheduleFold");
+    Check(!((DispatcherTimer)Field(window, "_foldTimer")!).IsEnabled, "always ignores exit " + edge);
+    window.ApplyPreferences(new NotchPreferences(edge, NotchDisplayMode.Hidden));
+    Check(!(bool)Call(window, "IsInteractive", NotchLayout.ToScreen(new Point(405, 310), edge))!,
+        "hidden has no hit targets " + edge);
+    Call(window, "UpdatePointer", NotchLayout.ToScreen(new Point(405, 310), edge));
+    Check(!(bool)Field(window, "_expanded")!, "hidden ignores hover " + edge);
+    window.ApplyPreferences(new NotchPreferences(edge, NotchDisplayMode.Hover));
+    Call(window, "UpdatePointer", NotchLayout.ToScreen(new Point(405, 310), edge));
+    Check((bool)Field(window, "_expanded")!, "hover restored " + edge);
+}
+
+var temporaryDirectory = Path.Combine(Path.GetTempPath(), "edgepilot-checks-" + Guid.NewGuid().ToString("N"));
+var settingsPath = Path.Combine(temporaryDirectory, "settings.json");
+try
+{
+    Check(PreferenceStore.Load(settingsPath) == new NotchPreferences(), "missing settings use defaults");
+    foreach (var edge in Enum.GetValues<EdgeSide>())
+    foreach (var mode in Enum.GetValues<NotchDisplayMode>())
+    {
+        var saved = new NotchPreferences(edge, mode);
+        PreferenceStore.Save(settingsPath, saved);
+        Check(PreferenceStore.Load(settingsPath) == saved, "settings round trip " + edge + mode);
+    }
+    var lastGood = File.ReadAllText(settingsPath);
+    try
+    {
+        PreferenceStore.Save(settingsPath, new NotchPreferences((EdgeSide)999));
+        Check(false, "invalid settings rejected");
+    }
+    catch (InvalidDataException) { Check(File.ReadAllText(settingsPath) == lastGood, "invalid save preserves last good file"); }
+    Check(Directory.GetFiles(temporaryDirectory, "*.tmp").Length == 0, "atomic saves leave no temporary files");
+    File.WriteAllText(settingsPath, "{bad json");
+    try { PreferenceStore.Load(settingsPath); Check(false, "corrupt settings rejected"); }
+    catch (System.Text.Json.JsonException) { Check(true, "corrupt settings reported"); }
+    File.WriteAllText(settingsPath, "{\"Edge\":999,\"Mode\":0}");
+    try { PreferenceStore.Load(settingsPath); Check(false, "unknown enum rejected"); }
+    catch (InvalidDataException) { Check(true, "unknown enum reported"); }
+    // Replacing an invalid file via Apply restores usable settings.
+    PreferenceStore.Save(settingsPath, new NotchPreferences());
+    Check(PreferenceStore.Load(settingsPath) == new NotchPreferences(), "corrupt file can be recovered");
+}
+finally
+{
+    if (Directory.Exists(temporaryDirectory)) Directory.Delete(temporaryDirectory, true);
+}
 window.Close();
 Console.WriteLine($"{passed} checks passed.");

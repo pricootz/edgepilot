@@ -58,6 +58,9 @@ public sealed class EdgeWindow : Window
     private bool _expanded;
     private bool _pinned;
     private bool _screensSubscribed;
+    private bool _started;
+    private NotchDisplayMode _mode;
+    private SettingsWindow? _settingsWindow;
     private int? _hoveredMetric;
 
     private readonly Win32Properties.CustomWndProcHookCallback? _wndProcHook;
@@ -198,10 +201,13 @@ public sealed class EdgeWindow : Window
     private void OnOpened(object? sender, EventArgs e)
     {
         Relocate();
+        if (_started) return;
+        _started = true;
         Screens.Changed += OnScreensChanged;
         _screensSubscribed = true;
         _cursorTimer.Start();
         _ = Task.Run(() => _monitor.RunAsync(_lifetime.Token));
+        if (_mode == NotchDisplayMode.Hidden) { _cursorTimer.Stop(); Hide(); }
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -210,6 +216,7 @@ public sealed class EdgeWindow : Window
         _foldTimer.Stop();
         _motionTimer.Stop();
         _lifetime.Cancel();
+        _settingsWindow?.Close();
         if (_screensSubscribed) Screens.Changed -= OnScreensChanged;
         _monitor.SnapshotUpdated -= OnSnapshotUpdated;
         _monitor.CaptureFailed -= OnCaptureFailed;
@@ -270,6 +277,7 @@ public sealed class EdgeWindow : Window
 
     private void UpdatePointer(Point point)
     {
+        if (_mode == NotchDisplayMode.Hidden) return;
         if (!_expanded)
         {
             if (HotZoneRect().Contains(point) ||
@@ -293,6 +301,13 @@ public sealed class EdgeWindow : Window
     }
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        {
+            if (IsInteractive(e.GetPosition(this))) ShowSettings();
+            e.Handled = true;
+            return;
+        }
+        if (_mode == NotchDisplayMode.Always) return;
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
 
@@ -320,7 +335,7 @@ public sealed class EdgeWindow : Window
 
     private void ScheduleFold()
     {
-        if (!_pinned && _expanded && !_foldTimer.IsEnabled)
+        if (_mode == NotchDisplayMode.Hover && !_pinned && _expanded && !_foldTimer.IsEnabled)
             _foldTimer.Start();
     }
 
@@ -463,6 +478,54 @@ public sealed class EdgeWindow : Window
         }
     }
 
+    public NotchPreferences Preferences => new(_edge, _mode);
+
+    public void ApplyPreferences(NotchPreferences preferences)
+    {
+        PreferenceStore.Validate(preferences);
+        CancelFold();
+        SetHoveredMetric(null);
+        _pinned = false;
+        _edge = preferences.Edge;
+        _mode = preferences.Mode;
+        ConfigureLayout();
+        _expanded = _mode == NotchDisplayMode.Always;
+        StartMotion(_expanded ? 1 : 0);
+        UpdateNotchVisual();
+        if (_started)
+        {
+            if (_mode == NotchDisplayMode.Hidden)
+            {
+                _cursorTimer.Stop();
+                Hide();
+            }
+            else
+            {
+                Show();
+                _cursorTimer.Start();
+            }
+        }
+        Relocate();
+    }
+
+    public void ShowSettings(string? warning = null)
+    {
+        if (_settingsWindow is not null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+        CancelFold();
+        _settingsWindow = new SettingsWindow(Preferences, ApplyPreferences, warning);
+        _settingsWindow.Closed += (_, _) =>
+        {
+            _settingsWindow = null;
+            if (_mode == NotchDisplayMode.Hidden && !_lifetime.IsCancellationRequested)
+                Close();
+        };
+        _settingsWindow.Show();
+    }
+
     private void ConfigureLayout()
     {
         var size = NotchLayout.WindowSize(_edge);
@@ -554,6 +617,7 @@ public sealed class EdgeWindow : Window
 
     private bool IsInteractive(Point point)
     {
+        if (_mode == NotchDisplayMode.Hidden) return false;
         if (!_expanded)
             return HotZoneRect().Contains(point) || ShapeRect().Contains(point);
 
