@@ -13,6 +13,16 @@ internal static class Program
             Console.WriteLine("EdgePilot " + typeof(Program).Assembly.GetName().Version);
             return;
         }
+        if (args.Contains("--install"))
+        {
+            try { Console.WriteLine("EdgePilot installato in " + DesktopInstaller.Install()); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+            {
+                Console.Error.WriteLine("Installazione non riuscita. Chiudi EdgePilot e riprova. " + ex.Message);
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
         using var instance = new SingleInstance();
         if (!instance.IsPrimary)
         {

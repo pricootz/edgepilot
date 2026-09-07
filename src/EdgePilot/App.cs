@@ -83,9 +83,11 @@ public sealed class App : Application
             desktop.MainWindow = window;
             window.Opened += (_, _) =>
             {
+                if (desktop.Args?.Contains("--smoke-test") == true)
+                    DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(3));
                 if ((preferences.Mode == NotchDisplayMode.Hidden &&
                     (!window.HasTray || desktop.Args?.Contains("--autostart") != true)) || warning is not null ||
-                    desktop.Args?.Contains("--settings") == true)
+                    desktop.Args?.Contains("--settings") == true || desktop.Args?.Contains("--smoke-test") == true)
                 {
                     window.ShowSettings(warning);
                     warning = null;
