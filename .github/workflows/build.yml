@@ -55,9 +55,9 @@ jobs:
           $second = Start-Process -FilePath $exe -ArgumentList '--settings' -PassThru -WindowStyle Hidden
           if (-not $second.WaitForExit(10000)) {
             $second.Kill()
-            throw 'Il secondo avvio ha creato un’altra istanza.'
+            throw 'Secondo avvio: rilevata istanza duplicata.'
           }
-          if ($second.ExitCode -ne 0) { throw 'Attivazione dell’istanza esistente fallita.' }
+          if ($second.ExitCode -ne 0) { throw 'Attivazione istanza esistente fallita.' }
           if (-not $smoke.WaitForExit(20000)) {
             $smoke.Kill()
             throw 'Il pacchetto non termina il controllo di avvio.'
