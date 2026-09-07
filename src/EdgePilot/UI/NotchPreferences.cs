@@ -12,6 +12,8 @@ public enum VisibleMetrics { Cpu = 1, Memory = 2, Disk = 4, Network = 8, All = 1
 public sealed record NotchPreferences(EdgeSide Edge = EdgeSide.Right,
     NotchDisplayMode Mode = NotchDisplayMode.Hover)
 {
+    public string? SelectedDrive { get; init; }
+    public bool StartAtLogin { get; init; }
     public int RefreshIntervalMs { get; init; } = 1000;
     public HoverSensitivity Sensitivity { get; init; } = HoverSensitivity.Normal;
     public VisibleMetrics Metrics { get; init; } = VisibleMetrics.All;
