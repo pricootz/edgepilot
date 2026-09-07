@@ -27,7 +27,10 @@ internal static class Program
         if (!instance.IsPrimary)
         {
             if (!args.Contains("--autostart") && !instance.NotifyPrimary())
+            {
                 Console.Error.WriteLine("EdgePilot è già aperto ma non risponde. Chiudilo e riprova.");
+                Environment.ExitCode = 1;
+            }
             return;
         }
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

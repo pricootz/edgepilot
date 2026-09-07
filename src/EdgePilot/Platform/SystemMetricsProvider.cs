@@ -33,7 +33,7 @@ public sealed class SystemMetricsProvider : ISystemMetricsProvider
         {
             try
             {
-                if (!drive.IsReady || drive.DriveType is not (DriveType.Fixed or DriveType.Removable or DriveType.Network) || drive.TotalSize <= 0) continue;
+                if (!drive.IsReady || drive.DriveType is DriveType.CDRom or DriveType.Ram or DriveType.NoRootDirectory || drive.TotalSize <= 0) continue;
 
                 result.Add(new DriveSnapshot(
                     drive.Name,

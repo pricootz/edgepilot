@@ -9,11 +9,13 @@ public sealed record DriveChoice(string? Name, string Caption)
 
 public static class DriveSelection
 {
+    public static StringComparer PathComparer => OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
     public static DriveSnapshot? Resolve(IReadOnlyList<DriveSnapshot> drives, string? selected)
     {
         if (selected is null) return drives.FirstOrDefault();
-        return drives.FirstOrDefault(d => string.Equals(d.Name, selected,
-            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        return drives.FirstOrDefault(d => PathComparer.Equals(d.Name, selected));
     }
 
     public static IReadOnlyList<DriveChoice> Choices(IReadOnlyList<DriveSnapshot> drives, string? selected)

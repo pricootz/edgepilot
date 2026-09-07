@@ -143,6 +143,6 @@ public sealed class SettingsWindow : Window
         var choices = DriveSelection.Choices(drives, selected);
         if (_drive.ItemsSource is IReadOnlyList<DriveChoice> old && old.SequenceEqual(choices)) return;
         _drive.ItemsSource = choices;
-        _drive.SelectedItem = choices.First(x => x.Name == selected);
+        _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, selected));
     }
 }

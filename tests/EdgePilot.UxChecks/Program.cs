@@ -298,6 +298,15 @@ try
     diskSettings.UpdateDrives(drives);
     Check(((DriveChoice)diskSelector.SelectedItem!).Name is null, "refresh preserves unsaved automatic choice");
     diskSettings.Close();
+    if (OperatingSystem.IsWindows())
+    {
+        var caseSettings = new SettingsWindow(new NotchPreferences { SelectedDrive = @"c:\" },
+            _ => { }, drives: new[] { new DriveSnapshot(@"C:\", "Sistema", 1000, 500) });
+        var casePanel = (StackPanel)((ScrollViewer)caseSettings.Content!).Content!;
+        Check(((DriveChoice)casePanel.Children.OfType<ComboBox>().Last().SelectedItem!).Name == @"C:\",
+            "Windows drive selection ignores casing");
+        caseSettings.Close();
+    }
 
     var registration = new MemoryRegistration();
     var command = new LaunchCommand("/opt/Edge Pilot/EdgePilot", new[] { "--autostart" });
@@ -334,6 +343,13 @@ Check(((SettingsWindow)Field(recovery, "_settingsWindow")!).IsVisible, "hidden h
 ((SettingsWindow)Field(recovery, "_settingsWindow")!).Close();
 Check(((CancellationTokenSource)Field(recovery, "_lifetime")!).IsCancellationRequested,
     "closing hidden settings exits the notch");
+var trayRecovery = new EdgeWindow { HasTray = true };
+trayRecovery.ApplyPreferences(new NotchPreferences(EdgeSide.Right, NotchDisplayMode.Hidden));
+trayRecovery.ShowSettings();
+((SettingsWindow)Field(trayRecovery, "_settingsWindow")!).Close();
+Check(!((CancellationTokenSource)Field(trayRecovery, "_lifetime")!).IsCancellationRequested,
+    "tray keeps hidden app alive after closing settings");
+trayRecovery.RequestExit();
 Console.WriteLine($"{passed} checks passed.");
 
 public sealed class MemoryRegistration : IAutostartRegistration
