@@ -15,8 +15,14 @@ internal static class EdgeNotchGeometry
         var right = windowWidth;
         var left = right - depth;
 
-        var corner = Math.Min(22, depth / 2);
-        var flare = Math.Min(34, Math.Min(length / 4, Math.Max(0, depth - corner)));
+        // At rest, use the full pill depth as the radius: a soft half-capsule
+        // against the screen edge, with no concave shoulders.
+        // Introduce the expanded notch's shoulders smoothly as it opens.
+        var progress = Math.Clamp((depth - 10) / (88 - 10), 0, 1);
+        var morph = progress * progress * (3 - 2 * progress);
+        var corner = Math.Min(depth, 10 + 10 * morph);
+        var flare = Math.Min(24 * morph,
+            Math.Min(length / 4, Math.Max(0, depth - corner)));
         corner = Math.Min(corner, Math.Max(0, (length - flare * 2) / 2));
 
         var bodyTop = top + flare;
