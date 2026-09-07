@@ -50,6 +50,14 @@ jobs:
           Copy-Item packaging/LEGGIMI.md dist/EdgePilot/
           $exe = (Resolve-Path dist/EdgePilot/EdgePilot.exe).Path
           $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
+          Start-Sleep -Milliseconds 1500
+          if ($smoke.HasExited) { throw 'Avvio primario terminato prematuramente.' }
+          $second = Start-Process -FilePath $exe -ArgumentList '--settings' -PassThru -WindowStyle Hidden
+          if (-not $second.WaitForExit(10000)) {
+            $second.Kill()
+            throw 'Il secondo avvio ha creato un’altra istanza.'
+          }
+          if ($second.ExitCode -ne 0) { throw 'Attivazione dell’istanza esistente fallita.' }
           if (-not $smoke.WaitForExit(20000)) {
             $smoke.Kill()
             throw 'Il pacchetto non termina il controllo di avvio.'
@@ -70,7 +78,11 @@ jobs:
         run: |
           cp packaging/installa.sh packaging/LEGGIMI.md dist/EdgePilot/
           chmod +x dist/EdgePilot/EdgePilot dist/EdgePilot/installa.sh
-          timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test
+          timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test &
+          smoke_pid=$!
+          sleep 2
+          timeout 6s dist/EdgePilot/EdgePilot --settings
+          wait "$smoke_pid"
           dist/EdgePilot/EdgePilot --install
           test -x "$HOME/.local/share/edgepilot/EdgePilot"
           test -f "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"

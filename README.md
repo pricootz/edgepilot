@@ -73,3 +73,9 @@ Supported values: `right`, `left`, `top`, `bottom`.
 ## Linux note
 
 Avalonia supports topmost/borderless windows on Linux, but transparency and exact compositor behavior can differ under X11/XWayland/Wayland. v0.1 intentionally keeps the platform surface small so we can test it on the real Ubuntu machine before adding more modules.
+
+## Pacchetti pronti e integrazione desktop
+
+I workflow verdi di GitHub Actions pubblicano gli artefatti **EdgePilot-win-x64** e **EdgePilot-linux-x64**, con runtime .NET incluso. Scarica il pacchetto dal workflow e segui [le istruzioni in italiano](packaging/LEGGIMI.md).
+
+Sono disponibili selezione persistente del disco, tema di sistema nelle impostazioni Ubuntu, menu nell’area di notifica, avvio all’accesso opzionale e collegamenti nel menu del desktop. Un secondo avvio riapre le impostazioni dell’istanza attiva.
