@@ -17,6 +17,7 @@ public sealed class EdgeWindow : Window
     private const double ExpandedWidth = 352;
     private const double ExpandedHeight = 508;
     private const double FoldDelayMs = 450;
+    private const double MotionDurationMs = 300;
 
     private readonly EdgeSide _edge = EdgePlacement.FromEnvironment();
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
@@ -42,6 +43,7 @@ public sealed class EdgeWindow : Window
     private readonly Button _pinButton;
 
     private CancellationTokenSource? _foldDelay;
+    private CancellationTokenSource? _motion;
     private bool _expanded;
     private bool _pinned;
 
@@ -78,8 +80,9 @@ public sealed class EdgeWindow : Window
         _collapsedView = BuildCollapsedView();
         _expandedView = BuildExpandedView();
         _expandedView.IsVisible = false;
+        _expandedView.Opacity = 0;
 
-        var content = new Grid();
+        var content = new Grid { ClipToBounds = true };
         content.Children.Add(_collapsedView);
         content.Children.Add(_expandedView);
 
@@ -90,6 +93,7 @@ public sealed class EdgeWindow : Window
             BorderThickness = new Thickness(0),
             CornerRadius = CornerRadiusForEdge(_edge, 8),
             Padding = new Thickness(0),
+            ClipToBounds = true,
             Child = content
         };
 
@@ -107,16 +111,13 @@ public sealed class EdgeWindow : Window
         ScalingChanged += (_, _) => Relocate();
     }
 
-    private Control BuildCollapsedView()
+    private Control BuildCollapsedView() => new Border
     {
-        return new Border
-        {
-            Background = Brush("#050608"),
-            CornerRadius = CornerRadiusForEdge(_edge, 8),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-    }
+        Background = Brush("#050608"),
+        CornerRadius = CornerRadiusForEdge(_edge, 8),
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+        VerticalAlignment = VerticalAlignment.Stretch
+    };
 
     private Control BuildExpandedView()
     {
@@ -271,10 +272,13 @@ public sealed class EdgeWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _foldDelay?.Cancel();
+        _motion?.Cancel();
         _lifetime.Cancel();
         Screens.Changed -= OnScreensChanged;
         _monitor.SnapshotUpdated -= OnSnapshotUpdated;
         _monitor.CaptureFailed -= OnCaptureFailed;
+        _foldDelay?.Dispose();
+        _motion?.Dispose();
         _lifetime.Dispose();
     }
 
@@ -287,10 +291,7 @@ public sealed class EdgeWindow : Window
 
     private void OnCaptureFailed(Exception exception)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            _osText.Text = $"Monitor error · {exception.GetType().Name}";
-        });
+        Dispatcher.UIThread.Post(() => _osText.Text = $"Monitor error · {exception.GetType().Name}");
     }
 
     private void RenderSnapshot(SystemSnapshot snapshot)
@@ -398,19 +399,91 @@ public sealed class EdgeWindow : Window
     {
         if (_expanded == expanded) return;
         _expanded = expanded;
-        _collapsedView.IsVisible = !expanded;
-        _expandedView.IsVisible = expanded;
+        _ = AnimateExpandedAsync(expanded);
+    }
 
-        _root.Background = expanded ? Brush("#0B0D11") : Brush("#050608");
-        _root.BorderBrush = expanded ? Brush("#252A33") : Brushes.Transparent;
-        _root.BorderThickness = expanded ? new Thickness(1) : new Thickness(0);
-        _root.CornerRadius = expanded ? CornerRadiusForEdge(_edge, 22) : CornerRadiusForEdge(_edge, 8);
-        _root.Padding = expanded ? new Thickness(16) : new Thickness(0);
+    private async Task AnimateExpandedAsync(bool expanded)
+    {
+        _motion?.Cancel();
+        _motion?.Dispose();
+        _motion = new CancellationTokenSource();
+        var token = _motion.Token;
 
-        Width = expanded ? ExpandedWidth : CollapsedWidth;
-        Height = expanded ? ExpandedHeight : CollapsedHeight;
-        Relocate();
-        Dispatcher.UIThread.Post(Relocate, DispatcherPriority.Background);
+        var startWidth = Width;
+        var startHeight = Height;
+        var targetWidth = expanded ? ExpandedWidth : CollapsedWidth;
+        var targetHeight = expanded ? ExpandedHeight : CollapsedHeight;
+        var startExpandedOpacity = _expandedView.Opacity;
+        var targetExpandedOpacity = expanded ? 1d : 0d;
+        var startCollapsedOpacity = _collapsedView.Opacity;
+        var targetCollapsedOpacity = expanded ? 0d : 1d;
+
+        _collapsedView.IsVisible = true;
+        _expandedView.IsVisible = true;
+
+        if (expanded)
+            ApplyExpandedChrome();
+
+        var started = DateTime.UtcNow;
+
+        try
+        {
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                var elapsed = (DateTime.UtcNow - started).TotalMilliseconds;
+                var progress = Math.Clamp(elapsed / MotionDurationMs, 0, 1);
+                var eased = EaseOutCubic(progress);
+
+                Width = Lerp(startWidth, targetWidth, eased);
+                Height = Lerp(startHeight, targetHeight, eased);
+                _expandedView.Opacity = Lerp(startExpandedOpacity, targetExpandedOpacity, eased);
+                _collapsedView.Opacity = Lerp(startCollapsedOpacity, targetCollapsedOpacity, eased);
+                Relocate();
+
+                if (progress >= 1) break;
+                await Task.Delay(16, token);
+            }
+
+            Width = targetWidth;
+            Height = targetHeight;
+            _expandedView.Opacity = targetExpandedOpacity;
+            _collapsedView.Opacity = targetCollapsedOpacity;
+
+            if (expanded)
+            {
+                _collapsedView.IsVisible = false;
+            }
+            else
+            {
+                _expandedView.IsVisible = false;
+                ApplyCollapsedChrome();
+            }
+
+            Relocate();
+            Dispatcher.UIThread.Post(Relocate, DispatcherPriority.Background);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void ApplyExpandedChrome()
+    {
+        _root.Background = Brush("#0B0D11");
+        _root.BorderBrush = Brush("#252A33");
+        _root.BorderThickness = new Thickness(1);
+        _root.CornerRadius = CornerRadiusForEdge(_edge, 22);
+        _root.Padding = new Thickness(16);
+    }
+
+    private void ApplyCollapsedChrome()
+    {
+        _root.Background = Brush("#050608");
+        _root.BorderBrush = Brushes.Transparent;
+        _root.BorderThickness = new Thickness(0);
+        _root.CornerRadius = CornerRadiusForEdge(_edge, 8);
+        _root.Padding = new Thickness(0);
     }
 
     private void Relocate()
@@ -420,6 +493,14 @@ public sealed class EdgeWindow : Window
         if (screen is null) return;
 
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
+    }
+
+    private static double Lerp(double from, double to, double amount) => from + (to - from) * amount;
+
+    private static double EaseOutCubic(double value)
+    {
+        var inverse = 1 - value;
+        return 1 - inverse * inverse * inverse;
     }
 
     private static CornerRadius CornerRadiusForEdge(EdgeSide edge, double radius) => edge switch
