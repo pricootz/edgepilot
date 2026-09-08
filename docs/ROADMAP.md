@@ -21,8 +21,9 @@ This roadmap is directional, not a delivery schedule.
 - [x] Interactive metric cards and conditional disk configuration.
 - [x] Canonical SVG branding inside the app and native Windows icon generation.
 - [x] Product-focused About page with author and GitHub links.
-- [x] Italian, English and French application localization.
+- [x] Italian, English, French and Spanish application localization.
 - [x] Automatic system-language detection plus persisted manual language selection.
+- [x] File-based locale discovery with one JSON file per shipped language.
 - [x] Localized tray, tooltip, installer and system-monitor strings.
 - [x] Split Settings implementation into shell, pages and reusable controls.
 - [x] Localization regression checks alongside existing UX/package CI.
@@ -33,7 +34,7 @@ This roadmap is directional, not a delivery schedule.
 - [ ] Verify real logout/login startup and tray behavior.
 - [ ] Test Settings at common scaling levels (100%, 125%, 150%) and smaller window sizes.
 - [ ] Validate all four edges and monitor changes on physical multi-monitor systems.
-- [ ] Confirm language switching and Automatic mode on Italian, English and French desktop locales.
+- [ ] Confirm language switching and Automatic mode on Italian, English, French and Spanish desktop locales.
 - [ ] Add current v0.2 Windows and Ubuntu screenshots.
 - [ ] Gather feedback from the preview release.
 
@@ -53,6 +54,8 @@ Architecture direction:
 - A signal service handles priority, deduplication, coalescing, rate limiting and expiry.
 - The edge temporarily morphs from its normal content into the active signal, then returns automatically.
 - Later signals may expose actions.
+
+Signals are being developed outside `main` until real-desktop behavior and CI are considered ready.
 
 ## Later exploration
 
