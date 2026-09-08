@@ -1,22 +1,32 @@
-"""Convert the approved raster master to application formats; run on GitHub CI."""
+"""Generate native icon formats and review previews from the canonical SVG mark."""
+from io import BytesIO
 from pathlib import Path
-import base64
+import xml.etree.ElementTree as ET
+
+import cairosvg
 from PIL import Image, ImageDraw
 
 root = Path(__file__).resolve().parents[1]
-master = Image.open(root / "docs/assets/edgepilot-master.png").convert("RGBA")
+svg_path = root / "src/EdgePilot/Assets/edgepilot.svg"
+svg_bytes = svg_path.read_bytes()
+svg_root = ET.fromstring(svg_bytes)
+assert svg_root.tag.endswith("svg"), "Brand source must be an SVG document"
+view_box = svg_root.attrib.get("viewBox", "").split()
+assert len(view_box) == 4, "SVG must define a four-value viewBox"
+assert float(view_box[2]) == float(view_box[3]), "SVG viewBox must be square"
+
+# Rasterize only for native formats that cannot consume SVG directly.
+png_bytes = cairosvg.svg2png(bytestring=svg_bytes, output_width=1024, output_height=1024)
+master = Image.open(BytesIO(png_bytes)).convert("RGBA")
 alpha = master.getchannel("A")
-assert alpha.getextrema()[0] == 0, "The master must have a transparent background"
-assert alpha.getextrema()[1] == 255, "The master must contain opaque artwork"
-assert master.width == master.height, "The master must be square"
-print(f"Master: {master.size}, alpha={alpha.getextrema()}, content bounds={alpha.getbbox()}")
+assert alpha.getextrema()[0] == 0, "The SVG must have a transparent background"
+assert alpha.getextrema()[1] == 255, "The SVG must contain opaque artwork"
+print(f"Vector master: viewBox={' '.join(view_box)}, alpha={alpha.getextrema()}, content bounds={alpha.getbbox()}")
 
 assets = root / "src/EdgePilot/Assets"
-assets.mkdir(parents=True, exist_ok=True)
-icon = master.resize((256, 256), Image.Resampling.LANCZOS)
 sizes = [(n, n) for n in (16, 24, 32, 48, 64, 128, 256)]
+icon = master.resize((256, 256), Image.Resampling.LANCZOS)
 icon.save(assets / "edgepilot.ico", sizes=sizes)
-master.resize((512, 512), Image.Resampling.LANCZOS).save(assets / "edgepilot.png")
 with Image.open(assets / "edgepilot.ico") as check:
     assert check.ico.sizes() == set(sizes), "Missing ICO resolution"
     for size in sizes:
@@ -34,4 +44,4 @@ for row, color in ((0, "#202020"), (115, "#ffffff")):
         sheet.paste(small, (x, row + 35), small)
         x += 100
 sheet.save(root / "docs/assets/icon-size-check.png")
-print("Generated PNG, seven-size ICO, and actual-size preview.")
+print("Generated seven-size ICO and actual-size preview from SVG.")

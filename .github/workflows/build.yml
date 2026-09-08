@@ -57,10 +57,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare application icon
+      - name: Verify vector brand assets
+        if: runner.os == 'Linux'
+        shell: bash
         run: |
-          python -m pip install Pillow==12.3.0
+          python -m pip install Pillow==12.3.0 CairoSVG==2.8.2
           python scripts/prepare_brand_assets.py
+          git diff --exit-code -- src/EdgePilot/Assets/edgepilot.ico docs/assets/icon-size-check.png
 
       - name: Build
         run: dotnet build src/EdgePilot/EdgePilot.csproj --configuration Release
@@ -118,6 +121,8 @@ jobs:
           dist/EdgePilot/EdgePilot --install
           test -x "$HOME/.local/share/edgepilot/EdgePilot"
           test -f "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
+          grep -F 'edgepilot.svg' "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
+          test -f "$HOME/.local/share/edgepilot/Assets/edgepilot.svg"
           tar -czf dist/EdgePilot-linux-x64.tar.gz -C dist/EdgePilot .
           (cd dist && sha256sum EdgePilot-linux-x64.tar.gz > EdgePilot-linux-x64.sha256)
 
