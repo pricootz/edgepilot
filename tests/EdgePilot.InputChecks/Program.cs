@@ -112,4 +112,26 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
         $"transparent notch shoulder passes through on {edge}");
 }
 
+// Native regions use integral device pixels. Verify that two adjacent logical scanlines remain
+// adjacent after fractional-DPI quantization instead of creating a one-pixel hole between them.
+var platformType = typeof(EdgeWindow).Assembly.GetType("EdgePilot.Platform.PlatformInputRegion")!;
+var toNative = platformType.GetMethod("ToNativeRectangles", BindingFlags.Static | BindingFlags.NonPublic)!;
+var nativeArray = (Array)toNative.Invoke(null, new object[]
+{
+    new[]
+    {
+        new Rect(100.2, 50.1, 20.4, 1.0),
+        new Rect(100.2, 51.1, 20.4, 1.0)
+    },
+    1.25d,
+    new Size(NotchLayout.DesignWidth, NotchLayout.DesignHeight)
+})!;
+Check(nativeArray.Length == 2, "fractional-DPI scanlines survive native quantization");
+var nativeType = nativeArray.GetType().GetElementType()!;
+var first = nativeArray.GetValue(0)!;
+var second = nativeArray.GetValue(1)!;
+var bottom = (int)nativeType.GetField("Bottom", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(first)!;
+var top = (int)nativeType.GetField("Top", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(second)!;
+Check(bottom == top, "fractional-DPI scanlines share a native pixel boundary");
+
 Console.WriteLine($"{passed} input-region checks passed.");
