@@ -73,7 +73,6 @@ public sealed class EdgeWindow : Window
     private SettingsWindow? _settingsWindow;
     private int? _hoveredMetric;
 
-    private readonly Win32Properties.CustomWndProcHookCallback? _wndProcHook;
     private readonly PlatformInputRegion _inputRegion;
 
     public EdgeWindow()
@@ -208,15 +207,10 @@ public sealed class EdgeWindow : Window
             Interval = TimeSpan.FromMilliseconds(40)
         };
         _cursorTimer.Tick += (_, _) => PollCursor();
-
-        if (OperatingSystem.IsWindows())
-        {
-            _wndProcHook = WndProc;
-            Win32Properties.AddWndProcHookCallback(this, _wndProcHook);
-        }
     }
 
-    internal bool HasSafePlatformInput => !OperatingSystem.IsLinux() || _inputRegion.IsReady;
+    internal bool HasSafePlatformInput =>
+        (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) || _inputRegion.IsReady;
 
     private void OnOpened(object? sender, EventArgs e)
     {
@@ -247,9 +241,6 @@ public sealed class EdgeWindow : Window
         if (_screensSubscribed) Screens.Changed -= OnScreensChanged;
         _monitor.SnapshotUpdated -= OnSnapshotUpdated;
         _monitor.CaptureFailed -= OnCaptureFailed;
-
-        if (_wndProcHook is not null)
-            Win32Properties.RemoveWndProcHookCallback(this, _wndProcHook);
 
         _inputRegion.Dispose();
         _lifetime.Dispose();
@@ -312,7 +303,7 @@ public sealed class EdgeWindow : Window
         if (!_expanded)
         {
             if (HotZoneRect().Contains(point) ||
-                (_expansion > 0.05 && ShapeRect().Contains(point)))
+                (_expansion > 0.05 && ShapeContains(point)))
                 Expand();
             return;
         }
@@ -321,15 +312,16 @@ public sealed class EdgeWindow : Window
         if (hovered is not null)
             SetHoveredMetric(hovered);
         else if (!TooltipLiveRect().Contains(point) && !BridgeRect().Contains(point)
-                 && !ExpandedLiveRect().Contains(point))
+                 && !ShapeContains(point))
             SetHoveredMetric(null);
 
-        if (ExpandedLiveRect().Contains(point) || HotZoneRect().Contains(point)
+        if (ShapeContains(point) || HotZoneRect().Contains(point)
             || TooltipLiveRect().Contains(point) || BridgeRect().Contains(point))
             CancelFold();
         else
             ScheduleFold();
     }
+
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
@@ -343,7 +335,7 @@ public sealed class EdgeWindow : Window
             return;
 
         var point = e.GetPosition(this);
-        if (!ShapeRect().Contains(point))
+        if (!ShapeContains(point))
             return;
 
         if (!_expanded)
@@ -379,6 +371,7 @@ public sealed class EdgeWindow : Window
         _motionClock.Restart();
         _motionTimer.Start();
     }
+
     private void UpdateNotchVisual()
     {
         var p = Math.Clamp(_expansion, 0, 1.025);
@@ -659,7 +652,17 @@ public sealed class EdgeWindow : Window
         return NotchLayout.ToScreen(new Rect(WindowWidth - depth, (WindowHeight - length) / 2, depth, length), _edge);
     }
 
-    private Rect ExpandedLiveRect() => ShapeRect();
+    private Rect[] ShapeInputRects()
+    {
+        var p = Math.Clamp(_expansion, 0, 1.025);
+        var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
+        var length = Lerp(CollapsedLength, ExpandedLength, p);
+        return EdgeNotchGeometry.BuildInputStripsRight(WindowWidth, WindowHeight, depth, length)
+            .Select(rect => NotchLayout.ToScreen(rect, _edge))
+            .ToArray();
+    }
+
+    private bool ShapeContains(Point point) => ShapeInputRects().Any(rect => rect.Contains(point));
 
     private Rect TooltipLiveRect()
     {
@@ -692,11 +695,12 @@ public sealed class EdgeWindow : Window
         if (_mode == NotchDisplayMode.Hidden)
             return [];
 
-        var regions = new List<Rect>(4);
+        var shape = ShapeInputRects();
+        var regions = new List<Rect>(shape.Length + 3);
         if (_mode == NotchDisplayMode.Hover)
             regions.Add(HotZoneRect());
 
-        regions.Add(ShapeRect());
+        regions.AddRange(shape);
 
         var tooltip = TooltipLiveRect();
         if (tooltip.Width > 0 && tooltip.Height > 0)
@@ -713,15 +717,15 @@ public sealed class EdgeWindow : Window
 
     private bool UpdatePlatformInputRegion()
     {
-        if (!OperatingSystem.IsLinux() || !_started || !IsVisible)
+        if ((!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) || !_started || !IsVisible)
             return true;
 
         if (_inputRegion.TryApply(InteractiveRects(), RenderScaling, new Size(Width, Height)))
             return true;
 
         // Failing closed is intentional: a hidden edge surface is preferable to leaving a
-        // large transparent topmost rectangle that blocks the user's desktop.
-        System.Diagnostics.Trace.WriteLine("EdgePilot disabled the Linux edge surface because a safe native input region could not be established.");
+        // transparent topmost rectangle that blocks the user's desktop or another application.
+        System.Diagnostics.Trace.WriteLine("EdgePilot disabled the edge surface because a safe native input region could not be established.");
         _cursorTimer.Stop();
         Hide();
         return false;
@@ -740,24 +744,6 @@ public sealed class EdgeWindow : Window
 
         point = default;
         return false;
-    }
-
-    private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        const uint WmNcHitTest = 0x0084;
-        const int HtTransparent = -1;
-        const int HtClient = 1;
-
-        if (msg != WmNcHitTest || !GetCursorPos(out var cursor))
-            return IntPtr.Zero;
-
-        var scaling = RenderScaling <= 0 ? 1 : RenderScaling;
-        var point = new Point(
-            (cursor.X - Position.X) / scaling,
-            (cursor.Y - Position.Y) / scaling);
-
-        handled = true;
-        return new IntPtr(IsInteractive(point) ? HtClient : HtTransparent);
     }
 
     private void Relocate()
