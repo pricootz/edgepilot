@@ -6,34 +6,124 @@ using Avalonia.Platform;
 namespace EdgePilot.Platform;
 
 /// <summary>
-/// Limits the native Linux top-level input shape to EdgePilot's live interaction areas.
-/// Avalonia renders transparent pixels, but an X11 top-level remains rectangular for pointer
-/// input unless the X Shape input region is explicitly constrained.
+/// Constrains the native top-level to EdgePilot's live interaction areas.
+/// Visual transparency is not an input-routing guarantee: Windows needs a real HWND region,
+/// while X11/XWayland needs an explicit ShapeInput region.
 /// </summary>
 internal sealed class PlatformInputRegion : IDisposable
 {
     private readonly Window _window;
+
+    private IntPtr _hwnd;
     private IntPtr _connection;
     private uint _xid;
-    private bool _initializationAttempted;
+    private bool _windowsInitializationAttempted;
+    private bool _x11InitializationAttempted;
     private bool _ready;
 
     public PlatformInputRegion(Window window) => _window = window;
 
-    public bool IsReady => !OperatingSystem.IsLinux() || _ready;
+    public bool IsReady => !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() || _ready;
 
     public bool TryApply(IReadOnlyList<Rect> logicalRects, double scaling, Size logicalWindowSize)
     {
-        if (!OperatingSystem.IsLinux())
-            return true;
+        if (OperatingSystem.IsWindows())
+            return TryApplyWindows(logicalRects, scaling, logicalWindowSize);
+        if (OperatingSystem.IsLinux())
+            return TryApplyX11(logicalRects, scaling, logicalWindowSize);
+        return true;
+    }
 
+    private bool TryApplyWindows(IReadOnlyList<Rect> logicalRects, double scaling, Size logicalWindowSize)
+    {
+        if (!EnsureWindows())
+            return false;
+
+        var rectangles = ToNativeRectangles(logicalRects, scaling, logicalWindowSize);
+        var region = CreateRectRgn(0, 0, 0, 0);
+        if (region == IntPtr.Zero)
+            return FailWindows("EdgePilot could not create the Windows input-safe window region.");
+
+        try
+        {
+            foreach (var rect in rectangles)
+            {
+                var part = CreateRectRgn(rect.Left, rect.Top, rect.Right, rect.Bottom);
+                if (part == IntPtr.Zero)
+                    return FailWindows("EdgePilot could not create a Windows region segment.");
+
+                try
+                {
+                    if (CombineRgn(region, region, part, RgnOr) == ErrorRegion)
+                        return FailWindows("EdgePilot could not combine the Windows input region.");
+                }
+                finally
+                {
+                    DeleteObject(part);
+                }
+            }
+
+            // SetWindowRgn transfers ownership of HRGN to USER32 on success. Unlike
+            // HTTRANSPARENT, the HWND simply does not exist for hit testing outside this region,
+            // so clicks can reach windows owned by other applications/processes.
+            if (SetWindowRgn(_hwnd, region, true) == 0)
+                return FailWindows("EdgePilot could not apply the Windows input-safe window region.");
+
+            region = IntPtr.Zero;
+            _ready = true;
+            return true;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        {
+            return FailWindows($"EdgePilot could not apply the Windows input region: {ex.Message}");
+        }
+        finally
+        {
+            if (region != IntPtr.Zero)
+                DeleteObject(region);
+        }
+    }
+
+    private bool EnsureWindows()
+    {
+        if (_ready && _hwnd != IntPtr.Zero)
+            return true;
+        if (_windowsInitializationAttempted)
+            return false;
+
+        _windowsInitializationAttempted = true;
+        var handle = _window.TryGetPlatformHandle();
+        if (handle is null || !string.Equals(handle.HandleDescriptor, "HWND", StringComparison.OrdinalIgnoreCase)
+            || handle.Handle == IntPtr.Zero)
+        {
+            System.Diagnostics.Trace.WriteLine("EdgePilot input-region safety requires a valid HWND on Windows.");
+            return false;
+        }
+
+        _hwnd = handle.Handle;
+        return true;
+    }
+
+    private bool FailWindows(string message)
+    {
+        System.Diagnostics.Trace.WriteLine(message);
+        _ready = false;
+        return false;
+    }
+
+    private bool TryApplyX11(IReadOnlyList<Rect> logicalRects, double scaling, Size logicalWindowSize)
+    {
         if (!EnsureX11())
             return false;
 
-        scaling = scaling > 0 && double.IsFinite(scaling) ? scaling : 1;
-        var windowWidth = Math.Max(0, (int)Math.Ceiling(logicalWindowSize.Width * scaling));
-        var windowHeight = Math.Max(0, (int)Math.Ceiling(logicalWindowSize.Height * scaling));
-        var rectangles = ToXRectangles(logicalRects, scaling, windowWidth, windowHeight);
+        var nativeRects = ToNativeRectangles(logicalRects, scaling, logicalWindowSize);
+        var rectangles = nativeRects.Select(rect => new XRectangle
+        {
+            X = (short)Math.Clamp(rect.Left, short.MinValue, short.MaxValue),
+            Y = (short)Math.Clamp(rect.Top, short.MinValue, short.MaxValue),
+            Width = (ushort)Math.Clamp(rect.Right - rect.Left, 0, ushort.MaxValue),
+            Height = (ushort)Math.Clamp(rect.Bottom - rect.Top, 0, ushort.MaxValue)
+        }).ToArray();
 
         try
         {
@@ -60,12 +150,12 @@ internal sealed class PlatformInputRegion : IDisposable
 
     private bool EnsureX11()
     {
-        if (_ready)
+        if (_ready && _connection != IntPtr.Zero)
             return true;
-        if (_initializationAttempted)
+        if (_x11InitializationAttempted)
             return false;
 
-        _initializationAttempted = true;
+        _x11InitializationAttempted = true;
         try
         {
             var handle = _window.TryGetPlatformHandle();
@@ -80,7 +170,7 @@ internal sealed class PlatformInputRegion : IDisposable
             if (_connection == IntPtr.Zero || XcbConnectionHasError(_connection) != 0)
             {
                 System.Diagnostics.Trace.WriteLine("EdgePilot could not open an XCB connection for input-region safety.");
-                Disconnect();
+                DisconnectX11();
                 return false;
             }
 
@@ -119,14 +209,18 @@ internal sealed class PlatformInputRegion : IDisposable
         finally
         {
             if (!_ready)
-                Disconnect();
+                DisconnectX11();
         }
     }
 
-    private static XRectangle[] ToXRectangles(IReadOnlyList<Rect> logicalRects, double scaling,
-        int windowWidth, int windowHeight)
+    private static NativeRect[] ToNativeRectangles(IReadOnlyList<Rect> logicalRects, double scaling,
+        Size logicalWindowSize)
     {
-        var result = new List<XRectangle>(logicalRects.Count);
+        scaling = scaling > 0 && double.IsFinite(scaling) ? scaling : 1;
+        var windowWidth = Math.Max(0, (int)Math.Ceiling(logicalWindowSize.Width * scaling));
+        var windowHeight = Math.Max(0, (int)Math.Ceiling(logicalWindowSize.Height * scaling));
+        var result = new List<NativeRect>(logicalRects.Count);
+
         foreach (var rect in logicalRects)
         {
             if (rect.Width <= 0 || rect.Height <= 0 || !double.IsFinite(rect.X) || !double.IsFinite(rect.Y)
@@ -140,25 +234,21 @@ internal sealed class PlatformInputRegion : IDisposable
             if (right <= left || bottom <= top)
                 continue;
 
-            result.Add(new XRectangle
-            {
-                X = (short)Math.Clamp(left, short.MinValue, short.MaxValue),
-                Y = (short)Math.Clamp(top, short.MinValue, short.MaxValue),
-                Width = (ushort)Math.Clamp(right - left, 0, ushort.MaxValue),
-                Height = (ushort)Math.Clamp(bottom - top, 0, ushort.MaxValue)
-            });
+            result.Add(new NativeRect(left, top, right, bottom));
         }
+
         return result.ToArray();
     }
 
     public void Dispose()
     {
         _ready = false;
+        _hwnd = IntPtr.Zero;
         _xid = 0;
-        Disconnect();
+        DisconnectX11();
     }
 
-    private void Disconnect()
+    private void DisconnectX11()
     {
         if (_connection == IntPtr.Zero)
             return;
@@ -171,6 +261,10 @@ internal sealed class PlatformInputRegion : IDisposable
         _connection = IntPtr.Zero;
     }
 
+    private readonly record struct NativeRect(int Left, int Top, int Right, int Bottom);
+
+    private const int RgnOr = 2;
+    private const int ErrorRegion = 0;
     private const byte ShapeSet = 0;
     private const byte ShapeInput = 2;
     private const byte Unsorted = 0;
@@ -206,6 +300,19 @@ internal sealed class PlatformInputRegion : IDisposable
     {
         public readonly uint Sequence;
     }
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, [MarshalAs(UnmanagedType.Bool)] bool redraw);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+
+    [DllImport("gdi32.dll")]
+    private static extern int CombineRgn(IntPtr destination, IntPtr source1, IntPtr source2, int combineMode);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteObject(IntPtr objectHandle);
 
     [DllImport("libxcb.so.1", EntryPoint = "xcb_connect")]
     private static extern IntPtr XcbConnect(IntPtr displayName, out int screen);
