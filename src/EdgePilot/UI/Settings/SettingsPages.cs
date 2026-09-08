@@ -82,9 +82,10 @@ public sealed partial class SettingsWindow
             Foreground = MutedBrush,
             Margin = new Thickness(10, 0, 0, 8)
         });
+        nav.Children.Add(NavButton("⚙", Localization.T("nav.general"), SettingsPage.General));
         nav.Children.Add(NavButton("◨", Localization.T("nav.edge"), SettingsPage.Edge));
         nav.Children.Add(NavButton("▦", Localization.T("nav.monitor"), SettingsPage.Monitor));
-        nav.Children.Add(NavButton("⚙", Localization.T("nav.behavior"), SettingsPage.Behavior));
+        nav.Children.Add(NavButton("◎", Localization.T("nav.behavior"), SettingsPage.Behavior));
         nav.Children.Add(NavButton("↻", Localization.T("nav.startup"), SettingsPage.Startup));
         nav.Children.Add(NavButton("ⓘ", Localization.T("nav.about"), SettingsPage.About));
 
@@ -135,6 +136,21 @@ public sealed partial class SettingsWindow
             BorderThickness = new Thickness(0, 1, 0, 0),
             Child = grid
         };
+    }
+
+    private Control BuildGeneralPage()
+    {
+        return Page(
+            Localization.T("general.pageTitle"),
+            Localization.T("general.pageSubtitle"),
+            Card(
+                SectionTitle("文", Localization.T("general.languageTitle")),
+                Description(Localization.T("general.languageDescription")),
+                _language),
+            Card(
+                SectionTitle("◐", Localization.T("general.themeTitle")),
+                Description(Localization.T("general.themeDescription")),
+                SegmentRow(_themeButtons)));
     }
 
     private Control BuildEdgePage()
@@ -229,11 +245,7 @@ public sealed partial class SettingsWindow
             Card(
                 SectionTitle("◎", Localization.T("behavior.sensitivityTitle")),
                 Description(Localization.T("behavior.sensitivityDescription")),
-                SegmentRow(_sensitivityButtons)),
-            Card(
-                SectionTitle("文", Localization.T("behavior.languageTitle")),
-                Description(Localization.T("behavior.languageDescription")),
-                _language));
+                SegmentRow(_sensitivityButtons)));
     }
 
     private Control BuildStartupPage(Action? exit)
