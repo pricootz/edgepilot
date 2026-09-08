@@ -94,7 +94,7 @@ internal sealed class PlatformInputRegion : IDisposable
                     return false;
                 }
 
-                var version = Marshal.PtrToStructure<XcbShapeQueryVersionReply>(reply);
+                var version = Marshal.PtrToStructure<XcbShapeVersionReply>(reply);
                 if (version.MajorVersion < 1 || (version.MajorVersion == 1 && version.MinorVersion < 1))
                 {
                     System.Diagnostics.Trace.WriteLine($"EdgePilot requires X Shape 1.1 for ShapeInput; server reports {version.MajorVersion}.{version.MinorVersion}.");
@@ -191,7 +191,7 @@ internal sealed class PlatformInputRegion : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct XcbShapeQueryVersionReply
+    private struct XcbShapeVersionReply
     {
         public byte ResponseType;
         public byte Pad0;
