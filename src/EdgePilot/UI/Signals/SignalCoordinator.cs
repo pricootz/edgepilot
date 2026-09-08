@@ -44,6 +44,43 @@ internal sealed class SignalCoordinator : IDisposable
         _tickTask = Task.Run(() => TickAsync(_lifetime.Token));
     }
 
+    public void RunDemo()
+    {
+        if (_disposed) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(900, _lifetime.Token).ConfigureAwait(false);
+                var lostAt = DateTimeOffset.UtcNow;
+                _manager.Publish(new Signal(
+                    "demo.network.lost",
+                    SignalSource.Network,
+                    SignalSeverity.Warning,
+                    "tooltip.network",
+                    "network.disconnected",
+                    lostAt,
+                    TimeSpan.FromSeconds(5),
+                    "network.connectivity"), lostAt);
+
+                await Task.Delay(3000, _lifetime.Token).ConfigureAwait(false);
+                var restoredAt = DateTimeOffset.UtcNow;
+                _manager.Publish(new Signal(
+                    "demo.network.restored",
+                    SignalSource.Network,
+                    SignalSeverity.Success,
+                    "tooltip.network",
+                    "network.connected",
+                    restoredAt,
+                    TimeSpan.FromSeconds(3),
+                    "network.connectivity"), restoredAt);
+            }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+            {
+            }
+        });
+    }
+
     private async Task TickAsync(CancellationToken cancellationToken)
     {
         try
