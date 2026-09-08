@@ -5,6 +5,7 @@ using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using EdgePilot.Core;
 using EdgePilot.UI;
+using EdgePilot.UI.Signals;
 using EdgePilot.Platform;
 using Avalonia.Threading;
 
@@ -16,6 +17,7 @@ public sealed class App : Application
     private NativeMenuItem? _settingsMenuItem;
     private NativeMenuItem? _toggleMenuItem;
     private NativeMenuItem? _exitMenuItem;
+    private SignalCoordinator? _signals;
 
     public override void Initialize()
     {
@@ -89,6 +91,15 @@ public sealed class App : Application
             };
             SingleInstance.Bind(() => Dispatcher.UIThread.Post(() => window.ShowSettings()));
             window.ApplyPreferences(preferences);
+
+            _signals = new SignalCoordinator(window);
+            _signals.Start();
+            window.Closed += (_, _) =>
+            {
+                _signals?.Dispose();
+                _signals = null;
+            };
+
             desktop.MainWindow = window;
             window.Opened += (_, _) =>
             {
