@@ -5,7 +5,7 @@ namespace EdgePilot.UI;
 
 internal static class EdgeNotchGeometry
 {
-    private const double InputStripHeight = 2;
+    private const double InputStripHeight = 1;
 
     public static Geometry BuildRight(double windowWidth, double windowHeight, double depth, double length)
     {
@@ -70,16 +70,16 @@ internal static class EdgeNotchGeometry
     }
 
     /// <summary>
-    /// Returns a conservative union of thin rectangles that lies inside the visible notch.
-    /// Native window/input regions are rectangular, so this scanline representation prevents
-    /// the transparent corners and concave shoulders of the notch's bounding box from becoming
+    /// Returns a conservative union of one-DIP scanline rectangles that lies inside the visible
+    /// notch. Native window/input regions are rectangular, so this representation prevents the
+    /// transparent corners and concave shoulders of the notch's bounding box from becoming
     /// invisible click blockers. The intentional Hover hot-zone is added separately by EdgeWindow.
     /// </summary>
     public static Rect[] BuildInputStripsRight(double windowWidth, double windowHeight,
         double depth, double length)
     {
         var shape = Calculate(windowWidth, windowHeight, depth, length);
-        var result = new List<Rect>((int)Math.Ceiling((shape.Bottom - shape.Top) / InputStripHeight));
+        var result = new List<Rect>((int)Math.Ceiling(shape.Bottom - shape.Top));
 
         for (var y = shape.Top; y < shape.Bottom - 0.001; y += InputStripHeight)
         {
