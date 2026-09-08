@@ -1,6 +1,6 @@
 # Settings
 
-Open Settings by right-clicking the notch, choosing **Settings / Impostazioni / Paramètres** from the tray menu, or launching EdgePilot with `--settings`. Starting EdgePilot a second time activates the Settings window of the running instance.
+Open Settings by right-clicking the notch, choosing **Settings / Impostazioni / Paramètres / Ajustes** from the tray menu, or launching EdgePilot with `--settings`. Starting EdgePilot a second time activates the Settings window of the running instance.
 
 The v0.2 Settings experience is split into six sections.
 
@@ -12,6 +12,8 @@ App-level preferences live here.
 - **Settings appearance:** System, Light or Dark.
 
 Automatic language mode follows the operating-system UI culture. EdgePilot first looks for an exact shipped language tag, then a neutral language tag, then English. If a previously saved language is no longer shipped, the Settings file remains valid and the interface falls back safely.
+
+The currently shipped locale files are Italian (`it`), English (`en`), French (`fr`) and Spanish (`es`). New languages are discovered from locale files rather than a fixed language enum.
 
 Changing language rebuilds the Settings content so every label refreshes consistently, while preserving the page that was open before the change.
 
@@ -47,13 +49,19 @@ Controls the current System module.
 
 Shows the EdgePilot product positioning, current version, local-first principles, project author and links to the GitHub repository and maintainer profile.
 
+## Signals during v0.3 development
+
+The first Signals implementation is deliberately **not** adding a new Settings page yet. Network lost/restored behavior is being validated first so the product does not accumulate configuration for an interaction model that has not been proven on real desktops.
+
+After the Signal lifecycle and presentation are approved, controls such as Signal enable/disable choices or severity preferences can be introduced based on real requirements rather than placeholders.
+
 ## Saving and recovery
 
-Edits remain pending until **Save changes / Salva modifiche / Enregistrer** is pressed. The footer shows whether changes are pending and provides a reset action. Saving is atomic: a failed save does not replace the last valid preferences.
+Edits remain pending until **Save changes / Salva modifiche / Enregistrer / Guardar cambios** is pressed. The footer shows whether changes are pending and provides a reset action. Saving is atomic: a failed save does not replace the last valid preferences.
 
 Preferences live in `EdgePilot/settings.json` under the user's application-data directory: `%APPDATA%` on Windows and normally `~/.config` on Linux. Missing fields in older files retain defaults; invalid files open Settings with an explanation.
 
-The original v0.2 preview stored languages as `Italian`, `English` and `French`. The current loader accepts those values and migrates them to `it`, `en` and `fr`, so upgrading does not discard existing preferences.
+The original v0.2 preview stored languages as `Italian`, `English` and `French`. The current loader accepts those values and migrates them to `it`, `en` and `fr`, so upgrading does not discard existing preferences. Spanish was introduced after the file-based locale architecture and therefore has no legacy enum value to migrate.
 
 Tray show/hide is temporary. Saving persists the selected visibility mode. With no tray fallback, closing Settings in hidden mode exits; otherwise the tray or a second launch provides recovery.
 
