@@ -40,6 +40,7 @@ public sealed partial class SettingsWindow : Window
     private readonly Button[] _edgeButtons;
     private readonly Button[] _modeButtons;
     private readonly Button[] _sensitivityButtons;
+    private readonly Button[] _themeButtons;
     private readonly Dictionary<SettingsPage, Button> _navButtons = new();
     private readonly Dictionary<SettingsPage, Control> _pages = new();
     private readonly List<Border> _cards = new();
@@ -59,6 +60,7 @@ public sealed partial class SettingsWindow : Window
     private EdgeSide _selectedEdge;
     private NotchDisplayMode _selectedMode;
     private HoverSensitivity _selectedSensitivity;
+    private SettingsThemePreference _selectedTheme;
     private SettingsPage _selectedPage;
     private bool _ready;
     private bool _darkTheme;
@@ -66,12 +68,13 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null,
         string? storagePath = null, IReadOnlyList<DriveSnapshot>? drives = null,
         Action<NotchPreferences>? savePreferences = null, Action? exit = null, bool hasTray = false,
-        Action? reopen = null)
+        Action<int>? reopen = null, int initialPage = 0)
     {
         _savedPreferences = current;
         _selectedEdge = current.Edge;
         _selectedMode = current.Mode;
         _selectedSensitivity = current.Sensitivity;
+        _selectedTheme = current.SettingsTheme;
         _initialDrive = current.SelectedDrive;
 
         Title = Localization.T("settings.title");
@@ -82,7 +85,7 @@ public sealed partial class SettingsWindow : Window
         MinHeight = 520;
         CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        RequestedThemeVariant = OperatingSystem.IsLinux() ? ThemeVariant.Default : ThemeVariant.Dark;
+        RequestedThemeVariant = ThemeVariantFor(current.SettingsTheme);
 
         _drive = new ComboBox
         {
@@ -105,17 +108,19 @@ public sealed partial class SettingsWindow : Window
             MinWidth = 210
         };
 
-        var languageChoices = new[]
+        var languageChoices = new List<LanguageChoice>
         {
-            new LanguageChoice(null, Localization.T("language.auto")),
-            new LanguageChoice(Language.Italian, "Italiano"),
-            new LanguageChoice(Language.English, "English"),
-            new LanguageChoice(Language.French, "Français")
+            new(null, Localization.T("language.autoNamed", Localization.SystemLanguageName))
         };
+        languageChoices.AddRange(Localization.Available.Select(option => new LanguageChoice(option.Value, option.Name)));
+        var selectedLanguage = current.Language is { } explicitLanguage
+            ? Localization.NormalizePreference(explicitLanguage)
+            : (Language?)null;
+        var languageIndex = languageChoices.FindIndex(choice => choice.Value == selectedLanguage);
         _language = new ComboBox
         {
             ItemsSource = languageChoices,
-            SelectedIndex = Array.FindIndex(languageChoices, x => x.Value == current.Language),
+            SelectedIndex = languageIndex >= 0 ? languageIndex : 0,
             HorizontalAlignment = HorizontalAlignment.Left,
             MinWidth = 210,
             MaxWidth = 320
@@ -191,6 +196,13 @@ public sealed partial class SettingsWindow : Window
             SegmentButton(null, Localization.T("sensitivity.wide"), () => SelectSensitivity(HoverSensitivity.Wide))
         ];
 
+        _themeButtons =
+        [
+            SegmentButton("◐", Localization.T("theme.system"), () => SelectTheme(SettingsThemePreference.System)),
+            SegmentButton("☀", Localization.T("theme.light"), () => SelectTheme(SettingsThemePreference.Light)),
+            SegmentButton("●", Localization.T("theme.dark"), () => SelectTheme(SettingsThemePreference.Dark))
+        ];
+
         _status = new TextBlock
         {
             Text = warning ?? Localization.T("settings.status.saved"),
@@ -230,6 +242,7 @@ public sealed partial class SettingsWindow : Window
             VerticalContentAlignment = VerticalAlignment.Stretch
         };
 
+        _pages[SettingsPage.General] = BuildGeneralPage();
         _pages[SettingsPage.Edge] = BuildEdgePage();
         _pages[SettingsPage.Monitor] = BuildMonitorPage();
         _pages[SettingsPage.Behavior] = BuildBehaviorPage();
@@ -266,8 +279,10 @@ public sealed partial class SettingsWindow : Window
         SelectEdge(current.Edge, markDirty: false);
         SelectMode(current.Mode, markDirty: false);
         SelectSensitivity(current.Sensitivity, markDirty: false);
+        SelectTheme(current.SettingsTheme, markDirty: false);
         UpdateConditionalSettings();
-        ShowPage(SettingsPage.Edge);
+        var firstPage = Enum.IsDefined(typeof(SettingsPage), initialPage) ? (SettingsPage)initialPage : SettingsPage.General;
+        ShowPage(firstPage);
         ApplyTheme();
         ApplyResponsiveLayout(Width);
 
@@ -319,6 +334,21 @@ public sealed partial class SettingsWindow : Window
         UpdateSegments(_sensitivityButtons, (int)sensitivity);
         if (markDirty) MarkDirty();
     }
+
+    private void SelectTheme(SettingsThemePreference theme, bool markDirty = true)
+    {
+        _selectedTheme = theme;
+        UpdateSegments(_themeButtons, (int)theme);
+        RequestedThemeVariant = ThemeVariantFor(theme);
+        if (markDirty) MarkDirty();
+    }
+
+    private static ThemeVariant ThemeVariantFor(SettingsThemePreference theme) => theme switch
+    {
+        SettingsThemePreference.Light => ThemeVariant.Light,
+        SettingsThemePreference.Dark => ThemeVariant.Dark,
+        _ => ThemeVariant.Default
+    };
 
     private static void UpdateSegments(IReadOnlyList<Button> buttons, int selectedIndex)
     {
@@ -395,7 +425,8 @@ public sealed partial class SettingsWindow : Window
             Metrics = SelectedMetrics(),
             SelectedDrive = (_drive.SelectedItem as DriveChoice)?.Name,
             StartAtLogin = _autostart.IsChecked == true,
-            Language = (_language.SelectedItem as LanguageChoice)?.Value
+            Language = (_language.SelectedItem as LanguageChoice)?.Value,
+            SettingsTheme = _selectedTheme
         };
     }
 
@@ -415,19 +446,27 @@ public sealed partial class SettingsWindow : Window
         _selectedEdge = _savedPreferences.Edge;
         _selectedMode = _savedPreferences.Mode;
         _selectedSensitivity = _savedPreferences.Sensitivity;
+        _selectedTheme = _savedPreferences.SettingsTheme;
         _refresh.SelectedIndex = Array.IndexOf(_intervals, _savedPreferences.RefreshIntervalMs);
         for (var i = 0; i < _metrics.Length; i++)
             _metrics[i].IsChecked = _savedPreferences.Metrics.HasFlag(MetricOptions[i]);
         _autostart.IsChecked = _savedPreferences.StartAtLogin;
 
         if (_language.ItemsSource is IReadOnlyList<LanguageChoice> languages)
-            _language.SelectedItem = languages.First(x => x.Value == _savedPreferences.Language);
+        {
+            var selected = _savedPreferences.Language is { } explicitLanguage
+                ? Localization.NormalizePreference(explicitLanguage)
+                : (Language?)null;
+            _language.SelectedItem = languages.First(choice => choice.Value == selected);
+        }
         if (_drive.ItemsSource is IReadOnlyList<DriveChoice> choices)
             _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, _savedPreferences.SelectedDrive));
 
         UpdateSegments(_edgeButtons, (int)_selectedEdge);
         UpdateSegments(_modeButtons, (int)_selectedMode);
         UpdateSegments(_sensitivityButtons, (int)_selectedSensitivity);
+        UpdateSegments(_themeButtons, (int)_selectedTheme);
+        RequestedThemeVariant = ThemeVariantFor(_selectedTheme);
         UpdatePreview();
         UpdateConditionalSettings();
         UpdateMetricTileStates();
@@ -438,7 +477,7 @@ public sealed partial class SettingsWindow : Window
     }
 
     private void SaveChanges(Action<NotchPreferences> apply, Action<NotchPreferences>? savePreferences,
-        string? storagePath, bool hasTray, Action? reopen)
+        string? storagePath, bool hasTray, Action<int>? reopen)
     {
         var selectedMetrics = SelectedMetrics();
         if (selectedMetrics == 0)
@@ -461,7 +500,7 @@ public sealed partial class SettingsWindow : Window
 
             if (languageChanged && reopen is not null)
             {
-                reopen();
+                reopen((int)_selectedPage);
                 Close();
                 return;
             }
@@ -550,6 +589,7 @@ public sealed partial class SettingsWindow : Window
 
     private enum SettingsPage
     {
+        General,
         Edge,
         Monitor,
         Behavior,
