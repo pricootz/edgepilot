@@ -1,6 +1,6 @@
 # Settings
 
-Open Settings by right-clicking the notch, choosing **Settings / Impostazioni / Paramètres** from the tray menu, or launching EdgePilot with `--settings`. Starting EdgePilot a second time activates the Settings window of the running instance.
+Open Settings by right-clicking the notch, choosing **Settings / Impostazioni / Paramètres / Ajustes** from the tray menu, or launching EdgePilot with `--settings`. Starting EdgePilot a second time activates the Settings window of the running instance.
 
 The v0.2 Settings experience is split into six sections.
 
@@ -8,7 +8,7 @@ The v0.2 Settings experience is split into six sections.
 
 App-level preferences live here.
 
-- **Interface language:** Automatic (system), plus every locale shipped under `src/EdgePilot/Assets/Locales`.
+- **Interface language:** Automatic (system), plus every locale shipped under `src/EdgePilot/Assets/Locales`. Current `main` includes English, Italian, French and Spanish.
 - **Settings appearance:** System, Light or Dark.
 
 Automatic language mode follows the operating-system UI culture. EdgePilot first looks for an exact shipped language tag, then a neutral language tag, then English. If a previously saved language is no longer shipped, the Settings file remains valid and the interface falls back safely.
@@ -49,11 +49,11 @@ Shows the EdgePilot product positioning, current version, local-first principles
 
 ## Saving and recovery
 
-Edits remain pending until **Save changes / Salva modifiche / Enregistrer** is pressed. The footer shows whether changes are pending and provides a reset action. Saving is atomic: a failed save does not replace the last valid preferences.
+Edits remain pending until **Save changes / Salva modifiche / Enregistrer / Guardar cambios** is pressed. The footer shows whether changes are pending and provides a reset action. Saving is atomic: a failed save does not replace the last valid preferences.
 
 Preferences live in `EdgePilot/settings.json` under the user's application-data directory: `%APPDATA%` on Windows and normally `~/.config` on Linux. Missing fields in older files retain defaults; invalid files open Settings with an explanation.
 
-The original v0.2 preview stored languages as `Italian`, `English` and `French`. The current loader accepts those values and migrates them to `it`, `en` and `fr`, so upgrading does not discard existing preferences.
+The original v0.2 preview stored languages as `Italian`, `English` and `French`. The current loader accepts those values and migrates them to `it`, `en` and `fr`, so upgrading does not discard existing preferences. Spanish was added after the extensible locale-code format was introduced and therefore stores directly as `es`.
 
 Tray show/hide is temporary. Saving persists the selected visibility mode. With no tray fallback, closing Settings in hidden mode exits; otherwise the tray or a second launch provides recovery.
 
