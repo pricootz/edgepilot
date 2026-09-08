@@ -77,6 +77,16 @@ jobs:
       - name: Signal engine regression checks
         run: dotnet run --project tests/EdgePilot.SignalChecks --configuration Release
 
+      - name: Signal surface smoke check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: dotnet run --project src/EdgePilot/EdgePilot.csproj --configuration Release -- --signal-smoke-test
+
+      - name: Signal surface smoke check (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: timeout 15s xvfb-run -a dotnet run --project src/EdgePilot/EdgePilot.csproj --configuration Release -- --signal-smoke-test
+
       - name: Publish self-contained package
         run: dotnet publish src/EdgePilot/EdgePilot.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:DebugType=None -p:DebugSymbols=false -o dist/EdgePilot
 
