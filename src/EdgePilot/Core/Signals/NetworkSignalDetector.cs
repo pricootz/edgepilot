@@ -23,8 +23,8 @@ public sealed class NetworkSignalDetector
                 "network.restored",
                 SignalSource.Network,
                 SignalSeverity.Success,
-                "signal.network.title",
-                "signal.network.restored",
+                "tooltip.network",
+                "network.connected",
                 snapshot.CapturedAt,
                 TimeSpan.FromSeconds(3),
                 "network.connectivity")
@@ -32,8 +32,8 @@ public sealed class NetworkSignalDetector
                 "network.lost",
                 SignalSource.Network,
                 SignalSeverity.Warning,
-                "signal.network.title",
-                "signal.network.lost",
+                "tooltip.network",
+                "network.disconnected",
                 snapshot.CapturedAt,
                 TimeSpan.FromSeconds(7),
                 "network.connectivity");
