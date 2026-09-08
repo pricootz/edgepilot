@@ -15,6 +15,7 @@ public sealed partial class SettingsWindow : Window
         public override string ToString() => Caption;
     }
 
+    private static int _pendingInitialPage = -1;
     private static readonly IBrush AccentBrush = new SolidColorBrush(Color.Parse("#FF8A3D"));
     private static readonly IBrush AccentSoftBrush = new SolidColorBrush(Color.FromArgb(38, 255, 138, 61));
     private static readonly IBrush PreviewBackgroundBrush = new SolidColorBrush(Color.Parse("#101114"));
@@ -68,7 +69,7 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null,
         string? storagePath = null, IReadOnlyList<DriveSnapshot>? drives = null,
         Action<NotchPreferences>? savePreferences = null, Action? exit = null, bool hasTray = false,
-        Action<int>? reopen = null, int initialPage = 0)
+        Action? reopen = null, int initialPage = -1)
     {
         _savedPreferences = current;
         _selectedEdge = current.Edge;
@@ -281,7 +282,8 @@ public sealed partial class SettingsWindow : Window
         SelectSensitivity(current.Sensitivity, markDirty: false);
         SelectTheme(current.SettingsTheme, markDirty: false);
         UpdateConditionalSettings();
-        var firstPage = Enum.IsDefined(typeof(SettingsPage), initialPage) ? (SettingsPage)initialPage : SettingsPage.General;
+        var pendingPage = initialPage >= 0 ? initialPage : Interlocked.Exchange(ref _pendingInitialPage, -1);
+        var firstPage = Enum.IsDefined(typeof(SettingsPage), pendingPage) ? (SettingsPage)pendingPage : SettingsPage.General;
         ShowPage(firstPage);
         ApplyTheme();
         ApplyResponsiveLayout(Width);
@@ -477,7 +479,7 @@ public sealed partial class SettingsWindow : Window
     }
 
     private void SaveChanges(Action<NotchPreferences> apply, Action<NotchPreferences>? savePreferences,
-        string? storagePath, bool hasTray, Action<int>? reopen)
+        string? storagePath, bool hasTray, Action? reopen)
     {
         var selectedMetrics = SelectedMetrics();
         if (selectedMetrics == 0)
@@ -500,7 +502,8 @@ public sealed partial class SettingsWindow : Window
 
             if (languageChanged && reopen is not null)
             {
-                reopen((int)_selectedPage);
+                Interlocked.Exchange(ref _pendingInitialPage, (int)_selectedPage);
+                reopen();
                 Close();
                 return;
             }
