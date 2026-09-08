@@ -20,6 +20,7 @@ internal sealed class PlatformInputRegion : IDisposable
     private bool _windowsInitializationAttempted;
     private bool _x11InitializationAttempted;
     private bool _ready;
+    private int? _lastNativeRegionHash;
 
     public PlatformInputRegion(Window window) => _window = window;
 
@@ -27,41 +28,35 @@ internal sealed class PlatformInputRegion : IDisposable
 
     public bool TryApply(IReadOnlyList<Rect> logicalRects, double scaling, Size logicalWindowSize)
     {
+        var rectangles = ToNativeRectangles(logicalRects, scaling, logicalWindowSize);
+        var hash = HashNativeRectangles(rectangles);
+        if (_ready && _lastNativeRegionHash == hash)
+            return true;
+
+        bool applied;
         if (OperatingSystem.IsWindows())
-            return TryApplyWindows(logicalRects, scaling, logicalWindowSize);
-        if (OperatingSystem.IsLinux())
-            return TryApplyX11(logicalRects, scaling, logicalWindowSize);
-        return true;
+            applied = TryApplyWindows(rectangles);
+        else if (OperatingSystem.IsLinux())
+            applied = TryApplyX11(rectangles);
+        else
+            return true;
+
+        if (applied)
+            _lastNativeRegionHash = hash;
+        return applied;
     }
 
-    private bool TryApplyWindows(IReadOnlyList<Rect> logicalRects, double scaling, Size logicalWindowSize)
+    private bool TryApplyWindows(NativeRect[] rectangles)
     {
         if (!EnsureWindows())
             return false;
 
-        var rectangles = ToNativeRectangles(logicalRects, scaling, logicalWindowSize);
-        var region = CreateRectRgn(0, 0, 0, 0);
-        if (region == IntPtr.Zero)
-            return FailWindows("EdgePilot could not create the Windows input-safe window region.");
-
+        IntPtr region = IntPtr.Zero;
         try
         {
-            foreach (var rect in rectangles)
-            {
-                var part = CreateRectRgn(rect.Left, rect.Top, rect.Right, rect.Bottom);
-                if (part == IntPtr.Zero)
-                    return FailWindows("EdgePilot could not create a Windows region segment.");
-
-                try
-                {
-                    if (CombineRgn(region, region, part, RgnOr) == ErrorRegion)
-                        return FailWindows("EdgePilot could not combine the Windows input region.");
-                }
-                finally
-                {
-                    DeleteObject(part);
-                }
-            }
+            region = CreateWindowsRegion(rectangles);
+            if (region == IntPtr.Zero)
+                return FailWindows("EdgePilot could not create the Windows input-safe window region.");
 
             // SetWindowRgn transfers ownership of HRGN to USER32 on success. Unlike
             // HTTRANSPARENT, the HWND simply does not exist for hit testing outside this region,
@@ -81,6 +76,47 @@ internal sealed class PlatformInputRegion : IDisposable
         {
             if (region != IntPtr.Zero)
                 DeleteObject(region);
+        }
+    }
+
+    private static IntPtr CreateWindowsRegion(NativeRect[] rectangles)
+    {
+        if (rectangles.Length == 0)
+            return CreateRectRgn(0, 0, 0, 0);
+
+        var rectSize = Marshal.SizeOf<NativeRect>();
+        var headerSize = Marshal.SizeOf<RegionDataHeader>();
+        var bufferSize = checked(headerSize + rectSize * rectangles.Length);
+        var buffer = Marshal.AllocHGlobal(bufferSize);
+        try
+        {
+            var bound = new NativeRect(
+                rectangles.Min(rect => rect.Left),
+                rectangles.Min(rect => rect.Top),
+                rectangles.Max(rect => rect.Right),
+                rectangles.Max(rect => rect.Bottom));
+            var header = new RegionDataHeader
+            {
+                Size = (uint)headerSize,
+                Type = RectanglesRegionType,
+                Count = (uint)rectangles.Length,
+                RegionSize = (uint)(rectSize * rectangles.Length),
+                Bound = bound
+            };
+            Marshal.StructureToPtr(header, buffer, false);
+
+            var cursor = IntPtr.Add(buffer, headerSize);
+            foreach (var rect in rectangles)
+            {
+                Marshal.StructureToPtr(rect, cursor, false);
+                cursor = IntPtr.Add(cursor, rectSize);
+            }
+
+            return ExtCreateRegion(IntPtr.Zero, (uint)bufferSize, buffer);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
         }
     }
 
@@ -108,15 +144,15 @@ internal sealed class PlatformInputRegion : IDisposable
     {
         System.Diagnostics.Trace.WriteLine(message);
         _ready = false;
+        _lastNativeRegionHash = null;
         return false;
     }
 
-    private bool TryApplyX11(IReadOnlyList<Rect> logicalRects, double scaling, Size logicalWindowSize)
+    private bool TryApplyX11(NativeRect[] nativeRects)
     {
         if (!EnsureX11())
             return false;
 
-        var nativeRects = ToNativeRectangles(logicalRects, scaling, logicalWindowSize);
         var rectangles = nativeRects.Select(rect => new XRectangle
         {
             X = (short)Math.Clamp(rect.Left, short.MinValue, short.MaxValue),
@@ -136,6 +172,7 @@ internal sealed class PlatformInputRegion : IDisposable
             {
                 System.Diagnostics.Trace.WriteLine("EdgePilot lost the X11 connection used for input-region safety.");
                 _ready = false;
+                _lastNativeRegionHash = null;
                 return false;
             }
             return true;
@@ -144,6 +181,7 @@ internal sealed class PlatformInputRegion : IDisposable
         {
             System.Diagnostics.Trace.WriteLine($"EdgePilot could not apply the X11 input region: {ex.Message}");
             _ready = false;
+            _lastNativeRegionHash = null;
             return false;
         }
     }
@@ -227,22 +265,40 @@ internal sealed class PlatformInputRegion : IDisposable
                 || !double.IsFinite(rect.Width) || !double.IsFinite(rect.Height))
                 continue;
 
-            var left = Math.Clamp((int)Math.Floor(rect.Left * scaling), 0, windowWidth);
-            var top = Math.Clamp((int)Math.Floor(rect.Top * scaling), 0, windowHeight);
-            var right = Math.Clamp((int)Math.Ceiling(rect.Right * scaling), 0, windowWidth);
-            var bottom = Math.Clamp((int)Math.Ceiling(rect.Bottom * scaling), 0, windowHeight);
+            var left = Math.Clamp((int)Math.Ceiling(rect.Left * scaling), 0, windowWidth);
+            var top = Math.Clamp((int)Math.Ceiling(rect.Top * scaling), 0, windowHeight);
+            var right = Math.Clamp((int)Math.Floor(rect.Right * scaling), 0, windowWidth);
+            var bottom = Math.Clamp((int)Math.Floor(rect.Bottom * scaling), 0, windowHeight);
             if (right <= left || bottom <= top)
                 continue;
 
+            // Inset rounding is deliberate. The native region must never grow beyond the logical
+            // live area because a one-pixel missed EdgePilot fringe is safer than stealing a click
+            // from the application underneath.
             result.Add(new NativeRect(left, top, right, bottom));
         }
 
         return result.ToArray();
     }
 
+    private static int HashNativeRectangles(NativeRect[] rectangles)
+    {
+        var hash = new HashCode();
+        hash.Add(rectangles.Length);
+        foreach (var rect in rectangles)
+        {
+            hash.Add(rect.Left);
+            hash.Add(rect.Top);
+            hash.Add(rect.Right);
+            hash.Add(rect.Bottom);
+        }
+        return hash.ToHashCode();
+    }
+
     public void Dispose()
     {
         _ready = false;
+        _lastNativeRegionHash = null;
         _hwnd = IntPtr.Zero;
         _xid = 0;
         DisconnectX11();
@@ -261,10 +317,34 @@ internal sealed class PlatformInputRegion : IDisposable
         _connection = IntPtr.Zero;
     }
 
-    private readonly record struct NativeRect(int Left, int Top, int Right, int Bottom);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
 
-    private const int RgnOr = 2;
-    private const int ErrorRegion = 0;
+        public NativeRect(int left, int top, int right, int bottom)
+        {
+            Left = left;
+            Top = top;
+            Right = right;
+            Bottom = bottom;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RegionDataHeader
+    {
+        public uint Size;
+        public uint Type;
+        public uint Count;
+        public uint RegionSize;
+        public NativeRect Bound;
+    }
+
+    private const uint RectanglesRegionType = 1;
     private const byte ShapeSet = 0;
     private const byte ShapeInput = 2;
     private const byte Unsorted = 0;
@@ -308,7 +388,7 @@ internal sealed class PlatformInputRegion : IDisposable
     private static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
 
     [DllImport("gdi32.dll")]
-    private static extern int CombineRgn(IntPtr destination, IntPtr source1, IntPtr source2, int combineMode);
+    private static extern IntPtr ExtCreateRegion(IntPtr transform, uint dataSize, IntPtr regionData);
 
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
