@@ -3,49 +3,60 @@
 </p>
 
 <h1 align="center">EdgePilot</h1>
-<p align="center">Your system, one screen edge away.</p>
-<p align="center">A compact desktop system monitor for Windows and Linux.</p>
+<p align="center"><strong>Your desktop has edges. EdgePilot makes them useful.</strong></p>
+<p align="center">An edge-native desktop surface for Windows and Linux.</p>
 
 [![Build](https://github.com/pricootz/edgepilot/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/pricootz/edgepilot/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Early preview — v0.1.** EdgePilot unfolds from the edge of your screen to show local system activity. No account or server is required. The application interface is currently **Italian**; repository documentation is in English.
+**v0.2 preview.** EdgePilot lives at the edge of the desktop and stays out of the way until it is useful. The current System module surfaces live local machine activity; the project is evolving toward contextual signals and actions that appear only when they matter.
 
-## See it in action
+No account, server or telemetry uploader is required. The interface supports **Italian, English and French**, with automatic system-language detection or a manual override.
 
 <p align="center">
-  <img src="docs/assets/windows11-overview.png" width="520" alt="EdgePilot on Windows 11 with the complete settings window and expanded right-edge notch">
+  <img src="docs/assets/windows11-notch.png" width="150" alt="Expanded EdgePilot notch showing system metrics on Windows 11">
 </p>
-<p align="center">Windows 11 · Settings and expanded notch.</p>
+<p align="center">The current System module running from the screen edge.</p>
 
-<table>
-<tr><th>Settings</th><th>Expanded notch</th><th>Collapsed pill</th></tr>
-<tr>
-<td valign="top"><img src="docs/assets/windows11-settings.png" width="360" alt="Complete Windows 11 settings with disk selection and start at login"></td>
-<td valign="top"><img src="docs/assets/windows11-notch.png" width="136" alt="Expanded right-edge notch showing CPU, memory and disk usage on Windows 11"></td>
-<td valign="top"><img src="docs/assets/windows11-pill.png" width="48" alt="Compact collapsed pill attached to the right screen edge on Windows 11"></td>
-</tr>
-</table>
+## v0.2 at a glance
 
-These are real, unaltered Windows 11 screenshots supplied by the maintainer. The application interface is Italian; CPU, memory and disk are enabled in these captures. Ubuntu screenshots are still to come.
+- Redesigned responsive Settings experience with dedicated **Edge, Monitor, Behavior, Startup and About** sections.
+- Interactive metric cards and contextual options: disabling Disk also hides its volume selector.
+- IT / EN / FR localization across Settings, tray, tooltips, installer messages and persisted preferences.
+- Direct rendering of the canonical EdgePilot SVG in the app; Windows keeps a generated native ICO.
+- Clear product identity, author attribution and GitHub links in About.
+- Settings code split into shell, pages and reusable controls so future modules do not turn one window into a monolith.
+- Dedicated localization regression checks in addition to the existing Windows/Ubuntu UX and packaging CI.
 
 ## What works today
 
-- Live CPU and memory usage, disk capacity, network download/upload rates.
+- Live CPU and memory usage, disk capacity, and network download/upload rates.
 - Details for the network interface, uptime, host and operating system.
 - Rounded collapsed pill, spring motion, hover expansion, delayed folding and click-to-pin.
 - Placement on any of the four screen edges, with upright metric labels.
-- Persistent display modes, visible metrics, refresh interval and hover sensitivity.
-- Persistent disk selection by volume path; an unavailable disk is not silently replaced.
-- System light/dark theme in Linux settings, subject to desktop support.
+- Persistent display modes, visible metrics, refresh interval, hover sensitivity, language and disk selection.
+- Responsive Settings UI; Linux follows available system light/dark theme information.
 - Tray menu, optional start at login, per-user installation and single-instance activation.
-- Windows and Ubuntu CI builds, UX checks, packaged launch and installation checks.
+- Windows and Ubuntu CI builds, UX checks, localization checks, packaged launch and installation checks.
+- Local-first operation: no account, required cloud backend or telemetry uploader.
+
+## Next: Signals
+
+The next product step is **ambient Signals**: short-lived, context-aware events that temporarily take over the edge instead of behaving like traditional notifications.
+
+The first planned signals are intentionally small and reliable:
+
+- Internet connection lost / restored.
+- Low disk space.
+- Sustained unusual CPU activity.
+
+The design goal is simple: **you should not have to open EdgePilot to discover that something important happened.**
 
 ## Download and install
 
-Use the [Releases page](https://github.com/pricootz/edgepilot/releases) for published previews. **If it is empty, a release has not been published yet.**
+Use the [Releases page](https://github.com/pricootz/edgepilot/releases) for published previews. If it is empty, a release has not been published yet.
 
-For development builds, open a successful [build workflow](https://github.com/pricootz/edgepilot/actions/workflows/build.yml), then download **EdgePilot-win-x64** or **EdgePilot-linux-x64** under *Artifacts*. Artifact downloads require a GitHub sign-in and expire after 30 days. Unpack the artifact, then unpack the application archive inside it.
+For development builds, open a successful [build workflow](https://github.com/pricootz/edgepilot/actions/workflows/build.yml), then download **EdgePilot-win-x64** or **EdgePilot-linux-x64** under *Artifacts*. Artifact downloads require a GitHub sign-in and expire after 30 days.
 
 Packages include the .NET runtime; no SDK is needed. See the [installation guide](packaging/README.md) for running, installing, upgrading and removing EdgePilot.
 
@@ -59,30 +70,34 @@ cd edgepilot
 dotnet run --project src/EdgePilot/EdgePilot.csproj -c Release -- --settings
 ```
 
-Right-click the notch to open settings. **Applica** saves changes; **Esci** exits. Starting EdgePilot again opens the settings of the running instance.
+Right-click the notch or use the tray menu to open Settings. Changes remain pending until **Save changes** is pressed. Starting EdgePilot again activates the already-running instance instead of launching a duplicate.
 
-To build and run the executable regression suite:
+To build and run the regression suites:
 
 ```bash
 dotnet build src/EdgePilot/EdgePilot.csproj -c Release
 dotnet run --project tests/EdgePilot.UxChecks -c Release
+dotnet run --project tests/EdgePilot.LocalizationChecks -c Release
 ```
 
 ## Preview limitations
 
 - Current packages target **x64**. macOS, ARM packages and headless SSH sessions are not supported targets.
 - Linux transparency, positioning and tray visibility depend on the desktop/compositor. A GNOME AppIndicator extension may be needed.
-- Linux settings use Avalonia controls and system theme information, not native GTK/Yaru widgets.
-- Display scaling, multiple monitors and login behavior need broader real-desktop testing.
+- Display scaling, multiple monitors and login behavior still need broader real-desktop testing.
 - Disk selection follows a drive letter or mount path, not a hardware serial number.
 - Network interface selection is automatic. Temperatures, GPU and fan readings are not implemented.
 - Packages are unsigned and updates are manual. This is not yet a stable release.
 
 ## Privacy
 
-Metrics are sampled on the local computer. The app has no account, cloud backend or telemetry uploader. Settings are stored in the user's application-data folder. Screenshots and diagnostics may reveal hostnames, disk labels or paths: review them before attaching them to an issue.
+Metrics are sampled on the local computer. Settings are stored in the user's application-data folder. EdgePilot currently has no account, required cloud backend or telemetry uploader. Screenshots and diagnostics may reveal hostnames, disk labels or paths: review them before attaching them to an issue.
 
-## Documentation and contributing
+## Project and contributing
+
+EdgePilot is created and primarily maintained by [@pricootz](https://github.com/pricootz).
+
+The IT / EN / FR localization foundation was contributed by [@IamArayel](https://github.com/IamArayel) through [PR #5](https://github.com/pricootz/edgepilot/pull/5) and reconciled with the v0.2 Settings architecture.
 
 - [Settings](docs/SETTINGS.md) · [Desktop integration](docs/DESKTOP-INTEGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md) · [Product scope](docs/PRODUCT.md) · [Roadmap](docs/ROADMAP.md)

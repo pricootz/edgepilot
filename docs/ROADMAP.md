@@ -2,7 +2,7 @@
 
 This roadmap is directional, not a delivery schedule.
 
-## v0.1 preview — implemented
+## v0.1 foundation — implemented
 
 - [x] Local CPU, memory, disk, network and machine details.
 - [x] Four-edge notch, rounded pill, spring motion, clipping and tooltips.
@@ -14,25 +14,46 @@ This roadmap is directional, not a delivery schedule.
 - [x] Self-contained x64 packages and per-user installation.
 - [x] Windows/Ubuntu build, UX and package checks.
 
-## Before calling v0.1 stable
+## v0.2 product surface — implemented for preview
+
+- [x] Responsive Settings redesign with dedicated navigation and clearer hierarchy.
+- [x] Edge preview and direct edge/display controls.
+- [x] Interactive metric cards and conditional disk configuration.
+- [x] Canonical SVG branding inside the app and native Windows icon generation.
+- [x] Product-focused About page with author and GitHub links.
+- [x] Italian, English and French application localization.
+- [x] Automatic system-language detection plus persisted manual language selection.
+- [x] Localized tray, tooltip, installer and system-monitor strings.
+- [x] Split Settings implementation into shell, pages and reusable controls.
+- [x] Localization regression checks alongside existing UX/package CI.
+
+## Before promoting v0.2 beyond preview
 
 - [ ] Broader Windows 11 and Ubuntu desktop testing.
 - [ ] Verify real logout/login startup and tray behavior.
-- [ ] Confirm disk selection persists across restarts and mount changes.
-- [ ] Test all edges, scaling levels and monitor changes.
-- [ ] Check Ubuntu light/dark settings on supported sessions.
-- [x] Add current Windows 11 settings and expanded/collapsed notch screenshots.
-- [ ] Add Ubuntu screenshots.
-- [ ] Publish a preview release and gather feedback.
+- [ ] Test Settings at common scaling levels (100%, 125%, 150%) and smaller window sizes.
+- [ ] Validate all four edges and monitor changes on physical multi-monitor systems.
+- [ ] Confirm language switching and Automatic mode on Italian, English and French desktop locales.
+- [ ] Add current v0.2 Windows and Ubuntu screenshots.
+- [ ] Gather feedback from the preview release.
 
-## Next priorities
+## v0.3 direction — Signals / ambient awareness
 
-- Explicit network interface selection.
-- More useful CPU, memory and disk details.
-- Keyboard access, reduced motion and accessibility review.
-- English application localization.
-- Evaluate GPU/temperature/fan providers separately for each OS.
+The next major feature is a signal engine following the model **Observe → Decide → Surface → Act**. Signals should be temporary, deduplicated and context-aware rather than behaving like a traditional notification center.
+
+Initial scope:
+
+- Internet connection lost / restored.
+- Low disk space.
+- Sustained unusual CPU activity.
+
+Architecture direction:
+
+- Sensors / detectors publish normalized signals.
+- A signal service handles priority, deduplication, coalescing, rate limiting and expiry.
+- The edge temporarily morphs from its normal content into the active signal, then returns automatically.
+- Later signals may expose actions.
 
 ## Later exploration
 
-Remote monitoring, Docker and quick actions may become separate modules. No implementation or release date is promised.
+Potential modules include contextual actions, Edge Shelf / Smart Drop, Docker, Git, VPN/Tailscale, removable devices and richer system providers. These remain exploratory until the Signals foundation is proven.

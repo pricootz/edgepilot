@@ -1,27 +1,50 @@
 # Settings
 
-Right-click the notch, choose **Impostazioni** in the tray menu, or start with --settings. A second launch opens settings in the running instance.
+Open Settings by right-clicking the notch, choosing **Settings / Impostazioni / Paramètres** from the tray menu, or launching EdgePilot with `--settings`. Starting EdgePilot a second time activates the Settings window of the running instance.
 
-| Italian label | Meaning |
-| --- | --- |
-| Bordo dello schermo | Right, left, top or bottom screen edge |
-| Visualizzazione | Hover, always open or hidden |
-| Metriche visibili | CPU, memory, disk and network; at least one is required |
-| Aggiornamento dei dati | 0.5, 1, 2 or 5 seconds |
-| Sensibilità di apertura | Precise, normal or wide activation area |
-| Disco da visualizzare | Automatic largest volume or an explicit volume path |
-| Avvia all’accesso | Optional current-user start at login |
-| Applica | Save and apply |
-| Esci | Exit EdgePilot |
+The v0.2 Settings experience is split into five sections.
 
-Apply saves atomically and updates the live panel. Closing without Apply discards edits. Visible metric count determines panel length; sampling remains available for hidden metrics. A refresh wait already in progress finishes before the new interval takes effect.
+## Edge
 
-Disk choices show labels, paths and decimal capacity. A missing explicit selection remains unavailable rather than switching to another disk. Mount paths are case-sensitive on Linux and case-insensitive on Windows.
+Controls where EdgePilot lives and how it appears.
 
-Preferences live in EdgePilot/settings.json under the user's application-data directory: %APPDATA% on Windows, normally ~/.config on Linux. Missing fields in older files retain defaults. Invalid files open settings with an explanation; failed saves leave active preferences unchanged.
+- **Position:** right, left, top or bottom edge, with a live visual preview.
+- **Panel behavior:** on hover, always visible or hidden.
 
-Tray show/hide is temporary. Apply persists the selected visibility mode. With no tray fallback, closing settings in hidden mode exits; otherwise the tray or a second launch provides recovery.
+## Monitor
 
-Linux settings follow the system theme information available to Avalonia. The notch retains its own dark styling. See [desktop integration](DESKTOP-INTEGRATION.md).
+Controls the current System module.
 
-For development, EDGEPILOT_EDGE can override the initial edge with right, left, top or bottom.
+- CPU, Memory, Disk and Network are interactive cards; at least one metric must remain enabled.
+- The notch resizes to the selected metric set.
+- The disk-volume selector is contextual: it is visible only while the Disk metric is enabled.
+- Explicit disk choices persist by volume path. If a selected volume disappears, EdgePilot reports it unavailable rather than silently switching to another disk.
+
+## Behavior
+
+- **Refresh frequency:** 0.5, 1, 2 or 5 seconds.
+- **Edge sensitivity:** precise, normal or wide activation area.
+- **Interface language:** Automatic (system), Italiano, English or Français.
+
+Automatic mode detects Italian and French explicitly and falls back to English for other system UI languages. Selecting a language manually persists the override. When the language changes, Settings reopens so the whole interface refreshes consistently.
+
+## Startup
+
+- Optional current-user start at login.
+- Explicit action to exit EdgePilot completely.
+
+## About
+
+Shows the EdgePilot product positioning, current version, local-first principles, project author and links to the GitHub repository and maintainer profile.
+
+## Saving and recovery
+
+Edits remain pending until **Save changes / Salva modifiche / Enregistrer** is pressed. The footer shows whether changes are pending and provides a reset action. Saving is atomic: a failed save does not replace the last valid preferences.
+
+Preferences live in `EdgePilot/settings.json` under the user's application-data directory: `%APPDATA%` on Windows and normally `~/.config` on Linux. Missing fields in older files retain defaults; invalid files open Settings with an explanation.
+
+Tray show/hide is temporary. Saving persists the selected visibility mode. With no tray fallback, closing Settings in hidden mode exits; otherwise the tray or a second launch provides recovery.
+
+Linux Settings follow system theme information available to Avalonia. The edge itself retains its dedicated EdgePilot visual language. See [desktop integration](DESKTOP-INTEGRATION.md).
+
+For development, `EDGEPILOT_EDGE` can override the initial edge with `right`, `left`, `top` or `bottom`.
