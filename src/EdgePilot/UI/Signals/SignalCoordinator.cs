@@ -17,6 +17,7 @@ internal sealed class SignalCoordinator : IDisposable
     private Task? _monitorTask;
     private Task? _tickTask;
     private bool _started;
+    private bool _demoStarted;
     private bool _disposed;
     private bool _restoreMainVisible;
     private volatile bool _enabled;
@@ -46,7 +47,8 @@ internal sealed class SignalCoordinator : IDisposable
 
     public void RunDemo()
     {
-        if (_disposed) return;
+        if (_disposed || _demoStarted) return;
+        _demoStarted = true;
         _ = Task.Run(async () =>
         {
             try
