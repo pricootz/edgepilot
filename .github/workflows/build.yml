@@ -74,6 +74,9 @@ jobs:
       - name: Localization regression checks
         run: dotnet run --project tests/EdgePilot.LocalizationChecks --configuration Release
 
+      - name: Signal engine regression checks
+        run: dotnet run --project tests/EdgePilot.SignalChecks --configuration Release
+
       - name: Publish self-contained package
         run: dotnet publish src/EdgePilot/EdgePilot.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:DebugType=None -p:DebugSymbols=false -o dist/EdgePilot
 
