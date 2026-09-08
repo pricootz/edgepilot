@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets/edgepilot.ico" />
+    <EmbeddedResource Include="Assets/Locales/*.json" />
     <Content Include="Assets/edgepilot.svg" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
