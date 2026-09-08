@@ -1,7 +1,6 @@
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -9,8 +8,13 @@ using EdgePilot.Core;
 
 namespace EdgePilot.UI;
 
-public sealed class SettingsWindow : Window
+public sealed partial class SettingsWindow : Window
 {
+    private sealed record LanguageChoice(Language? Value, string Caption)
+    {
+        public override string ToString() => Caption;
+    }
+
     private static readonly IBrush AccentBrush = new SolidColorBrush(Color.Parse("#FF8A3D"));
     private static readonly IBrush AccentSoftBrush = new SolidColorBrush(Color.FromArgb(38, 255, 138, 61));
     private static readonly IBrush PreviewBackgroundBrush = new SolidColorBrush(Color.Parse("#101114"));
@@ -19,11 +23,9 @@ public sealed class SettingsWindow : Window
     private static readonly VisibleMetrics[] MetricOptions =
         { VisibleMetrics.Cpu, VisibleMetrics.Memory, VisibleMetrics.Disk, VisibleMetrics.Network };
 
-    private const string GitHubMarkPath =
-        "M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656";
-
     private readonly ComboBox _drive;
     private readonly ComboBox _refresh;
+    private readonly ComboBox _language;
     private readonly CheckBox[] _metrics;
     private readonly CheckBox _autostart;
     private readonly Button _applyButton;
@@ -61,9 +63,10 @@ public sealed class SettingsWindow : Window
     private bool _ready;
     private bool _darkTheme;
 
-    public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null, string? storagePath = null,
-        IReadOnlyList<DriveSnapshot>? drives = null, Action<NotchPreferences>? savePreferences = null,
-        Action? exit = null, bool hasTray = false)
+    public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null,
+        string? storagePath = null, IReadOnlyList<DriveSnapshot>? drives = null,
+        Action<NotchPreferences>? savePreferences = null, Action? exit = null, bool hasTray = false,
+        Action? reopen = null)
     {
         _savedPreferences = current;
         _selectedEdge = current.Edge;
@@ -71,7 +74,7 @@ public sealed class SettingsWindow : Window
         _selectedSensitivity = current.Sensitivity;
         _initialDrive = current.SelectedDrive;
 
-        Title = "EdgePilot · Impostazioni";
+        Title = Localization.T("settings.title");
         Icon = AppIcon.Load();
         Width = 920;
         Height = 680;
@@ -91,14 +94,38 @@ public sealed class SettingsWindow : Window
 
         _refresh = new ComboBox
         {
-            ItemsSource = new[] { "Ogni 0,5 secondi", "Ogni secondo", "Ogni 2 secondi", "Ogni 5 secondi" },
+            ItemsSource = new[]
+            {
+                Localization.T("refresh.0_5s"), Localization.T("refresh.1s"),
+                Localization.T("refresh.2s"), Localization.T("refresh.5s")
+            },
             SelectedIndex = Array.IndexOf(_intervals, current.RefreshIntervalMs),
             HorizontalAlignment = HorizontalAlignment.Left,
             MaxWidth = 320,
             MinWidth = 210
         };
 
-        var metricNames = new[] { "CPU", "Memoria", "Disco", "Rete" };
+        var languageChoices = new[]
+        {
+            new LanguageChoice(null, Localization.T("language.auto")),
+            new LanguageChoice(Language.Italian, "Italiano"),
+            new LanguageChoice(Language.English, "English"),
+            new LanguageChoice(Language.French, "Français")
+        };
+        _language = new ComboBox
+        {
+            ItemsSource = languageChoices,
+            SelectedIndex = Array.FindIndex(languageChoices, x => x.Value == current.Language),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MinWidth = 210,
+            MaxWidth = 320
+        };
+
+        var metricNames = new[]
+        {
+            Localization.T("metric.cpu"), Localization.T("metric.memory"),
+            Localization.T("metric.disk"), Localization.T("metric.network")
+        };
         _metrics = MetricOptions.Select((flag, index) => new CheckBox
         {
             Content = metricNames[index],
@@ -109,7 +136,7 @@ public sealed class SettingsWindow : Window
 
         _autostart = new CheckBox
         {
-            Content = "Avvia EdgePilot quando accedo al sistema",
+            Content = Localization.T("startup.autostartLabel"),
             IsChecked = current.StartAtLogin,
             FontWeight = FontWeight.SemiBold
         };
@@ -144,29 +171,29 @@ public sealed class SettingsWindow : Window
 
         _edgeButtons =
         [
-            SegmentButton("▸  Destra", () => SelectEdge(EdgeSide.Right)),
-            SegmentButton("◂  Sinistra", () => SelectEdge(EdgeSide.Left)),
-            SegmentButton("▴  Alto", () => SelectEdge(EdgeSide.Top)),
-            SegmentButton("▾  Basso", () => SelectEdge(EdgeSide.Bottom))
+            SegmentButton("▸", Localization.T("edge.right"), () => SelectEdge(EdgeSide.Right)),
+            SegmentButton("◂", Localization.T("edge.left"), () => SelectEdge(EdgeSide.Left)),
+            SegmentButton("▴", Localization.T("edge.top"), () => SelectEdge(EdgeSide.Top)),
+            SegmentButton("▾", Localization.T("edge.bottom"), () => SelectEdge(EdgeSide.Bottom))
         ];
 
         _modeButtons =
         [
-            SegmentButton("◌  Al passaggio", () => SelectMode(NotchDisplayMode.Hover)),
-            SegmentButton("●  Sempre visibile", () => SelectMode(NotchDisplayMode.Always)),
-            SegmentButton("○  Nascosto", () => SelectMode(NotchDisplayMode.Hidden))
+            SegmentButton("◌", Localization.T("mode.hover"), () => SelectMode(NotchDisplayMode.Hover)),
+            SegmentButton("●", Localization.T("mode.always"), () => SelectMode(NotchDisplayMode.Always)),
+            SegmentButton("○", Localization.T("mode.hidden"), () => SelectMode(NotchDisplayMode.Hidden))
         ];
 
         _sensitivityButtons =
         [
-            SegmentButton("Precisa", () => SelectSensitivity(HoverSensitivity.Precise)),
-            SegmentButton("Normale", () => SelectSensitivity(HoverSensitivity.Normal)),
-            SegmentButton("Ampia", () => SelectSensitivity(HoverSensitivity.Wide))
+            SegmentButton(null, Localization.T("sensitivity.precise"), () => SelectSensitivity(HoverSensitivity.Precise)),
+            SegmentButton(null, Localization.T("sensitivity.normal"), () => SelectSensitivity(HoverSensitivity.Normal)),
+            SegmentButton(null, Localization.T("sensitivity.wide"), () => SelectSensitivity(HoverSensitivity.Wide))
         ];
 
         _status = new TextBlock
         {
-            Text = warning ?? "Tutto salvato.",
+            Text = warning ?? Localization.T("settings.status.saved"),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             MaxLines = 2
@@ -174,7 +201,7 @@ public sealed class SettingsWindow : Window
 
         _applyButton = new Button
         {
-            Content = ButtonContent("✓", "Salva modifiche"),
+            Content = ButtonContent("✓", Localization.T("settings.saveChanges")),
             Background = AccentBrush,
             Padding = new Thickness(17, 9),
             MinWidth = 146,
@@ -182,7 +209,7 @@ public sealed class SettingsWindow : Window
         };
         _resetButton = new Button
         {
-            Content = ButtonContent("↶", "Annulla"),
+            Content = ButtonContent("↶", Localization.T("settings.resetChanges")),
             Padding = new Thickness(14, 9),
             MinWidth = 100,
             IsEnabled = false
@@ -190,11 +217,12 @@ public sealed class SettingsWindow : Window
 
         _drive.SelectionChanged += (_, _) => MarkDirty();
         _refresh.SelectionChanged += (_, _) => MarkDirty();
+        _language.SelectionChanged += (_, _) => MarkDirty();
         foreach (var metric in _metrics) metric.Click += (_, _) => OnMetricChanged();
         _autostart.Click += (_, _) => MarkDirty();
 
         _resetButton.Click += (_, _) => ResetToSaved();
-        _applyButton.Click += (_, _) => SaveChanges(apply, savePreferences, storagePath, hasTray);
+        _applyButton.Click += (_, _) => SaveChanges(apply, savePreferences, storagePath, hasTray, reopen);
 
         _pageHost = new ContentControl
         {
@@ -255,599 +283,6 @@ public sealed class SettingsWindow : Window
         if (_drive is null) return;
         _drive.ItemsSource = choices;
         _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, selected));
-    }
-
-    private Border BuildHeader()
-    {
-        var title = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 12,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children =
-            {
-                new EdgePilotLogo { Width = 36, Height = 36 },
-                new StackPanel
-                {
-                    Spacing = 1,
-                    Children =
-                    {
-                        new TextBlock { Text = "EdgePilot", FontSize = 20, FontWeight = FontWeight.SemiBold },
-                        new TextBlock { Text = "Impostazioni", FontSize = 12, Foreground = MutedBrush }
-                    }
-                }
-            }
-        };
-
-        _versionBadge = new Border
-        {
-            Background = AccentSoftBrush,
-            BorderBrush = AccentBrush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(999),
-            Padding = new Thickness(10, 4),
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = VersionLabel(),
-                FontSize = 10,
-                FontWeight = FontWeight.SemiBold
-            }
-        };
-
-        var grid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(24, 0)
-        };
-        grid.Children.Add(title);
-        grid.Children.Add(_versionBadge);
-        Grid.SetColumn(_versionBadge, 1);
-
-        return new Border
-        {
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = grid
-        };
-    }
-
-    private Border BuildSidebar()
-    {
-        var nav = new StackPanel
-        {
-            Spacing = 4,
-            Margin = new Thickness(12, 18)
-        };
-        nav.Children.Add(new TextBlock
-        {
-            Text = "IMPOSTAZIONI",
-            FontSize = 10,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = MutedBrush,
-            Margin = new Thickness(10, 0, 0, 8)
-        });
-        nav.Children.Add(NavButton("◨", "Bordo", SettingsPage.Edge));
-        nav.Children.Add(NavButton("▦", "Monitor", SettingsPage.Monitor));
-        nav.Children.Add(NavButton("⚙", "Comportamento", SettingsPage.Behavior));
-        nav.Children.Add(NavButton("↻", "Avvio", SettingsPage.Startup));
-        nav.Children.Add(NavButton("ⓘ", "Informazioni", SettingsPage.About));
-
-        return new Border
-        {
-            BorderThickness = new Thickness(0, 0, 1, 0),
-            Child = nav
-        };
-    }
-
-    private Border BuildFooter()
-    {
-        var statusDot = new Border
-        {
-            Width = 7,
-            Height = 7,
-            Background = AccentBrush,
-            CornerRadius = new CornerRadius(4),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 9, 0)
-        };
-        var statusRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { statusDot, _status }
-        };
-
-        var actions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _resetButton, _applyButton }
-        };
-
-        var grid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(24, 0)
-        };
-        grid.Children.Add(statusRow);
-        grid.Children.Add(actions);
-        Grid.SetColumn(actions, 1);
-
-        return new Border
-        {
-            BorderThickness = new Thickness(0, 1, 0, 0),
-            Child = grid
-        };
-    }
-
-    private Control BuildEdgePage()
-    {
-        _positionOptions = new StackPanel
-        {
-            Spacing = 10,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children =
-            {
-                Label("Posizione"),
-                Description("Scegli il bordo da cui EdgePilot deve emergere."),
-                SegmentRow(_edgeButtons)
-            }
-        };
-
-        _previewLayout = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            RowDefinitions = new RowDefinitions("Auto"),
-            ColumnSpacing = 24
-        };
-        _previewLayout.Children.Add(_previewFrame);
-        _previewLayout.Children.Add(_positionOptions);
-        Grid.SetColumn(_positionOptions, 1);
-
-        return Page(
-            "Bordo e presenza",
-            "Definisci dove vive EdgePilot e quanto deve essere presente sul desktop.",
-            Card(
-                SectionTitle("◨", "Posizione sullo schermo"),
-                Description("La preview cambia insieme alla scelta e mostra dove comparirà la linguetta."),
-                _previewLayout),
-            Card(
-                SectionTitle("◌", "Comportamento del pannello"),
-                Description("Al passaggio mantiene EdgePilot discreto. Sempre visibile lo lascia aperto. Nascosto lo rimuove dal bordo finché non lo riapri dalla tray o dalle impostazioni."),
-                SegmentRow(_modeButtons)));
-    }
-
-    private Control BuildMonitorPage()
-    {
-        _metricGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
-            RowDefinitions = new RowDefinitions("Auto,Auto"),
-            ColumnSpacing = 12,
-            RowSpacing = 12
-        };
-
-        var descriptions = new[]
-        {
-            "Carico del processore in tempo reale",
-            "Memoria RAM attualmente utilizzata",
-            "Spazio occupato sul volume scelto",
-            "Traffico di download e upload"
-        };
-        var icons = new[] { "◉", "▤", "▱", "↕" };
-        _metricTiles = new Border[_metrics.Length];
-        for (var i = 0; i < _metrics.Length; i++)
-        {
-            var tile = MetricTile(_metrics[i], icons[i], descriptions[i]);
-            _metricTiles[i] = tile;
-            _metricGrid.Children.Add(tile);
-            Grid.SetColumn(tile, i % 2);
-            Grid.SetRow(tile, i / 2);
-        }
-
-        _diskCard = Card(
-            SectionTitle("▱", "Volume per la metrica Disco"),
-            Description("Questa scelta compare solo quando la metrica Disco è attiva. EdgePilot conserva comunque la selezione se la disattivi temporaneamente."),
-            _drive);
-
-        return Page(
-            "Monitor di sistema",
-            "Decidi quali dati del modulo System devono comparire nella notch.",
-            Card(
-                SectionTitle("▦", "Metriche visibili"),
-                Description("Fai clic sull’intera scheda per attivare o disattivare una metrica. La notch si ridimensiona automaticamente."),
-                _metricGrid),
-            _diskCard);
-    }
-
-    private Control BuildBehaviorPage()
-    {
-        return Page(
-            "Comportamento",
-            "Regola quanto spesso EdgePilot aggiorna i dati e quanto facilmente reagisce al bordo.",
-            Card(
-                SectionTitle("↻", "Frequenza di aggiornamento"),
-                Description("Un intervallo breve rende i valori più reattivi. Un intervallo più lungo riduce leggermente il lavoro in background."),
-                SettingField("Aggiorna i dati", _refresh)),
-            Card(
-                SectionTitle("◎", "Sensibilità al bordo"),
-                Description("Precisa richiede di arrivare vicino alla linguetta. Ampia crea una zona di aggancio più generosa. Normale è il compromesso consigliato."),
-                SegmentRow(_sensitivityButtons)));
-    }
-
-    private Control BuildStartupPage(Action? exit)
-    {
-        var exitButton = new Button
-        {
-            Content = ButtonContent("⏻", "Esci da EdgePilot"),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(14, 8)
-        };
-        exitButton.Click += (_, _) =>
-        {
-            if (exit is not null) exit();
-            else Close();
-        };
-
-        return Page(
-            "Avvio e sessione",
-            "Scegli come EdgePilot entra nella sessione e quando deve terminare completamente.",
-            Card(
-                SectionTitle("↻", "Avvio automatico"),
-                Description("Abilita l’avvio per l’utente corrente. EdgePilot resterà disponibile senza doverlo lanciare manualmente a ogni accesso."),
-                _autostart),
-            Card(
-                SectionTitle("⏻", "Sessione corrente"),
-                Description("Chiude completamente EdgePilot, inclusi pannello e processo in background."),
-                exitButton));
-    }
-
-    private Control BuildAboutPage()
-    {
-        var hero = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            ColumnSpacing = 20
-        };
-        var logo = new EdgePilotLogo
-        {
-            Width = 76,
-            Height = 76,
-            VerticalAlignment = VerticalAlignment.Top
-        };
-        hero.Children.Add(logo);
-
-        var heroText = new StackPanel
-        {
-            Spacing = 6,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = "EdgePilot",
-                    FontSize = 28,
-                    FontWeight = FontWeight.SemiBold
-                },
-                new TextBlock
-                {
-                    Text = "Your desktop has edges. EdgePilot makes them useful.",
-                    FontSize = 16,
-                    TextWrapping = TextWrapping.Wrap
-                },
-                Description("Una superficie desktop edge-native per Windows e Linux, progettata per mostrare informazioni e azioni solo quando servono."),
-                ChipRow("Open source", "MIT", "Windows + Linux", "Local-first")
-            }
-        };
-        hero.Children.Add(heroText);
-        Grid.SetColumn(heroText, 1);
-
-        var repoButton = LinkButton("Repository GitHub", "https://github.com/pricootz/edgepilot");
-        var profileButton = LinkButton("Profilo @pricootz", "https://github.com/pricootz");
-
-        return Page(
-            "Informazioni",
-            "Il progetto, chi lo sviluppa e i principi su cui viene costruito.",
-            Card(hero),
-            Card(
-                SectionTitle("✦", "Autore"),
-                new TextBlock
-                {
-                    Text = "Creato e mantenuto da @pricootz",
-                    FontSize = 18,
-                    FontWeight = FontWeight.SemiBold,
-                    TextWrapping = TextWrapping.Wrap
-                },
-                Description("EdgePilot è un progetto indipendente open source. Idee, sviluppo, direzione del prodotto e manutenzione principale fanno capo a @pricootz, con contributi della community tramite GitHub."),
-                SegmentRow(new[] { repoButton, profileButton })),
-            Card(
-                SectionTitle("⌁", "Filosofia del progetto"),
-                FeatureRow("◉", "Locale per impostazione predefinita", "Nessun account, nessun backend cloud obbligatorio e nessun uploader di telemetria."),
-                Divider(),
-                FeatureRow("◨", "Edge-native", "EdgePilot vive sul bordo dello schermo e punta a ridurre finestre, dashboard e notifiche tradizionali."),
-                Divider(),
-                FeatureRow("◇", "In evoluzione", "La preview attuale parte dal monitor di sistema; i prossimi moduli allargheranno il concetto senza trasformarlo in un pannello generico.")),
-            Card(
-                SectionTitle("ⓘ", "Versione"),
-                new TextBlock { Text = FullVersionLabel(), FontWeight = FontWeight.SemiBold },
-                Description("Preview in sviluppo attivo. Le API, il layout e alcune funzioni possono ancora cambiare prima della prima release stabile.")));
-    }
-
-    private ScrollViewer Page(string title, string subtitle, params Control[] sections)
-    {
-        var stack = new StackPanel
-        {
-            Margin = new Thickness(28, 24, 28, 28),
-            Spacing = 16
-        };
-        _pageStacks.Add(stack);
-        stack.Children.Add(new TextBlock
-        {
-            Text = title,
-            FontSize = 28,
-            FontWeight = FontWeight.SemiBold
-        });
-        stack.Children.Add(new TextBlock
-        {
-            Text = subtitle,
-            Foreground = MutedBrush,
-            FontSize = 14,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, -8, 0, 8)
-        });
-        foreach (var section in sections) stack.Children.Add(section);
-        return new ScrollViewer
-        {
-            Content = stack,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
-        };
-    }
-
-    private Border Card(params Control[] children)
-    {
-        var stack = new StackPanel { Spacing = 12 };
-        foreach (var child in children) stack.Children.Add(child);
-        var card = new Border
-        {
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(18),
-            Child = stack
-        };
-        _cards.Add(card);
-        return card;
-    }
-
-    private Border MetricTile(CheckBox checkbox, string icon, string description)
-    {
-        var heading = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
-            ColumnSpacing = 9
-        };
-        heading.Children.Add(new TextBlock
-        {
-            Text = icon,
-            FontSize = 18,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = AccentBrush
-        });
-        var title = new TextBlock
-        {
-            Text = checkbox.Content?.ToString(),
-            FontWeight = FontWeight.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        heading.Children.Add(title);
-        Grid.SetColumn(title, 1);
-        checkbox.Content = null;
-        heading.Children.Add(checkbox);
-        Grid.SetColumn(checkbox, 2);
-
-        var tile = new Border
-        {
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(11),
-            Padding = new Thickness(14),
-            Cursor = new Cursor(StandardCursorType.Hand),
-            Child = new StackPanel
-            {
-                Spacing = 7,
-                Children =
-                {
-                    heading,
-                    Description(description)
-                }
-            }
-        };
-        tile.PointerPressed += (_, e) =>
-        {
-            if (e.Source is CheckBox) return;
-            checkbox.IsChecked = checkbox.IsChecked != true;
-            OnMetricChanged();
-            e.Handled = true;
-        };
-        return tile;
-    }
-
-    private static Control SettingField(string label, Control control)
-    {
-        var stack = new StackPanel { Spacing = 6 };
-        stack.Children.Add(Label(label));
-        stack.Children.Add(control);
-        return stack;
-    }
-
-    private static TextBlock SectionTitle(string icon, string text) => new()
-    {
-        Text = $"{icon}  {text}",
-        FontSize = 16,
-        FontWeight = FontWeight.SemiBold
-    };
-
-    private static TextBlock Label(string text) => new()
-    {
-        Text = text,
-        FontWeight = FontWeight.SemiBold
-    };
-
-    private static TextBlock Description(string text) => new()
-    {
-        Text = text,
-        Foreground = MutedBrush,
-        FontSize = 12,
-        TextWrapping = TextWrapping.Wrap
-    };
-
-    private static Border Divider() => new()
-    {
-        Height = 1,
-        Background = new SolidColorBrush(Color.FromArgb(60, 128, 128, 128)),
-        Margin = new Thickness(0, 4)
-    };
-
-    private static WrapPanel SegmentRow(IEnumerable<Button> buttons)
-    {
-        var row = new WrapPanel
-        {
-            Orientation = Orientation.Horizontal
-        };
-        foreach (var button in buttons)
-        {
-            button.Margin = new Thickness(0, 0, 8, 8);
-            row.Children.Add(button);
-        }
-        return row;
-    }
-
-    private static WrapPanel ChipRow(params string[] labels)
-    {
-        var row = new WrapPanel { Orientation = Orientation.Horizontal };
-        foreach (var label in labels)
-        {
-            row.Children.Add(new Border
-            {
-                Background = AccentSoftBrush,
-                CornerRadius = new CornerRadius(999),
-                Padding = new Thickness(9, 4),
-                Margin = new Thickness(0, 4, 7, 0),
-                Child = new TextBlock { Text = label, FontSize = 11, FontWeight = FontWeight.SemiBold }
-            });
-        }
-        return row;
-    }
-
-    private static StackPanel FeatureRow(string icon, string title, string description)
-    {
-        return new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 12,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = icon,
-                    FontSize = 18,
-                    Foreground = AccentBrush,
-                    Width = 24,
-                    VerticalAlignment = VerticalAlignment.Top
-                },
-                new StackPanel
-                {
-                    Spacing = 3,
-                    Children =
-                    {
-                        new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap },
-                        Description(description)
-                    }
-                }
-            }
-        };
-    }
-
-    private static StackPanel ButtonContent(string icon, string text)
-    {
-        return new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 7,
-            Children =
-            {
-                new TextBlock { Text = icon, VerticalAlignment = VerticalAlignment.Center },
-                new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center }
-            }
-        };
-    }
-
-    private static Button SegmentButton(string text, Action select)
-    {
-        var button = new Button
-        {
-            Content = text,
-            Padding = new Thickness(13, 8),
-            MinWidth = 72
-        };
-        button.Click += (_, _) => select();
-        return button;
-    }
-
-    private Button NavButton(string icon, string text, SettingsPage page)
-    {
-        var content = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 9,
-            Children =
-            {
-                new TextBlock { Text = icon, Width = 20, TextAlignment = TextAlignment.Center },
-                new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap }
-            }
-        };
-        var button = new Button
-        {
-            Content = content,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(11, 10),
-            BorderThickness = new Thickness(0)
-        };
-        button.Click += (_, _) => ShowPage(page);
-        _navButtons[page] = button;
-        return button;
-    }
-
-    private Button LinkButton(string text, string url)
-    {
-        var button = new Button
-        {
-            Content = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 8,
-                Children =
-                {
-                    new PathIcon { Data = Geometry.Parse(GitHubMarkPath), Width = 16, Height = 16 },
-                    new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center }
-                }
-            },
-            Padding = new Thickness(13, 8)
-        };
-        button.Click += (_, _) => OpenUrl(url);
-        return button;
-    }
-
-    private void OpenUrl(string url)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            System.Diagnostics.Trace.WriteLine(ex);
-            _status.Text = "Impossibile aprire il browser. Visita github.com/pricootz/edgepilot.";
-        }
     }
 
     private void ShowPage(SettingsPage page)
@@ -959,7 +394,8 @@ public sealed class SettingsWindow : Window
             Sensitivity = _selectedSensitivity,
             Metrics = SelectedMetrics(),
             SelectedDrive = (_drive.SelectedItem as DriveChoice)?.Name,
-            StartAtLogin = _autostart.IsChecked == true
+            StartAtLogin = _autostart.IsChecked == true,
+            Language = (_language.SelectedItem as LanguageChoice)?.Value
         };
     }
 
@@ -970,7 +406,7 @@ public sealed class SettingsWindow : Window
         var dirty = current != _savedPreferences;
         _applyButton.IsEnabled = dirty;
         _resetButton.IsEnabled = dirty;
-        _status.Text = dirty ? "Modifiche non salvate." : "Tutto salvato.";
+        _status.Text = dirty ? Localization.T("settings.status.unsaved") : Localization.T("settings.status.saved");
     }
 
     private void ResetToSaved()
@@ -980,10 +416,15 @@ public sealed class SettingsWindow : Window
         _selectedMode = _savedPreferences.Mode;
         _selectedSensitivity = _savedPreferences.Sensitivity;
         _refresh.SelectedIndex = Array.IndexOf(_intervals, _savedPreferences.RefreshIntervalMs);
-        for (var i = 0; i < _metrics.Length; i++) _metrics[i].IsChecked = _savedPreferences.Metrics.HasFlag(MetricOptions[i]);
+        for (var i = 0; i < _metrics.Length; i++)
+            _metrics[i].IsChecked = _savedPreferences.Metrics.HasFlag(MetricOptions[i]);
         _autostart.IsChecked = _savedPreferences.StartAtLogin;
+
+        if (_language.ItemsSource is IReadOnlyList<LanguageChoice> languages)
+            _language.SelectedItem = languages.First(x => x.Value == _savedPreferences.Language);
         if (_drive.ItemsSource is IReadOnlyList<DriveChoice> choices)
             _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, _savedPreferences.SelectedDrive));
+
         UpdateSegments(_edgeButtons, (int)_selectedEdge);
         UpdateSegments(_modeButtons, (int)_selectedMode);
         UpdateSegments(_sensitivityButtons, (int)_selectedSensitivity);
@@ -993,20 +434,22 @@ public sealed class SettingsWindow : Window
         _ready = true;
         _applyButton.IsEnabled = false;
         _resetButton.IsEnabled = false;
-        _status.Text = "Modifiche annullate.";
+        _status.Text = Localization.T("settings.status.reset");
     }
 
-    private void SaveChanges(Action<NotchPreferences> apply, Action<NotchPreferences>? savePreferences, string? storagePath, bool hasTray)
+    private void SaveChanges(Action<NotchPreferences> apply, Action<NotchPreferences>? savePreferences,
+        string? storagePath, bool hasTray, Action? reopen)
     {
         var selectedMetrics = SelectedMetrics();
         if (selectedMetrics == 0)
         {
-            _status.Text = "Seleziona almeno una metrica da mostrare.";
+            _status.Text = Localization.T("settings.selectMetric");
             ShowPage(SettingsPage.Monitor);
             return;
         }
 
         var value = CurrentPreferences();
+        var languageChanged = value.Language != _savedPreferences.Language;
         try
         {
             if (savePreferences is not null) savePreferences(value);
@@ -1015,16 +458,22 @@ public sealed class SettingsWindow : Window
             _savedPreferences = value;
             _applyButton.IsEnabled = false;
             _resetButton.IsEnabled = false;
+
+            if (languageChanged && reopen is not null)
+            {
+                reopen();
+                Close();
+                return;
+            }
+
             _status.Text = value.Mode == NotchDisplayMode.Hidden
-                ? (hasTray
-                    ? "Pannello nascosto. Puoi riaprirlo dall’area di notifica."
-                    : "Pannello nascosto. Chiudendo le impostazioni esci da EdgePilot; al prossimo avvio tornerai qui.")
-                : "Impostazioni salvate.";
+                ? (hasTray ? Localization.T("settings.hiddenWithTray") : Localization.T("settings.hiddenNoTray"))
+                : Localization.T("settings.saved");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException)
         {
             System.Diagnostics.Trace.WriteLine(ex);
-            _status.Text = "Impossibile salvare le impostazioni. Verifica permessi e spazio disponibile, poi riprova.";
+            _status.Text = Localization.T("settings.saveFailed");
             _applyButton.IsEnabled = true;
         }
     }
