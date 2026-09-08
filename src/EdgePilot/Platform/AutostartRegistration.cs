@@ -37,7 +37,15 @@ public sealed record LaunchCommand(string Executable, IReadOnlyList<string> Argu
     public string DesktopEntry()
     {
         var command = string.Join(" ", new[] { Executable }.Concat(Arguments).Select(QuoteDesktop));
-        return $"[Desktop Entry]\nType=Application\nName=EdgePilot\nComment={Localization.T("desktop.comment")}\nExec=" +
+        var comments = new System.Text.StringBuilder();
+        comments.Append("Comment=").Append(Localization.In(Language.English, "desktop.comment")).Append('\n');
+        foreach (var language in Localization.Available)
+        {
+            var desktopLocale = language.Code.Replace('-', '_');
+            comments.Append("Comment[").Append(desktopLocale).Append("]=")
+                .Append(Localization.In(language.Value, "desktop.comment")).Append('\n');
+        }
+        return "[Desktop Entry]\nType=Application\nName=EdgePilot\n" + comments + "Exec=" +
             command.Replace("\\", "\\\\") +
             "\nTerminal=false\nX-GNOME-Autostart-enabled=true\n";
     }
