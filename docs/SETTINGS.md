@@ -2,7 +2,20 @@
 
 Open Settings by right-clicking the notch, choosing **Settings / Impostazioni / Paramètres** from the tray menu, or launching EdgePilot with `--settings`. Starting EdgePilot a second time activates the Settings window of the running instance.
 
-The v0.2 Settings experience is split into five sections.
+The v0.2 Settings experience is split into six sections.
+
+## General
+
+App-level preferences live here.
+
+- **Interface language:** Automatic (system), plus every locale shipped under `src/EdgePilot/Assets/Locales`.
+- **Settings appearance:** System, Light or Dark.
+
+Automatic language mode follows the operating-system UI culture. EdgePilot first looks for an exact shipped language tag, then a neutral language tag, then English. If a previously saved language is no longer shipped, the Settings file remains valid and the interface falls back safely.
+
+Changing language rebuilds the Settings content so every label refreshes consistently, while preserving the page that was open before the change.
+
+The appearance setting applies to the Settings window. The edge/notch retains its dedicated EdgePilot dark visual language.
 
 ## Edge
 
@@ -24,9 +37,6 @@ Controls the current System module.
 
 - **Refresh frequency:** 0.5, 1, 2 or 5 seconds.
 - **Edge sensitivity:** precise, normal or wide activation area.
-- **Interface language:** Automatic (system), Italiano, English or Français.
-
-Automatic mode detects Italian and French explicitly and falls back to English for other system UI languages. Selecting a language manually persists the override. When the language changes, Settings reopens so the whole interface refreshes consistently.
 
 ## Startup
 
@@ -43,8 +53,10 @@ Edits remain pending until **Save changes / Salva modifiche / Enregistrer** is p
 
 Preferences live in `EdgePilot/settings.json` under the user's application-data directory: `%APPDATA%` on Windows and normally `~/.config` on Linux. Missing fields in older files retain defaults; invalid files open Settings with an explanation.
 
+The original v0.2 preview stored languages as `Italian`, `English` and `French`. The current loader accepts those values and migrates them to `it`, `en` and `fr`, so upgrading does not discard existing preferences.
+
 Tray show/hide is temporary. Saving persists the selected visibility mode. With no tray fallback, closing Settings in hidden mode exits; otherwise the tray or a second launch provides recovery.
 
-Linux Settings follow system theme information available to Avalonia. The edge itself retains its dedicated EdgePilot visual language. See [desktop integration](DESKTOP-INTEGRATION.md).
+For translation details, see [Translating EdgePilot](TRANSLATING.md). For desktop integration details, see [Desktop integration](DESKTOP-INTEGRATION.md).
 
 For development, `EDGEPILOT_EDGE` can override the initial edge with `right`, `left`, `top` or `bottom`.

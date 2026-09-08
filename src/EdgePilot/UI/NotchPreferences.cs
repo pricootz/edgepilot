@@ -5,8 +5,9 @@ using EdgePilot.Core;
 namespace EdgePilot.UI;
 
 public enum NotchDisplayMode { Hover, Always, Hidden }
-
 public enum HoverSensitivity { Precise, Normal, Wide }
+public enum SettingsThemePreference { System, Light, Dark }
+
 [Flags]
 public enum VisibleMetrics { Cpu = 1, Memory = 2, Disk = 4, Network = 8, All = 15 }
 
@@ -20,6 +21,7 @@ public sealed record NotchPreferences(EdgeSide Edge = EdgeSide.Right,
     public VisibleMetrics Metrics { get; init; } = VisibleMetrics.All;
     // Null means "follow the system language".
     public Language? Language { get; init; }
+    public SettingsThemePreference SettingsTheme { get; init; } = SettingsThemePreference.System;
 }
 
 public static class PreferenceStore
@@ -44,7 +46,9 @@ public static class PreferenceStore
             throw new InvalidDataException(Localization.T("prefs.invalidSensitivity"));
         if (value.Metrics == 0 || (value.Metrics & ~VisibleMetrics.All) != 0)
             throw new InvalidDataException(Localization.T("prefs.invalidMetrics"));
-        if (value.Language is { } language && !Enum.IsDefined(language))
+        if (!Enum.IsDefined(value.SettingsTheme))
+            throw new InvalidDataException(Localization.T("prefs.invalidTheme"));
+        if (value.Language is { } language && string.IsNullOrWhiteSpace(language.Code))
             throw new InvalidDataException(Localization.T("prefs.invalidLanguage"));
     }
 
@@ -54,6 +58,13 @@ public static class PreferenceStore
         var value = JsonSerializer.Deserialize<NotchPreferences>(File.ReadAllText(path), Options)
             ?? throw new InvalidDataException(Localization.T("prefs.emptyFile"));
         Validate(value);
+
+        // Older v0.2 settings stored enum names such as "Italian". LanguageJsonConverter
+        // accepts those names and turns them into locale codes. A locale no longer shipped
+        // by the current build resolves safely to the English fallback.
+        if (value.Language is { } language)
+            value = value with { Language = Localization.NormalizePreference(language) };
+
         return value;
     }
 
