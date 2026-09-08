@@ -1,3 +1,5 @@
+using EdgePilot.Core;
+
 namespace EdgePilot.UI;
 
 internal static class DisplayFormat
@@ -23,7 +25,7 @@ internal static class DisplayFormat
 
     public static string Uptime(TimeSpan uptime)
     {
-        if (uptime.TotalDays >= 1) return $"{(int)uptime.TotalDays} g {uptime.Hours} h {uptime.Minutes} min";
+        if (uptime.TotalDays >= 1) return $"{(int)uptime.TotalDays} {Localization.T("time.dayUnit")} {uptime.Hours} h {uptime.Minutes} min";
         if (uptime.TotalHours >= 1) return $"{uptime.Hours} h {uptime.Minutes} min";
         return $"{uptime.Minutes} min {uptime.Seconds} s";
     }

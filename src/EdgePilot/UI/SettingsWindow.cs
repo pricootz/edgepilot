@@ -1,148 +1,559 @@
+using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Styling;
 using EdgePilot.Core;
 
 namespace EdgePilot.UI;
 
-public sealed class SettingsWindow : Window
+public sealed partial class SettingsWindow : Window
 {
-    private readonly ComboBox _drive;
-    private readonly string? _initialDrive;
-    public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null, string? storagePath = null,
-        IReadOnlyList<DriveSnapshot>? drives = null, Action<NotchPreferences>? savePreferences = null,
-        Action? exit = null, bool hasTray = false)
+    private sealed record LanguageChoice(Language? Value, string Caption)
     {
-        Title = "EdgePilot · Impostazioni";
-        Width = 480;
-        MinWidth = 420;
-        MinHeight = 400;
-        RequestedThemeVariant = OperatingSystem.IsLinux() ? Avalonia.Styling.ThemeVariant.Default : Avalonia.Styling.ThemeVariant.Dark;
-        Height = 650;
+        public override string ToString() => Caption;
+    }
+
+    private static readonly IBrush AccentBrush = new SolidColorBrush(Color.Parse("#FF8A3D"));
+    private static readonly IBrush AccentSoftBrush = new SolidColorBrush(Color.FromArgb(38, 255, 138, 61));
+    private static readonly IBrush PreviewBackgroundBrush = new SolidColorBrush(Color.Parse("#101114"));
+    private static readonly IBrush PreviewBorderBrush = new SolidColorBrush(Color.Parse("#404247"));
+    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#8D9096"));
+    private static readonly VisibleMetrics[] MetricOptions =
+        { VisibleMetrics.Cpu, VisibleMetrics.Memory, VisibleMetrics.Disk, VisibleMetrics.Network };
+
+    private readonly ComboBox _drive;
+    private readonly ComboBox _refresh;
+    private readonly ComboBox _language;
+    private readonly CheckBox[] _metrics;
+    private readonly CheckBox _autostart;
+    private readonly Button _applyButton;
+    private readonly Button _resetButton;
+    private readonly TextBlock _status;
+    private readonly ContentControl _pageHost;
+    private readonly Border _header;
+    private readonly Border _sidebar;
+    private readonly Border _footer;
+    private readonly Border _previewFrame;
+    private readonly Border _previewNotch;
+    private readonly Button[] _edgeButtons;
+    private readonly Button[] _modeButtons;
+    private readonly Button[] _sensitivityButtons;
+    private readonly Dictionary<SettingsPage, Button> _navButtons = new();
+    private readonly Dictionary<SettingsPage, Control> _pages = new();
+    private readonly List<Border> _cards = new();
+    private readonly List<StackPanel> _pageStacks = new();
+    private readonly string? _initialDrive;
+    private readonly int[] _intervals = { 500, 1000, 2000, 5000 };
+
+    private Border _diskCard = null!;
+    private Border[] _metricTiles = Array.Empty<Border>();
+    private Grid _body = null!;
+    private Grid _previewLayout = null!;
+    private StackPanel _positionOptions = null!;
+    private Grid _metricGrid = null!;
+    private Border _versionBadge = null!;
+
+    private NotchPreferences _savedPreferences;
+    private EdgeSide _selectedEdge;
+    private NotchDisplayMode _selectedMode;
+    private HoverSensitivity _selectedSensitivity;
+    private SettingsPage _selectedPage;
+    private bool _ready;
+    private bool _darkTheme;
+
+    public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null,
+        string? storagePath = null, IReadOnlyList<DriveSnapshot>? drives = null,
+        Action<NotchPreferences>? savePreferences = null, Action? exit = null, bool hasTray = false,
+        Action? reopen = null)
+    {
+        _savedPreferences = current;
+        _selectedEdge = current.Edge;
+        _selectedMode = current.Mode;
+        _selectedSensitivity = current.Sensitivity;
+        _initialDrive = current.SelectedDrive;
+
+        Title = Localization.T("settings.title");
+        Icon = AppIcon.Load();
+        Width = 920;
+        Height = 680;
+        MinWidth = 680;
+        MinHeight = 520;
         CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        var edge = new ComboBox
-        {
-            ItemsSource = new[] { "Destra", "Sinistra", "Alto", "Basso" },
-            SelectedIndex = (int)current.Edge,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        var mode = new ComboBox
-        {
-            ItemsSource = new[] { "Al passaggio del mouse", "Sempre aperto", "Nascosto" },
-            SelectedIndex = (int)current.Mode,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        var intervals = new[] { 500, 1000, 2000, 5000 };
-        var refresh = new ComboBox
-        {
-            ItemsSource = new[] { "Ogni 0,5 secondi", "Ogni secondo", "Ogni 2 secondi", "Ogni 5 secondi" },
-            SelectedIndex = Array.IndexOf(intervals, current.RefreshIntervalMs),
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        var sensitivity = new ComboBox
-        {
-            ItemsSource = new[] { "Precisa", "Normale", "Ampia" },
-            SelectedIndex = (int)current.Sensitivity,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        var metricOptions = new[] { VisibleMetrics.Cpu, VisibleMetrics.Memory, VisibleMetrics.Disk, VisibleMetrics.Network };
-        var metricNames = new[] { "CPU", "Memoria", "Disco", "Rete" };
-        var metrics = metricOptions.Select((flag, index) => new CheckBox
-        {
-            Content = metricNames[index], IsChecked = current.Metrics.HasFlag(flag)
-        }).ToArray();
-        var metricPanel = new WrapPanel();
-        foreach (var metric in metrics)
-        {
-            metric.Margin = new Thickness(0, 0, 16, 0);
-            metricPanel.Children.Add(metric);
-        }
-        _initialDrive = current.SelectedDrive;
+        RequestedThemeVariant = OperatingSystem.IsLinux() ? ThemeVariant.Default : ThemeVariant.Dark;
+
         _drive = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            MaxDropDownHeight = 280
+            MaxDropDownHeight = 280,
+            MaxWidth = 460
         };
         UpdateDrives(drives ?? Array.Empty<DriveSnapshot>());
-        var autostart = new CheckBox { Content = "Avvia all’accesso", IsChecked = current.StartAtLogin };
-        var exitButton = new Button { Content = "Esci da EdgePilot" };
-        exitButton.Click += (_, _) => { if (exit is not null) exit(); else Close(); };
-        var message = new TextBlock
+
+        _refresh = new ComboBox
         {
-            Text = warning ?? "Premi Applica per salvare le modifiche.",
-            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+            ItemsSource = new[]
+            {
+                Localization.T("refresh.0_5s"), Localization.T("refresh.1s"),
+                Localization.T("refresh.2s"), Localization.T("refresh.5s")
+            },
+            SelectedIndex = Array.IndexOf(_intervals, current.RefreshIntervalMs),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MaxWidth = 320,
+            MinWidth = 210
         };
-        var applyButton = new Button { Content = "Applica", HorizontalAlignment = HorizontalAlignment.Right };
-        applyButton.Click += (_, _) =>
+
+        var languageChoices = new[]
         {
-            VisibleMetrics selected = 0;
-            for (var i = 0; i < metrics.Length; i++)
-                if (metrics[i].IsChecked == true) selected |= metricOptions[i];
-            if (selected == 0)
-            {
-                message.Text = "Seleziona almeno una metrica da mostrare.";
-                return;
-            }
-            var value = new NotchPreferences((EdgeSide)edge.SelectedIndex, (NotchDisplayMode)mode.SelectedIndex)
-            {
-                RefreshIntervalMs = intervals[refresh.SelectedIndex],
-                Sensitivity = (HoverSensitivity)sensitivity.SelectedIndex,
-                Metrics = selected,
-                SelectedDrive = (_drive.SelectedItem as DriveChoice)?.Name,
-                StartAtLogin = autostart.IsChecked == true
-            };
-            try
-            {
-                if (savePreferences is not null) savePreferences(value);
-                else PreferenceStore.Save(storagePath ?? PreferenceStore.DefaultPath, value);
-                apply(value);
-                message.Text = value.Mode == NotchDisplayMode.Hidden
-                    ? (hasTray ? "Pannello nascosto. Usa l’icona nell’area di notifica per mostrarlo o riaprire le impostazioni."
-                        : "Pannello nascosto. Scegli un’altra modalità per mostrarlo. Chiudendo le impostazioni esci da EdgePilot; al prossimo avvio tornerai qui.")
-                    : "Impostazioni salvate. Fai clic destro sul pannello per riaprirle.";
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException)
-            {
-                System.Diagnostics.Trace.WriteLine(ex);
-                message.Text = "Impossibile salvare le impostazioni. Le preferenze attive non sono cambiate. Verifica i permessi di scrittura e lo spazio disponibile, poi riprova.";
-            }
+            new LanguageChoice(null, Localization.T("language.auto")),
+            new LanguageChoice(Language.Italian, "Italiano"),
+            new LanguageChoice(Language.English, "English"),
+            new LanguageChoice(Language.French, "Français")
         };
-        Content = new ScrollViewer { Content = new StackPanel
+        _language = new ComboBox
         {
-            Margin = new Thickness(24),
-            Spacing = 12,
-            Children =
-            {
-                new TextBlock { Text = "Personalizza EdgePilot", FontSize = 22 },
-                new TextBlock { Text = "Bordo dello schermo" }, edge,
-                new TextBlock { Text = "Visualizzazione" }, mode,
-                new TextBlock { Text = "Metriche visibili" }, metricPanel,
-                new TextBlock { Text = "Aggiornamento dei dati" }, refresh,
-                new TextBlock { Text = "Sensibilità di apertura" }, sensitivity,
-                new TextBlock
-                {
-                    Text = "Ampia: il pannello si apre anche passando vicino alla linguetta. Precisa: occorre avvicinarsi di più al bordo.",
-                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
-                },
-                new TextBlock { Text = "Disco da visualizzare" }, _drive,
-                new TextBlock
-                {
-                    Text = "Sono elencati i volumi montati e accessibili. Se manca un disco, montalo: l’elenco si aggiorna automaticamente.",
-                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
-                },
-                autostart,
-                message, applyButton,
-                new StackPanel { Children = { exitButton } }
-            }
-        } };
+            ItemsSource = languageChoices,
+            SelectedIndex = Array.FindIndex(languageChoices, x => x.Value == current.Language),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MinWidth = 210,
+            MaxWidth = 320
+        };
+
+        var metricNames = new[]
+        {
+            Localization.T("metric.cpu"), Localization.T("metric.memory"),
+            Localization.T("metric.disk"), Localization.T("metric.network")
+        };
+        _metrics = MetricOptions.Select((flag, index) => new CheckBox
+        {
+            Content = metricNames[index],
+            IsChecked = current.Metrics.HasFlag(flag),
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        }).ToArray();
+
+        _autostart = new CheckBox
+        {
+            Content = Localization.T("startup.autostartLabel"),
+            IsChecked = current.StartAtLogin,
+            FontWeight = FontWeight.SemiBold
+        };
+
+        _previewNotch = new Border
+        {
+            Background = AccentBrush,
+            CornerRadius = new CornerRadius(6)
+        };
+        var previewGrid = new Grid();
+        previewGrid.Children.Add(new TextBlock
+        {
+            Text = "DESKTOP",
+            Foreground = MutedBrush,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        previewGrid.Children.Add(_previewNotch);
+        _previewFrame = new Border
+        {
+            Width = 292,
+            Height = 178,
+            Background = PreviewBackgroundBrush,
+            BorderBrush = PreviewBorderBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Child = previewGrid,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+
+        _edgeButtons =
+        [
+            SegmentButton("▸", Localization.T("edge.right"), () => SelectEdge(EdgeSide.Right)),
+            SegmentButton("◂", Localization.T("edge.left"), () => SelectEdge(EdgeSide.Left)),
+            SegmentButton("▴", Localization.T("edge.top"), () => SelectEdge(EdgeSide.Top)),
+            SegmentButton("▾", Localization.T("edge.bottom"), () => SelectEdge(EdgeSide.Bottom))
+        ];
+
+        _modeButtons =
+        [
+            SegmentButton("◌", Localization.T("mode.hover"), () => SelectMode(NotchDisplayMode.Hover)),
+            SegmentButton("●", Localization.T("mode.always"), () => SelectMode(NotchDisplayMode.Always)),
+            SegmentButton("○", Localization.T("mode.hidden"), () => SelectMode(NotchDisplayMode.Hidden))
+        ];
+
+        _sensitivityButtons =
+        [
+            SegmentButton(null, Localization.T("sensitivity.precise"), () => SelectSensitivity(HoverSensitivity.Precise)),
+            SegmentButton(null, Localization.T("sensitivity.normal"), () => SelectSensitivity(HoverSensitivity.Normal)),
+            SegmentButton(null, Localization.T("sensitivity.wide"), () => SelectSensitivity(HoverSensitivity.Wide))
+        ];
+
+        _status = new TextBlock
+        {
+            Text = warning ?? Localization.T("settings.status.saved"),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            MaxLines = 2
+        };
+
+        _applyButton = new Button
+        {
+            Content = ButtonContent("✓", Localization.T("settings.saveChanges")),
+            Background = AccentBrush,
+            Padding = new Thickness(17, 9),
+            MinWidth = 146,
+            IsEnabled = false
+        };
+        _resetButton = new Button
+        {
+            Content = ButtonContent("↶", Localization.T("settings.resetChanges")),
+            Padding = new Thickness(14, 9),
+            MinWidth = 100,
+            IsEnabled = false
+        };
+
+        _drive.SelectionChanged += (_, _) => MarkDirty();
+        _refresh.SelectionChanged += (_, _) => MarkDirty();
+        _language.SelectionChanged += (_, _) => MarkDirty();
+        foreach (var metric in _metrics) metric.Click += (_, _) => OnMetricChanged();
+        _autostart.Click += (_, _) => MarkDirty();
+
+        _resetButton.Click += (_, _) => ResetToSaved();
+        _applyButton.Click += (_, _) => SaveChanges(apply, savePreferences, storagePath, hasTray, reopen);
+
+        _pageHost = new ContentControl
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch
+        };
+
+        _pages[SettingsPage.Edge] = BuildEdgePage();
+        _pages[SettingsPage.Monitor] = BuildMonitorPage();
+        _pages[SettingsPage.Behavior] = BuildBehaviorPage();
+        _pages[SettingsPage.Startup] = BuildStartupPage(exit);
+        _pages[SettingsPage.About] = BuildAboutPage();
+
+        _header = BuildHeader();
+        _sidebar = BuildSidebar();
+        _footer = BuildFooter();
+
+        var shell = new Grid
+        {
+            RowDefinitions = new RowDefinitions("76,*,68")
+        };
+        shell.Children.Add(_header);
+        Grid.SetRow(_header, 0);
+
+        _body = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("184,*")
+        };
+        _body.Children.Add(_sidebar);
+        Grid.SetColumn(_sidebar, 0);
+        _body.Children.Add(_pageHost);
+        Grid.SetColumn(_pageHost, 1);
+        shell.Children.Add(_body);
+        Grid.SetRow(_body, 1);
+
+        shell.Children.Add(_footer);
+        Grid.SetRow(_footer, 2);
+        Content = shell;
+
+        _ready = true;
+        SelectEdge(current.Edge, markDirty: false);
+        SelectMode(current.Mode, markDirty: false);
+        SelectSensitivity(current.Sensitivity, markDirty: false);
+        UpdateConditionalSettings();
+        ShowPage(SettingsPage.Edge);
+        ApplyTheme();
+        ApplyResponsiveLayout(Width);
+
+        ActualThemeVariantChanged += (_, _) => ApplyTheme();
+        SizeChanged += (_, e) => ApplyResponsiveLayout(e.NewSize.Width);
     }
+
     public void UpdateDrives(IReadOnlyList<DriveSnapshot> drives)
     {
-        var selected = _drive.SelectedItem is DriveChoice current ? current.Name : _initialDrive;
+        var selected = _drive?.SelectedItem is DriveChoice current ? current.Name : _initialDrive;
         var choices = DriveSelection.Choices(drives, selected);
-        if (_drive.ItemsSource is IReadOnlyList<DriveChoice> old && old.SequenceEqual(choices)) return;
+        if (_drive?.ItemsSource is IReadOnlyList<DriveChoice> old && old.SequenceEqual(choices)) return;
+        if (_drive is null) return;
         _drive.ItemsSource = choices;
         _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, selected));
+    }
+
+    private void ShowPage(SettingsPage page)
+    {
+        _selectedPage = page;
+        _pageHost.Content = _pages[page];
+        foreach (var item in _navButtons)
+        {
+            var selected = item.Key == page;
+            item.Value.Background = selected ? AccentSoftBrush : Brushes.Transparent;
+            item.Value.BorderBrush = selected ? AccentBrush : Brushes.Transparent;
+            item.Value.BorderThickness = selected ? new Thickness(3, 0, 0, 0) : new Thickness(0);
+        }
+    }
+
+    private void SelectEdge(EdgeSide edge, bool markDirty = true)
+    {
+        _selectedEdge = edge;
+        UpdateSegments(_edgeButtons, (int)edge);
+        UpdatePreview();
+        if (markDirty) MarkDirty();
+    }
+
+    private void SelectMode(NotchDisplayMode mode, bool markDirty = true)
+    {
+        _selectedMode = mode;
+        UpdateSegments(_modeButtons, (int)mode);
+        if (markDirty) MarkDirty();
+    }
+
+    private void SelectSensitivity(HoverSensitivity sensitivity, bool markDirty = true)
+    {
+        _selectedSensitivity = sensitivity;
+        UpdateSegments(_sensitivityButtons, (int)sensitivity);
+        if (markDirty) MarkDirty();
+    }
+
+    private static void UpdateSegments(IReadOnlyList<Button> buttons, int selectedIndex)
+    {
+        for (var i = 0; i < buttons.Count; i++)
+        {
+            var selected = i == selectedIndex;
+            buttons[i].Background = selected ? AccentBrush : Brushes.Transparent;
+            buttons[i].BorderBrush = selected ? AccentBrush : new SolidColorBrush(Color.FromArgb(70, 128, 128, 128));
+            buttons[i].BorderThickness = new Thickness(1);
+        }
+    }
+
+    private void UpdatePreview()
+    {
+        _previewNotch.HorizontalAlignment = _selectedEdge switch
+        {
+            EdgeSide.Left => HorizontalAlignment.Left,
+            EdgeSide.Right => HorizontalAlignment.Right,
+            _ => HorizontalAlignment.Center
+        };
+        _previewNotch.VerticalAlignment = _selectedEdge switch
+        {
+            EdgeSide.Top => VerticalAlignment.Top,
+            EdgeSide.Bottom => VerticalAlignment.Bottom,
+            _ => VerticalAlignment.Center
+        };
+        var horizontal = _selectedEdge is EdgeSide.Top or EdgeSide.Bottom;
+        _previewNotch.Width = horizontal ? 64 : 12;
+        _previewNotch.Height = horizontal ? 12 : 64;
+        _previewNotch.CornerRadius = new CornerRadius(6);
+    }
+
+    private void OnMetricChanged()
+    {
+        UpdateConditionalSettings();
+        UpdateMetricTileStates();
+        MarkDirty();
+    }
+
+    private void UpdateConditionalSettings()
+    {
+        if (_diskCard is not null) _diskCard.IsVisible = _metrics[2].IsChecked == true;
+    }
+
+    private void UpdateMetricTileStates()
+    {
+        if (_metricTiles.Length == 0) return;
+        for (var i = 0; i < _metricTiles.Length; i++)
+        {
+            var selected = _metrics[i].IsChecked == true;
+            _metricTiles[i].Background = selected
+                ? AccentSoftBrush
+                : Brush(_darkTheme ? "#1F1F1F" : "#F8F8F9");
+            _metricTiles[i].BorderBrush = selected
+                ? AccentBrush
+                : Brush(_darkTheme ? "#343434" : "#E6E6E8");
+        }
+    }
+
+    private VisibleMetrics SelectedMetrics()
+    {
+        VisibleMetrics selected = 0;
+        for (var i = 0; i < _metrics.Length; i++)
+            if (_metrics[i].IsChecked == true) selected |= MetricOptions[i];
+        return selected;
+    }
+
+    private NotchPreferences CurrentPreferences()
+    {
+        return new NotchPreferences(_selectedEdge, _selectedMode)
+        {
+            RefreshIntervalMs = _intervals[_refresh.SelectedIndex],
+            Sensitivity = _selectedSensitivity,
+            Metrics = SelectedMetrics(),
+            SelectedDrive = (_drive.SelectedItem as DriveChoice)?.Name,
+            StartAtLogin = _autostart.IsChecked == true,
+            Language = (_language.SelectedItem as LanguageChoice)?.Value
+        };
+    }
+
+    private void MarkDirty()
+    {
+        if (!_ready) return;
+        var current = CurrentPreferences();
+        var dirty = current != _savedPreferences;
+        _applyButton.IsEnabled = dirty;
+        _resetButton.IsEnabled = dirty;
+        _status.Text = dirty ? Localization.T("settings.status.unsaved") : Localization.T("settings.status.saved");
+    }
+
+    private void ResetToSaved()
+    {
+        _ready = false;
+        _selectedEdge = _savedPreferences.Edge;
+        _selectedMode = _savedPreferences.Mode;
+        _selectedSensitivity = _savedPreferences.Sensitivity;
+        _refresh.SelectedIndex = Array.IndexOf(_intervals, _savedPreferences.RefreshIntervalMs);
+        for (var i = 0; i < _metrics.Length; i++)
+            _metrics[i].IsChecked = _savedPreferences.Metrics.HasFlag(MetricOptions[i]);
+        _autostart.IsChecked = _savedPreferences.StartAtLogin;
+
+        if (_language.ItemsSource is IReadOnlyList<LanguageChoice> languages)
+            _language.SelectedItem = languages.First(x => x.Value == _savedPreferences.Language);
+        if (_drive.ItemsSource is IReadOnlyList<DriveChoice> choices)
+            _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, _savedPreferences.SelectedDrive));
+
+        UpdateSegments(_edgeButtons, (int)_selectedEdge);
+        UpdateSegments(_modeButtons, (int)_selectedMode);
+        UpdateSegments(_sensitivityButtons, (int)_selectedSensitivity);
+        UpdatePreview();
+        UpdateConditionalSettings();
+        UpdateMetricTileStates();
+        _ready = true;
+        _applyButton.IsEnabled = false;
+        _resetButton.IsEnabled = false;
+        _status.Text = Localization.T("settings.status.reset");
+    }
+
+    private void SaveChanges(Action<NotchPreferences> apply, Action<NotchPreferences>? savePreferences,
+        string? storagePath, bool hasTray, Action? reopen)
+    {
+        var selectedMetrics = SelectedMetrics();
+        if (selectedMetrics == 0)
+        {
+            _status.Text = Localization.T("settings.selectMetric");
+            ShowPage(SettingsPage.Monitor);
+            return;
+        }
+
+        var value = CurrentPreferences();
+        var languageChanged = value.Language != _savedPreferences.Language;
+        try
+        {
+            if (savePreferences is not null) savePreferences(value);
+            else PreferenceStore.Save(storagePath ?? PreferenceStore.DefaultPath, value);
+            apply(value);
+            _savedPreferences = value;
+            _applyButton.IsEnabled = false;
+            _resetButton.IsEnabled = false;
+
+            if (languageChanged && reopen is not null)
+            {
+                reopen();
+                Close();
+                return;
+            }
+
+            _status.Text = value.Mode == NotchDisplayMode.Hidden
+                ? (hasTray ? Localization.T("settings.hiddenWithTray") : Localization.T("settings.hiddenNoTray"))
+                : Localization.T("settings.saved");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException)
+        {
+            System.Diagnostics.Trace.WriteLine(ex);
+            _status.Text = Localization.T("settings.saveFailed");
+            _applyButton.IsEnabled = true;
+        }
+    }
+
+    private void ApplyResponsiveLayout(double width)
+    {
+        if (_body is null) return;
+        var compact = width < 800;
+
+        _body.ColumnDefinitions = new ColumnDefinitions(compact ? "154,*" : "184,*");
+        _versionBadge.IsVisible = width >= 760;
+
+        foreach (var stack in _pageStacks)
+            stack.Margin = compact ? new Thickness(18, 20, 18, 24) : new Thickness(28, 24, 28, 28);
+
+        _previewLayout.ColumnDefinitions = compact ? new ColumnDefinitions("*") : new ColumnDefinitions("Auto,*");
+        _previewLayout.RowDefinitions = compact ? new RowDefinitions("Auto,Auto") : new RowDefinitions("Auto");
+        Grid.SetColumn(_positionOptions, compact ? 0 : 1);
+        Grid.SetRow(_positionOptions, compact ? 1 : 0);
+        _positionOptions.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
+        _previewFrame.Width = compact ? 260 : 292;
+        _previewFrame.Height = compact ? 158 : 178;
+
+        _metricGrid.ColumnDefinitions = compact ? new ColumnDefinitions("*") : new ColumnDefinitions("*,*");
+        _metricGrid.RowDefinitions = compact
+            ? new RowDefinitions("Auto,Auto,Auto,Auto")
+            : new RowDefinitions("Auto,Auto");
+        for (var i = 0; i < _metricTiles.Length; i++)
+        {
+            Grid.SetColumn(_metricTiles[i], compact ? 0 : i % 2);
+            Grid.SetRow(_metricTiles[i], compact ? i : i / 2);
+        }
+    }
+
+    private void ApplyTheme()
+    {
+        _darkTheme = ActualThemeVariant == ThemeVariant.Dark;
+        Background = Brush(_darkTheme ? "#121212" : "#F4F4F5");
+        _header.Background = Brush(_darkTheme ? "#151515" : "#FFFFFF");
+        _sidebar.Background = Brush(_darkTheme ? "#141414" : "#FAFAFA");
+        _footer.Background = Brush(_darkTheme ? "#151515" : "#FFFFFF");
+
+        var line = Brush(_darkTheme ? "#2C2C2C" : "#DDDDDF");
+        _header.BorderBrush = line;
+        _sidebar.BorderBrush = line;
+        _footer.BorderBrush = line;
+
+        foreach (var card in _cards)
+        {
+            card.Background = Brush(_darkTheme ? "#191919" : "#FFFFFF");
+            card.BorderBrush = Brush(_darkTheme ? "#2D2D2D" : "#E2E2E4");
+        }
+        UpdateMetricTileStates();
+        ShowPage(_selectedPage);
+    }
+
+    private static string VersionLabel()
+    {
+        var version = FullVersionLabel();
+        if (version.Contains("0.2", StringComparison.OrdinalIgnoreCase)) return "PREVIEW 0.2";
+        return version.ToUpperInvariant();
+    }
+
+    private static string FullVersionLabel()
+    {
+        var informational = typeof(SettingsWindow).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion?
+            .Split('+')[0];
+        return string.IsNullOrWhiteSpace(informational) ? "Preview" : $"v{informational}";
+    }
+
+    private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
+
+    private enum SettingsPage
+    {
+        Edge,
+        Monitor,
+        Behavior,
+        Startup,
+        About
     }
 }

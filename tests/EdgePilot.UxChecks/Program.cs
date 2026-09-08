@@ -20,6 +20,9 @@ object? Field(EdgeWindow w, string name) => typeof(EdgeWindow).GetField(name, fl
 object? Call(EdgeWindow w, string name, params object[] args) =>
     typeof(EdgeWindow).GetMethod(name, flags)!.Invoke(w, args);
 void Set(EdgeWindow w, string name, object value) => typeof(EdgeWindow).GetField(name, flags)!.SetValue(w, value);
+object? SettingsField(SettingsWindow w, string name) => typeof(SettingsWindow).GetField(name, flags)!.GetValue(w);
+object? SettingsCall(SettingsWindow w, string name, params object[] args) =>
+    typeof(SettingsWindow).GetMethod(name, flags)!.Invoke(w, args);
 
 foreach (var frame in new[] { 1d / 30, 1d / 60, 1d / 144, 0.5 })
 {
@@ -249,27 +252,38 @@ try
     File.WriteAllText(settingsPath, "{\"Edge\":999,\"Mode\":0}");
     try { PreferenceStore.Load(settingsPath); Check(false, "unknown enum rejected"); }
     catch (InvalidDataException) { Check(true, "unknown enum reported"); }
+
     NotchPreferences? applied = null;
     var settings = new SettingsWindow(new NotchPreferences(), value => applied = value,
         storagePath: settingsPath);
-    var settingsPanel = (StackPanel)((ScrollViewer)settings.Content!).Content!;
-    var selectors = settingsPanel.Children.OfType<ComboBox>().ToArray();
-    selectors[0].SelectedIndex = (int)EdgeSide.Bottom;
-    selectors[1].SelectedIndex = (int)NotchDisplayMode.Always;
-    settingsPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(
-        new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(settings.Content is Grid, "settings uses structured shell");
+    var applyButton = (Button)SettingsField(settings, "_applyButton")!;
+    var resetButton = (Button)SettingsField(settings, "_resetButton")!;
+    var refreshSelector = (ComboBox)SettingsField(settings, "_refresh")!;
+    var metricChecks = (CheckBox[])SettingsField(settings, "_metrics")!;
+    var previewNotch = (Border)SettingsField(settings, "_previewNotch")!;
+
+    SettingsCall(settings, "SelectEdge", EdgeSide.Bottom, true);
+    SettingsCall(settings, "SelectMode", NotchDisplayMode.Always, true);
+    Check(previewNotch.VerticalAlignment == Avalonia.Layout.VerticalAlignment.Bottom,
+        "settings preview follows selected edge");
+    Check(applyButton.IsEnabled && resetButton.IsEnabled, "settings dirty state enables actions");
+    applyButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied == new NotchPreferences(EdgeSide.Bottom, NotchDisplayMode.Always),
         "settings Apply invokes live update");
     Check(PreferenceStore.Load(settingsPath) == applied, "settings Apply persists chosen values");
-    selectors[2].SelectedIndex = 3;
-    selectors[3].SelectedIndex = (int)HoverSensitivity.Wide;
-    var checks = settingsPanel.Children.OfType<WrapPanel>().Single().Children.OfType<CheckBox>().ToArray();
-    foreach (var checkbox in checks) checkbox.IsChecked = false;
+    Check(!applyButton.IsEnabled && !resetButton.IsEnabled, "successful save clears dirty state");
+
+    refreshSelector.SelectedIndex = 3;
+    SettingsCall(settings, "SelectSensitivity", HoverSensitivity.Wide, true);
+    foreach (var checkbox in metricChecks) checkbox.IsChecked = false;
     applied = null;
-    settingsPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    applyButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied is null, "empty metric selection is not applied");
-    checks[3].IsChecked = true;
-    settingsPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(((TextBlock)SettingsField(settings, "_status")!).Text?.StartsWith("Seleziona almeno una metrica") == true,
+        "empty metric selection is visible");
+    metricChecks[3].IsChecked = true;
+    applyButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied?.Metrics == VisibleMetrics.Network && applied.RefreshIntervalMs == 5000 &&
         applied.Sensitivity == HoverSensitivity.Wide, "new UI selections apply");
     Check(PreferenceStore.Load(settingsPath) == applied, "new UI selections persist");
@@ -278,19 +292,20 @@ try
     applied = null;
     var failingSettings = new SettingsWindow(new NotchPreferences(), value => applied = value,
         storagePath: temporaryDirectory);
-    var failingPanel = (StackPanel)((ScrollViewer)failingSettings.Content!).Content!;
-    failingPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(
+    SettingsCall(failingSettings, "SelectEdge", EdgeSide.Left, true);
+    ((Button)SettingsField(failingSettings, "_applyButton")!).RaiseEvent(
         new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied is null, "save failure does not apply changes");
-    Check(failingPanel.Children.OfType<TextBlock>().Any(x => x.Text?.StartsWith("Impossibile salvare") == true),
+    Check(((TextBlock)SettingsField(failingSettings, "_status")!).Text?.StartsWith("Impossibile salvare") == true,
         "save failure is visible");
     failingSettings.Close();
+
     var diskSettings = new SettingsWindow(new NotchPreferences { SelectedDrive = "/mnt/dati16" },
         value => applied = value, storagePath: settingsPath, drives: drives);
-    var diskPanel = (StackPanel)((ScrollViewer)diskSettings.Content!).Content!;
-    var diskSelector = diskPanel.Children.OfType<ComboBox>().Last();
+    var diskSelector = (ComboBox)SettingsField(diskSettings, "_drive")!;
     Check(((DriveChoice)diskSelector.SelectedItem!).Name == "/mnt/dati16", "saved disk selected in settings");
-    diskPanel.Children.OfType<Button>().Single(x => Equals(x.Content, "Applica")).RaiseEvent(
+    SettingsCall(diskSettings, "SelectMode", NotchDisplayMode.Always, true);
+    ((Button)SettingsField(diskSettings, "_applyButton")!).RaiseEvent(
         new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied?.SelectedDrive == "/mnt/dati16" && PreferenceStore.Load(settingsPath).SelectedDrive == "/mnt/dati16",
         "disk picker selection persists");
@@ -302,8 +317,7 @@ try
     {
         var caseSettings = new SettingsWindow(new NotchPreferences { SelectedDrive = @"c:\" },
             _ => { }, drives: new[] { new DriveSnapshot(@"C:\", "Sistema", 1000, 500) });
-        var casePanel = (StackPanel)((ScrollViewer)caseSettings.Content!).Content!;
-        Check(((DriveChoice)casePanel.Children.OfType<ComboBox>().Last().SelectedItem!).Name == @"C:\",
+        Check(((DriveChoice)((ComboBox)SettingsField(caseSettings, "_drive")!).SelectedItem!).Name == @"C:\",
             "Windows drive selection ignores casing");
         caseSettings.Close();
     }
