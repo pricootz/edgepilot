@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/edgepilot-master.png" width="112" alt="EdgePilot icon">
+  <img src="src/EdgePilot/Assets/edgepilot.svg" width="112" alt="EdgePilot icon">
 </p>
 
 <h1 align="center">EdgePilot</h1>

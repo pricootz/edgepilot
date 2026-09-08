@@ -2,16 +2,21 @@
 
 The EdgePilot mark depicts a right-edge notch with three rounded bars suggesting E. Its palette combines graphite, off-white and orange.
 
-- [Original supplied artwork](assets/edgepilot-original.png)
-- [Application master](assets/edgepilot-master.png)
-- Windows multi-resolution ICO: src/EdgePilot/Assets/edgepilot.ico
-- Linux launcher image: src/EdgePilot/Assets/edgepilot.png
+- Canonical vector artwork: [src/EdgePilot/Assets/edgepilot.svg](../src/EdgePilot/Assets/edgepilot.svg)
+- Windows multi-resolution ICO: `src/EdgePilot/Assets/edgepilot.ico`
+- Small-size review sheet: [assets/icon-size-check.png](assets/icon-size-check.png)
 
-The original was supplied by the maintainer as AI-generated artwork. The master was adapted with the built-in image-generation tool, preserving the silhouette and bar arrangement while increasing its use of the canvas. It is raster artwork, not a hand-drawn vector.
+The SVG is the single source of truth for the EdgePilot mark. It has a transparent background and is used directly by the Linux desktop launcher and by repository documentation. Do not add a raster PNG copy of the logo.
 
-Adaptation prompt: preserve the right-edge notch, concave top/bottom flares and three E-like bars; use graphite, off-white and orange; remove the surrounding background; center the tall mark with reduced vertical padding; preserve its proportions and identity; no text, shadow or mockup.
+Windows executable, shortcut, tray and window icon integration still requires the generated ICO. `scripts/prepare_brand_assets.py` rasterizes the SVG only for that native format and for the small-size QA preview. The generated files must stay in sync with the SVG.
 
-The packaging script converts the approved master into PNG and ICO sizes on GitHub Actions. It preserves alpha and checks icon decoding. These technical conversions do not require an image-generation service.
+To regenerate the derived assets on a system with Python 3.12, Pillow and CairoSVG:
+
+```bash
+python scripts/prepare_brand_assets.py
+```
+
+CI regenerates the derived assets on Ubuntu and fails if the committed ICO or review sheet differs from the SVG source.
 
 ## Screenshots
 
