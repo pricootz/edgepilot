@@ -3,8 +3,9 @@ using System.Text.Json;
 
 namespace EdgePilot.Core;
 
-public sealed record LanguageOption(string Code, string Name)
+public sealed record LanguageOption(Language Value, string Name)
 {
+    public string Code => Value.Code;
     public override string ToString() => Name;
 }
 
@@ -18,31 +19,34 @@ public static class Localization
     private static readonly IReadOnlyDictionary<string, Dictionary<string, string>> Catalogs = LoadCatalogs();
     private static Dictionary<string, string> _active = Catalog(FallbackCode);
 
-    internal static Func<string>? SystemLanguageDetectorOverride { get; set; }
+    internal static Func<Language>? SystemLanguageDetectorOverride { get; set; }
 
-    public static string Current { get; private set; } = FallbackCode;
-    public static string? Requested { get; private set; }
+    public static Language Current { get; private set; } = Language.English;
 
     public static IReadOnlyList<LanguageOption> Available => Catalogs
-        .Select(item => new LanguageOption(item.Key, LanguageName(item.Key)))
+        .Select(item => new LanguageOption(new Language(item.Key), LanguageName(item.Key)))
         .OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
         .ToArray();
 
-    public static string SystemLanguageName => LanguageName(DetectSystemLanguage());
+    public static string SystemLanguageName => LanguageName(DetectSystemLanguage().Code);
 
-    public static string DetectSystemLanguage()
+    public static Language DetectSystemLanguage()
     {
-        var requested = SystemLanguageDetectorOverride?.Invoke() ?? CultureInfo.InstalledUICulture.Name;
-        return Resolve(requested);
+        if (SystemLanguageDetectorOverride is not null)
+            return Resolve(SystemLanguageDetectorOverride());
+
+        try { return Resolve(new Language(CultureInfo.InstalledUICulture.Name)); }
+        catch (ArgumentException) { return new Language(FallbackCode); }
     }
 
-    public static void SetLanguage(string? requested)
+    public static void SetLanguage(Language language)
     {
-        Requested = string.IsNullOrWhiteSpace(requested) ? null : NormalizeLegacyCode(requested.Trim());
-        Current = Requested is null ? DetectSystemLanguage() : Resolve(Requested);
-        _active = Catalog(Current);
-        ApplyCulture(Current);
+        Current = Resolve(language);
+        _active = Catalog(Current.Code);
+        ApplyCulture(Current.Code);
     }
+
+    public static Language NormalizePreference(Language language) => Resolve(language);
 
     public static string T(string key)
     {
@@ -54,47 +58,39 @@ public static class Localization
     public static string T(string key, params object?[] args) =>
         string.Format(CultureInfo.CurrentCulture, T(key), args);
 
+    public static string In(Language language, string key) => In(language.Code, key);
+
     public static string In(string code, string key)
     {
-        var resolved = Resolve(code);
-        if (Catalog(resolved).TryGetValue(key, out var value)) return value;
+        Language requested;
+        try { requested = new Language(code); }
+        catch (ArgumentException) { requested = Language.English; }
+        var resolved = Resolve(requested);
+        if (Catalog(resolved.Code).TryGetValue(key, out var value)) return value;
         if (Catalog(FallbackCode).TryGetValue(key, out value)) return value;
         return key;
     }
 
-    public static IReadOnlyCollection<string> Keys(string code) => Catalog(Resolve(code)).Keys;
+    public static IReadOnlyCollection<string> Keys(Language language) => Catalog(Resolve(language).Code).Keys;
 
-    public static string Resolve(string? requested)
+    public static Language Resolve(Language requested)
     {
-        var wanted = NormalizeLegacyCode(requested ?? string.Empty);
-        if (wanted.Length == 0) wanted = CultureInfo.InstalledUICulture.Name;
+        if (Catalogs.ContainsKey(requested.Code)) return CanonicalLanguage(requested.Code);
 
-        if (Catalogs.ContainsKey(wanted)) return CanonicalCode(wanted);
-
-        var separator = wanted.IndexOf('-');
+        var separator = requested.Code.IndexOf('-');
         if (separator > 0)
         {
-            var neutral = wanted[..separator];
-            if (Catalogs.ContainsKey(neutral)) return CanonicalCode(neutral);
+            var neutral = requested.Code[..separator];
+            if (Catalogs.ContainsKey(neutral)) return CanonicalLanguage(neutral);
         }
 
         return Catalogs.ContainsKey(FallbackCode)
-            ? FallbackCode
-            : Catalogs.Keys.FirstOrDefault() ?? FallbackCode;
+            ? new Language(FallbackCode)
+            : new Language(Catalogs.Keys.First());
     }
 
-    public static string NormalizePreference(string requested) => Resolve(NormalizeLegacyCode(requested));
-
-    private static string NormalizeLegacyCode(string value) => value switch
-    {
-        var x when x.Equals("Italian", StringComparison.OrdinalIgnoreCase) => "it",
-        var x when x.Equals("English", StringComparison.OrdinalIgnoreCase) => "en",
-        var x when x.Equals("French", StringComparison.OrdinalIgnoreCase) => "fr",
-        _ => value
-    };
-
-    private static string CanonicalCode(string requested) =>
-        Catalogs.Keys.First(key => key.Equals(requested, StringComparison.OrdinalIgnoreCase));
+    private static Language CanonicalLanguage(string requested) =>
+        new(Catalogs.Keys.First(key => key.Equals(requested, StringComparison.OrdinalIgnoreCase)));
 
     private static string LanguageName(string code) =>
         Catalog(code).TryGetValue(LanguageNameKey, out var name) && !string.IsNullOrWhiteSpace(name)
