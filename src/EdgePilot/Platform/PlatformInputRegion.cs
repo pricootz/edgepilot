@@ -19,6 +19,7 @@ internal sealed class PlatformInputRegion : IDisposable
     private uint _xid;
     private bool _windowsInitializationAttempted;
     private bool _x11InitializationAttempted;
+    private bool _windowsRegionVerified;
     private bool _ready;
     private int? _lastNativeRegionHash;
 
@@ -65,6 +66,11 @@ internal sealed class PlatformInputRegion : IDisposable
                 return FailWindows("EdgePilot could not apply the Windows input-safe window region.");
 
             region = IntPtr.Zero;
+
+            if (!_windowsRegionVerified && !VerifyWindowsRegion(rectangles))
+                return FailWindows("EdgePilot could not verify the applied Windows window region.");
+
+            _windowsRegionVerified = true;
             _ready = true;
             return true;
         }
@@ -76,6 +82,30 @@ internal sealed class PlatformInputRegion : IDisposable
         {
             if (region != IntPtr.Zero)
                 DeleteObject(region);
+        }
+    }
+
+    private bool VerifyWindowsRegion(NativeRect[] rectangles)
+    {
+        var expected = CreateWindowsRegion(rectangles);
+        var actual = CreateRectRgn(0, 0, 0, 0);
+        if (expected == IntPtr.Zero || actual == IntPtr.Zero)
+        {
+            if (expected != IntPtr.Zero) DeleteObject(expected);
+            if (actual != IntPtr.Zero) DeleteObject(actual);
+            return false;
+        }
+
+        try
+        {
+            if (GetWindowRgn(_hwnd, actual) == RegionError)
+                return false;
+            return EqualRgn(expected, actual);
+        }
+        finally
+        {
+            DeleteObject(expected);
+            DeleteObject(actual);
         }
     }
 
@@ -163,12 +193,22 @@ internal sealed class PlatformInputRegion : IDisposable
 
         try
         {
-            // XCB uses a connection independent from Avalonia's own X11 connection. This avoids
-            // introducing Xlib locking/threading into Avalonia's event loop while still applying
-            // SHAPE 1.1's ShapeInput region to the Avalonia-owned XID.
-            _ = XcbShapeRectangles(_connection, ShapeSet, ShapeInput, Unsorted, _xid, 0, 0,
-                (uint)rectangles.Length, rectangles);
-            if (XcbFlush(_connection) <= 0 || XcbConnectionHasError(_connection) != 0)
+            // XCB uses a connection independent from Avalonia's own X11 connection. A checked
+            // SHAPE request lets the package smoke test prove that the server accepted ShapeInput,
+            // not merely that the request could be queued locally.
+            var cookie = XcbShapeRectanglesChecked(_connection, ShapeSet, ShapeInput, Unsorted,
+                _xid, 0, 0, (uint)rectangles.Length, rectangles);
+            var error = XcbRequestCheck(_connection, cookie);
+            if (error != IntPtr.Zero)
+            {
+                LibcFree(error);
+                System.Diagnostics.Trace.WriteLine("The X server rejected EdgePilot's ShapeInput region.");
+                _ready = false;
+                _lastNativeRegionHash = null;
+                return false;
+            }
+
+            if (XcbConnectionHasError(_connection) != 0)
             {
                 System.Diagnostics.Trace.WriteLine("EdgePilot lost the X11 connection used for input-region safety.");
                 _ready = false;
@@ -265,21 +305,24 @@ internal sealed class PlatformInputRegion : IDisposable
                 || !double.IsFinite(rect.Width) || !double.IsFinite(rect.Height))
                 continue;
 
-            var left = Math.Clamp((int)Math.Ceiling(rect.Left * scaling), 0, windowWidth);
-            var top = Math.Clamp((int)Math.Ceiling(rect.Top * scaling), 0, windowHeight);
-            var right = Math.Clamp((int)Math.Floor(rect.Right * scaling), 0, windowWidth);
-            var bottom = Math.Clamp((int)Math.Floor(rect.Bottom * scaling), 0, windowHeight);
+            // Region coordinates are integral device pixels. Nearest-pixel quantization keeps
+            // adjacent one-DIP scanlines sharing the exact same boundary at fractional DPI, so
+            // SetWindowRgn cannot cut visible one-pixel seams through the animated notch.
+            var left = Quantize(rect.Left * scaling, windowWidth);
+            var top = Quantize(rect.Top * scaling, windowHeight);
+            var right = Quantize(rect.Right * scaling, windowWidth);
+            var bottom = Quantize(rect.Bottom * scaling, windowHeight);
             if (right <= left || bottom <= top)
                 continue;
 
-            // Inset rounding is deliberate. The native region must never grow beyond the logical
-            // live area because a one-pixel missed EdgePilot fringe is safer than stealing a click
-            // from the application underneath.
             result.Add(new NativeRect(left, top, right, bottom));
         }
 
         return result.ToArray();
     }
+
+    private static int Quantize(double value, int maximum) =>
+        Math.Clamp((int)Math.Round(value, MidpointRounding.AwayFromZero), 0, maximum);
 
     private static int HashNativeRectangles(NativeRect[] rectangles)
     {
@@ -298,6 +341,7 @@ internal sealed class PlatformInputRegion : IDisposable
     public void Dispose()
     {
         _ready = false;
+        _windowsRegionVerified = false;
         _lastNativeRegionHash = null;
         _hwnd = IntPtr.Zero;
         _xid = 0;
@@ -345,6 +389,7 @@ internal sealed class PlatformInputRegion : IDisposable
     }
 
     private const uint RectanglesRegionType = 1;
+    private const int RegionError = 0;
     private const byte ShapeSet = 0;
     private const byte ShapeInput = 2;
     private const byte Unsorted = 0;
@@ -384,11 +429,18 @@ internal sealed class PlatformInputRegion : IDisposable
     [DllImport("user32.dll")]
     private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, [MarshalAs(UnmanagedType.Bool)] bool redraw);
 
+    [DllImport("user32.dll")]
+    private static extern int GetWindowRgn(IntPtr hWnd, IntPtr hRgn);
+
     [DllImport("gdi32.dll")]
     private static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
 
     [DllImport("gdi32.dll")]
     private static extern IntPtr ExtCreateRegion(IntPtr transform, uint dataSize, IntPtr regionData);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EqualRgn(IntPtr first, IntPtr second);
 
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -400,8 +452,8 @@ internal sealed class PlatformInputRegion : IDisposable
     [DllImport("libxcb.so.1", EntryPoint = "xcb_connection_has_error")]
     private static extern int XcbConnectionHasError(IntPtr connection);
 
-    [DllImport("libxcb.so.1", EntryPoint = "xcb_flush")]
-    private static extern int XcbFlush(IntPtr connection);
+    [DllImport("libxcb.so.1", EntryPoint = "xcb_request_check")]
+    private static extern IntPtr XcbRequestCheck(IntPtr connection, XcbVoidCookie cookie);
 
     [DllImport("libxcb.so.1", EntryPoint = "xcb_disconnect")]
     private static extern void XcbDisconnect(IntPtr connection);
@@ -413,8 +465,8 @@ internal sealed class PlatformInputRegion : IDisposable
     private static extern IntPtr XcbShapeQueryVersionReply(IntPtr connection,
         XcbShapeQueryVersionCookie cookie, out IntPtr error);
 
-    [DllImport("libxcb-shape.so.0", EntryPoint = "xcb_shape_rectangles")]
-    private static extern XcbVoidCookie XcbShapeRectangles(IntPtr connection, byte operation,
+    [DllImport("libxcb-shape.so.0", EntryPoint = "xcb_shape_rectangles_checked")]
+    private static extern XcbVoidCookie XcbShapeRectanglesChecked(IntPtr connection, byte operation,
         byte destinationKind, byte ordering, uint destinationWindow, short xOffset, short yOffset,
         uint rectanglesLength, [In] XRectangle[] rectangles);
 
