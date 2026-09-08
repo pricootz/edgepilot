@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Win32;
+using EdgePilot.Core;
 using EdgePilot.UI;
 
 namespace EdgePilot.Platform;
@@ -14,12 +15,12 @@ public sealed record LaunchCommand(string Executable, IReadOnlyList<string> Argu
 {
     public static LaunchCommand Current()
     {
-        var executable = Environment.ProcessPath ?? throw new IOException("Percorso dell’app non disponibile.");
+        var executable = Environment.ProcessPath ?? throw new IOException(Localization.T("autostart.pathUnavailable"));
         var arguments = new List<string>();
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
         {
             var assembly = Assembly.GetEntryAssembly()?.Location;
-            if (string.IsNullOrEmpty(assembly)) throw new IOException("Percorso dell’app non disponibile.");
+            if (string.IsNullOrEmpty(assembly)) throw new IOException(Localization.T("autostart.pathUnavailable"));
             arguments.Add(assembly);
         }
         arguments.Add("--autostart");
@@ -29,14 +30,14 @@ public sealed record LaunchCommand(string Executable, IReadOnlyList<string> Argu
     public string WindowsCommand()
     {
         var result = string.Join(" ", new[] { Executable }.Concat(Arguments).Select(QuoteWindows));
-        if (result.Length > 260) throw new IOException("Percorso troppo lungo per l’avvio automatico di Windows.");
+        if (result.Length > 260) throw new IOException(Localization.T("autostart.pathTooLong"));
         return result;
     }
 
     public string DesktopEntry()
     {
         var command = string.Join(" ", new[] { Executable }.Concat(Arguments).Select(QuoteDesktop));
-        return "[Desktop Entry]\nType=Application\nName=EdgePilot\nComment=Monitoraggio del sistema\nExec=" +
+        return $"[Desktop Entry]\nType=Application\nName=EdgePilot\nComment={Localization.T("desktop.comment")}\nExec=" +
             command.Replace("\\", "\\\\") +
             "\nTerminal=false\nX-GNOME-Autostart-enabled=true\n";
     }
@@ -44,7 +45,7 @@ public sealed record LaunchCommand(string Executable, IReadOnlyList<string> Argu
     private static void ValidateArgument(string value)
     {
         if (value.IndexOfAny(['\r', '\n', '\0']) >= 0)
-            throw new IOException("Il percorso dell’app contiene caratteri non supportati.");
+            throw new IOException(Localization.T("autostart.invalidChars"));
     }
 
     public static string QuoteWindows(string value)
@@ -103,7 +104,7 @@ public sealed class AutostartRegistration : IAutostartRegistration
         if (OperatingSystem.IsWindows())
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey)
-                ?? throw new IOException("Impossibile aggiornare l’avvio automatico.");
+                ?? throw new IOException(Localization.T("autostart.updateFailed"));
             if (content is null) key.DeleteValue(ValueName, false);
             else key.SetValue(ValueName, content, RegistryValueKind.String);
             return;

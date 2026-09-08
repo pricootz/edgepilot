@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
+using EdgePilot.Core;
 using EdgePilot.UI;
 using EdgePilot.Platform;
 using Avalonia.Threading;
@@ -12,13 +13,13 @@ namespace EdgePilot;
 public sealed class App : Application
 {
     private TrayIcon? _tray;
+    private NativeMenuItem? _settingsMenuItem;
+    private NativeMenuItem? _toggleMenuItem;
+    private NativeMenuItem? _exitMenuItem;
+
     public override void Initialize()
     {
-        var italian = System.Globalization.CultureInfo.GetCultureInfo("it-IT");
-        System.Globalization.CultureInfo.DefaultThreadCurrentCulture = italian;
-        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = italian;
-        System.Globalization.CultureInfo.CurrentCulture = italian;
-        System.Globalization.CultureInfo.CurrentUICulture = italian;
+        Localization.SetLanguage(Localization.DetectSystemLanguage());
         Styles.Add(new FluentTheme());
         RequestedThemeVariant = OperatingSystem.IsLinux() ? ThemeVariant.Default : ThemeVariant.Dark;
     }
@@ -36,8 +37,9 @@ public sealed class App : Application
             {
                 preferences = new();
                 System.Diagnostics.Trace.WriteLine(ex);
-                warning = "Impossibile leggere le impostazioni salvate. Sono attive quelle predefinite. Premi Applica per salvare nuovamente le preferenze.";
+                warning = Localization.T("warning.loadFailed");
             }
+            if (preferences.Language is { } language) Localization.SetLanguage(language);
             // Preserve the existing development override without writing it to disk.
             if (Environment.GetEnvironmentVariable("EDGEPILOT_EDGE") is { Length: > 0 })
                 preferences = preferences with { Edge = EdgePlacement.FromEnvironment() };
@@ -46,7 +48,7 @@ public sealed class App : Application
             catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
                 System.Diagnostics.Trace.WriteLine(ex);
-                warning = "Non è stato possibile verificare l’avvio automatico. Controlla le impostazioni.";
+                warning = Localization.T("warning.autostartCheckFailed");
             }
             var window = new EdgeWindow();
             window.SavePreferences = value => DesktopPreferences.Save(PreferenceStore.DefaultPath,
@@ -55,16 +57,16 @@ public sealed class App : Application
             try
             {
                 var menu = new NativeMenu();
-                var settings = new NativeMenuItem { Header = "Impostazioni" };
-                settings.Click += (_, _) => window.ShowSettings();
-                var toggle = new NativeMenuItem { Header = "Mostra / Nascondi pannello" };
-                toggle.Click += (_, _) => window.ToggleVisibility();
-                var exit = new NativeMenuItem { Header = "Esci" };
-                exit.Click += (_, _) => desktop.Shutdown();
-                menu.Items.Add(settings);
-                menu.Items.Add(toggle);
+                _settingsMenuItem = new NativeMenuItem { Header = Localization.T("tray.settings") };
+                _settingsMenuItem.Click += (_, _) => window.ShowSettings();
+                _toggleMenuItem = new NativeMenuItem { Header = Localization.T("tray.toggle") };
+                _toggleMenuItem.Click += (_, _) => window.ToggleVisibility();
+                _exitMenuItem = new NativeMenuItem { Header = Localization.T("tray.exit") };
+                _exitMenuItem.Click += (_, _) => desktop.Shutdown();
+                menu.Items.Add(_settingsMenuItem);
+                menu.Items.Add(_toggleMenuItem);
                 menu.Items.Add(new NativeMenuItemSeparator());
-                menu.Items.Add(exit);
+                menu.Items.Add(_exitMenuItem);
                 _tray = new TrayIcon { Icon = AppIcon.Load(), ToolTipText = "EdgePilot", Menu = menu, IsVisible = true };
                 _tray.Clicked += (_, _) => window.ShowSettings();
                 TrayIcon.SetIcons(this, new TrayIcons { _tray });
@@ -76,8 +78,15 @@ public sealed class App : Application
                 _tray?.Dispose();
                 _tray = null;
                 window.HasTray = false;
-                warning = "Icona nell’area di notifica non disponibile. Puoi riaprire le impostazioni avviando nuovamente EdgePilot.";
+                warning = Localization.T("warning.trayUnavailable");
             }
+            window.PreferencesChanged += () =>
+            {
+                if (_settingsMenuItem is null) return;
+                _settingsMenuItem.Header = Localization.T("tray.settings");
+                _toggleMenuItem!.Header = Localization.T("tray.toggle");
+                _exitMenuItem!.Header = Localization.T("tray.exit");
+            };
             SingleInstance.Bind(() => Dispatcher.UIThread.Post(() => window.ShowSettings()));
             window.ApplyPreferences(preferences);
             desktop.MainWindow = window;

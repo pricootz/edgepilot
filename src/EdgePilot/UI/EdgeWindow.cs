@@ -65,8 +65,10 @@ public sealed class EdgeWindow : Window
     private NotchDisplayMode _mode;
     private string? _selectedDrive;
     private bool _startAtLogin;
+    private Language? _language;
     public bool HasTray { get; set; }
     public event Action? ExitRequested;
+    public event Action? PreferencesChanged;
     public Action<NotchPreferences>? SavePreferences { get; set; }
     private SettingsWindow? _settingsWindow;
     private int? _hoveredMetric;
@@ -97,8 +99,8 @@ public sealed class EdgeWindow : Window
 
         _cpuRing = new MetricRing("C", "CPU");
         _ramRing = new MetricRing("M", "RAM");
-        _diskRing = new MetricRing("D", "DISCO");
-        _networkRing = new MetricRing("↕", "RETE");
+        _diskRing = new MetricRing("D", Localization.T("ring.disk"));
+        _networkRing = new MetricRing("↕", Localization.T("ring.network"));
 
         _metricStack = new StackPanel
         {
@@ -249,11 +251,11 @@ public sealed class EdgeWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            _tooltipTitle.Text = "MONITORAGGIO SISTEMA";
-            _tooltipValue.Text = "ERRORE";
+            _tooltipTitle.Text = Localization.T("tooltip.systemMonitoring");
+            _tooltipValue.Text = Localization.T("tooltip.error");
             System.Diagnostics.Trace.WriteLine(exception);
-            _tooltipLine1.Text = "Impossibile aggiornare i dati del sistema.";
-            _tooltipLine2.Text = "Nuovo tentativo al prossimo aggiornamento.";
+            _tooltipLine1.Text = Localization.T("tooltip.updateFailed");
+            _tooltipLine2.Text = Localization.T("tooltip.retryNext");
             _tooltipLine3.Text = "";
         });
     }
@@ -270,7 +272,7 @@ public sealed class EdgeWindow : Window
         _cpuRing.SetValue(cpu, $"{cpu:0}%");
         _ramRing.SetValue(ram, $"{ram:0}%");
         _diskRing.SetValue(drive?.UsedPercent, drive is null ? "—" : $"{drive.UsedPercent:0}%");
-        _networkRing.SetValue(null, snapshot.Network.Connected ? "SÌ" : "NO");
+        _networkRing.SetValue(null, snapshot.Network.Connected ? Localization.T("network.yes") : Localization.T("network.no"));
 
         if (_hoveredMetric is not null)
         {
@@ -446,47 +448,47 @@ public sealed class EdgeWindow : Window
             case 0:
                 _tooltipTitle.Text = "CPU";
                 _tooltipValue.Text = $"{cpu:0}%";
-                _tooltipLine1.Text = $"{Environment.ProcessorCount} processori logici";
+                _tooltipLine1.Text = Localization.T("tooltip.processors", Environment.ProcessorCount);
                 _tooltipLine2.Text = snapshot.HostName;
                 _tooltipLine3.Text = snapshot.OperatingSystem;
                 break;
 
             case 1:
-                _tooltipTitle.Text = "MEMORIA";
+                _tooltipTitle.Text = Localization.T("tooltip.memory");
                 _tooltipValue.Text = $"{ram:0}%";
-                _tooltipLine1.Text = $"{DisplayFormat.Bytes(snapshot.MemoryUsedBytes)} utilizzati";
-                _tooltipLine2.Text = $"{DisplayFormat.Bytes(snapshot.MemoryAvailableBytes)} disponibili";
-                _tooltipLine3.Text = $"{DisplayFormat.Bytes(snapshot.MemoryTotalBytes)} totali";
+                _tooltipLine1.Text = Localization.T("bytes.used", DisplayFormat.Bytes(snapshot.MemoryUsedBytes));
+                _tooltipLine2.Text = Localization.T("bytes.available", DisplayFormat.Bytes(snapshot.MemoryAvailableBytes));
+                _tooltipLine3.Text = Localization.T("bytes.total", DisplayFormat.Bytes(snapshot.MemoryTotalBytes));
                 break;
 
             case 2:
-                _tooltipTitle.Text = "ARCHIVIAZIONE";
+                _tooltipTitle.Text = Localization.T("tooltip.storage");
                 if (drive is null)
                 {
                     _tooltipValue.Text = "—";
-                    _tooltipLine1.Text = _selectedDrive is null ? "Nessun disco disponibile" : "Il disco scelto non è disponibile";
+                    _tooltipLine1.Text = _selectedDrive is null ? Localization.T("storage.noDisk") : Localization.T("storage.unavailable");
                     _tooltipLine2.Text = _selectedDrive ?? "";
-                    _tooltipLine3.Text = "Scegli il disco nelle impostazioni.";
+                    _tooltipLine3.Text = Localization.T("storage.chooseInSettings");
                 }
                 else
                 {
                     _tooltipValue.Text = $"{drive.UsedPercent:0}%";
                     _tooltipLine1.Text = drive.Label;
-                    _tooltipLine2.Text = $"{DisplayFormat.Bytes(drive.FreeBytes)} liberi";
-                    _tooltipLine3.Text = $"{DisplayFormat.Bytes(drive.TotalBytes)} totali";
+                    _tooltipLine2.Text = Localization.T("bytes.free", DisplayFormat.Bytes(drive.FreeBytes));
+                    _tooltipLine3.Text = Localization.T("bytes.total", DisplayFormat.Bytes(drive.TotalBytes));
                 }
                 break;
 
             default:
-                _tooltipTitle.Text = "RETE";
-                _tooltipValue.Text = snapshot.Network.Connected ? "CONNESSA" : "DISCONNESSA";
-                _tooltipLine1.Text = snapshot.Network.Connected ? snapshot.Network.InterfaceName : "Nessuna interfaccia di rete attiva";
+                _tooltipTitle.Text = Localization.T("tooltip.network");
+                _tooltipValue.Text = snapshot.Network.Connected ? Localization.T("network.connected") : Localization.T("network.disconnected");
+                _tooltipLine1.Text = snapshot.Network.Connected ? snapshot.Network.InterfaceName : Localization.T("network.noInterface");
                 _tooltipLine2.Text = snapshot.Network.Connected
                     ? $"↓ {DisplayFormat.Rate(snapshot.Network.ReceiveBytesPerSecond)}   ↑ {DisplayFormat.Rate(snapshot.Network.SendBytesPerSecond)}"
                     : "";
                 _tooltipLine3.Text = snapshot.Network.LinkSpeedBitsPerSecond > 0
-                    ? $"Velocità collegamento: {snapshot.Network.LinkSpeedBitsPerSecond / 1_000_000d:0} Mbps"
-                    : $"Tempo di attività: {DisplayFormat.Uptime(snapshot.Uptime)}";
+                    ? Localization.T("network.linkSpeed", (int)Math.Round(snapshot.Network.LinkSpeedBitsPerSecond / 1_000_000d))
+                    : Localization.T("network.uptime", DisplayFormat.Uptime(snapshot.Uptime));
                 break;
         }
     }
@@ -495,7 +497,8 @@ public sealed class EdgeWindow : Window
     {
         SelectedDrive = _selectedDrive, StartAtLogin = _startAtLogin,
         Metrics = _metrics, Sensitivity = _sensitivity,
-        RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds
+        RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds,
+        Language = _language
     };
 
     public void ApplyPreferences(NotchPreferences preferences)
@@ -510,6 +513,10 @@ public sealed class EdgeWindow : Window
         _startAtLogin = preferences.StartAtLogin;
         _metrics = preferences.Metrics;
         _sensitivity = preferences.Sensitivity;
+        _language = preferences.Language;
+        Localization.SetLanguage(preferences.Language ?? Localization.DetectSystemLanguage());
+        _diskRing.SetCaption(Localization.T("ring.disk"));
+        _networkRing.SetCaption(Localization.T("ring.network"));
         _monitor.RefreshInterval = TimeSpan.FromMilliseconds(preferences.RefreshIntervalMs);
         _visibleMetricIndices = Enumerable.Range(0, 4).Where(i => ((int)_metrics & (1 << i)) != 0).ToArray();
         _metricStack.Children.Clear();
@@ -534,6 +541,7 @@ public sealed class EdgeWindow : Window
         }
         if (_latestSnapshot is not null) RenderSnapshot(_latestSnapshot);
         Relocate();
+        PreferencesChanged?.Invoke();
     }
 
     public void RequestExit()
@@ -558,7 +566,7 @@ public sealed class EdgeWindow : Window
         CancelFold();
         _settingsWindow = new SettingsWindow(Preferences, ApplyPreferences, warning,
             drives: _latestSnapshot?.Drives, savePreferences: SavePreferences,
-            exit: RequestExit, hasTray: HasTray);
+            exit: RequestExit, hasTray: HasTray, reopen: () => Dispatcher.UIThread.Post(() => ShowSettings()));
         _settingsWindow.Closed += (_, _) =>
         {
             _settingsWindow = null;
