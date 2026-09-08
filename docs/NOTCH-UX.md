@@ -12,13 +12,18 @@ Pointer exit starts one 450 ms fold timer. Reentry cancels it. Pin prevents fold
 
 `EdgeWindow` intentionally remains larger than the visible notch because the same surface must accommodate spring animation, all four edge orientations and the detail tooltip. Transparency is visual only: the native top-level must also be prevented from receiving pointer input outside EdgePilot's live regions.
 
-The live input model contains only the current notch, the configured hover hot-zone in Hover mode, and the visible tooltip plus its bridge. Hidden mode has no live input region. Windows and Linux consume this same model:
+The live input model contains only the current notch silhouette, the configured Hover hot-zone in Hover mode, and the visible tooltip plus its bridge. Hidden mode has no live input region. The curved/concave notch is represented by conservative scanline strips rather than its rectangular bounds, so transparent notch corners and shoulders are not accidentally promoted to native input.
 
-- Windows returns `HTTRANSPARENT` from `WM_NCHITTEST` everywhere outside the live regions.
-- Linux X11/XWayland applies the live rectangles to the window's X Shape `ShapeInput` region, updating it during spring motion, tooltip changes, scaling and preference changes.
-- If Linux cannot establish a safe X11 input region, EdgePilot fails closed by hiding the edge surface instead of leaving a large transparent topmost rectangle that could block the desktop.
+Windows and Linux consume this same model:
 
-The current Avalonia desktop configuration uses the X11 backend on Linux, including XWayland on Wayland desktops. Avalonia's native Wayland backend is experimental and is not enabled by this project. If a future native Wayland backend is enabled and no equivalent compositor-supported input-region mechanism is available, the same fail-closed rule must be preserved rather than falling back to a rectangular interactive window.
+- Windows applies a real `HWND` window region with `SetWindowRgn`. This is intentionally not based on `HTTRANSPARENT`: Win32 only forwards `HTTRANSPARENT` hit tests through windows owned by the same thread, which is insufficient for browser/desktop applications in other processes.
+- Linux X11/XWayland applies the same live rectangles to the X Shape `ShapeInput` region and updates it during spring motion, tooltip changes, scaling and preference changes.
+- Native rectangle conversion rounds inward. A one-pixel EdgePilot fringe becoming non-interactive is preferable to claiming a pixel that belongs to the application underneath.
+- If Windows or Linux cannot establish its safe native region, EdgePilot fails closed by hiding the edge surface instead of leaving a large transparent topmost rectangle that could block the desktop.
+
+The intentional Hover hot-zone remains transparent and interactive: it is the small configured edge area used to wake the collapsed notch. Outside the notch/hot-zone/tooltip/bridge, the large layout window must never receive pointer input.
+
+The current Avalonia desktop configuration uses the X11 backend on Linux, including XWayland on Wayland desktops. The XCB Shape binding requires `libxcb-shape.so.0` (`libxcb-shape0` on Debian/Ubuntu/Parrot), which the package installer checks. Avalonia's native Wayland backend is experimental and is not enabled by this project. If a future native Wayland backend is enabled and no equivalent compositor-supported input-region mechanism is available, the same fail-closed rule must be preserved rather than falling back to a rectangular interactive window.
 
 Single-instance protection is separate from pointer routing. The guard is scoped to the current user across OS sessions; a second terminal, desktop launcher or autostart session must activate the existing instance instead of creating another edge surface.
 
@@ -31,12 +36,12 @@ dotnet run --project tests/EdgePilot.UxChecks -c Release
 dotnet run --project tests/EdgePilot.InputChecks -c Release
 ```
 
-The headless suites exercise spring stability and reversals, reveal gating, edge transforms, metric hit targets, tooltip bridges, pin/fold behavior, preferences and the live input-region model on all four edges. They explicitly verify that the transparent center of the larger native window never belongs to EdgePilot's interaction region.
+The headless suites exercise spring stability and reversals, reveal gating, edge transforms, metric hit targets, tooltip bridges, pin/fold behavior, preferences and the live input-region model on all four edges. They explicitly verify that the transparent center of the larger native window and points inside the old rectangular notch bounds but outside the visible shoulder never belong to EdgePilot's interaction region.
 
-CI additionally launches the packaged Linux build under Xvfb and requires the X11 input region to initialize successfully. The Linux package check launches a second process in a new Unix session to verify that single-instance protection is user-wide rather than session-local.
+CI launches packaged builds on both platforms and requires the native input-region guard to initialize successfully. Ubuntu performs the X11 check under Xvfb with the declared XCB Shape runtime dependency. The Linux package check also launches a second process in a new Unix session to verify that single-instance protection is user-wide rather than session-local.
 
 ## Desktop checks
 
-Check rapid entry/exit, tooltip transitions, pin/unpin, right-click Settings, every edge, Hidden/Hover/Always, mixed DPI and monitor changes on Windows and Ubuntu. On Linux, verify browser controls directly behind the transparent parts of the EdgePilot window remain clickable while the hover hot-zone still opens the notch.
+Check rapid entry/exit, tooltip transitions, pin/unpin, right-click Settings, every edge, Hidden/Hover/Always, mixed DPI and monitor changes on Windows and Ubuntu. On both platforms, place browser controls directly behind transparent portions of the larger EdgePilot layout surface and verify they remain clickable while the configured Hover hot-zone still opens the notch.
 
-Automated headless/Xvfb checks cannot certify compositor behavior on every real X11/XWayland desktop. Native Wayland behavior also requires explicit hands-on validation if that backend is enabled in the future.
+Automated package/Xvfb checks cannot certify compositor/window-manager behavior on every real desktop. Real Windows and Linux X11/XWayland validation is required before #16 is considered resolved. Native Wayland behavior also requires explicit hands-on validation if that backend is enabled in the future.
