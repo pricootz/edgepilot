@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Avalonia.Controls.Shapes;
 using EdgePilot.Core.Signals;
+using EdgePilot.Platform;
 
 namespace EdgePilot.UI.Signals;
 
@@ -23,6 +24,7 @@ internal sealed class SignalWindow : Window
     private readonly DispatcherTimer _motionTimer = new();
     private readonly NotchSpring _spring = new();
     private readonly Stopwatch _clock = new();
+    private readonly Win32Properties.CustomWndProcHookCallback? _wndProcHook;
     private EdgeSide _edge;
 
     public event Action? Collapsed;
@@ -37,6 +39,7 @@ internal sealed class SignalWindow : Window
         ShowInTaskbar = false;
         Topmost = true;
         ShowActivated = false;
+        IsHitTestVisible = false;
         Background = Brushes.Transparent;
         TransparencyBackgroundFallback = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
@@ -85,6 +88,18 @@ internal sealed class SignalWindow : Window
 
         ScalingChanged += (_, _) => Relocate();
         Opened += (_, _) => Relocate();
+        Closed += (_, _) =>
+        {
+            _motionTimer.Stop();
+            if (_wndProcHook is not null)
+                Win32Properties.RemoveWndProcHookCallback(this, _wndProcHook);
+        };
+
+        if (OperatingSystem.IsWindows())
+        {
+            _wndProcHook = WndProc;
+            Win32Properties.AddWndProcHookCallback(this, _wndProcHook);
+        }
     }
 
     public void ConfigureEdge(EdgeSide edge)
@@ -162,6 +177,15 @@ internal sealed class SignalWindow : Window
         var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
         if (screen is null) return;
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
+    }
+
+    private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const uint WmNcHitTest = 0x0084;
+        const int HtTransparent = -1;
+        if (msg != WmNcHitTest) return IntPtr.Zero;
+        handled = true;
+        return new IntPtr(HtTransparent);
     }
 
     private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
