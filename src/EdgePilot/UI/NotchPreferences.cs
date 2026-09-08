@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using EdgePilot.Core;
 
 namespace EdgePilot.UI;
@@ -20,8 +19,8 @@ public sealed record NotchPreferences(EdgeSide Edge = EdgeSide.Right,
     public int RefreshIntervalMs { get; init; } = 1000;
     public HoverSensitivity Sensitivity { get; init; } = HoverSensitivity.Normal;
     public VisibleMetrics Metrics { get; init; } = VisibleMetrics.All;
-    // Null means "follow the system language". Explicit languages use BCP-47-style codes such as it, en or fr.
-    public string? Language { get; init; }
+    // Null means "follow the system language".
+    public Language? Language { get; init; }
     public SettingsThemePreference SettingsTheme { get; init; } = SettingsThemePreference.System;
 }
 
@@ -37,10 +36,6 @@ public static class PreferenceStore
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private static readonly Regex LanguageTag = new(
-        "^[A-Za-z]{2,8}(-[A-Za-z0-9]{2,8})*$",
-        RegexOptions.CultureInvariant);
-
     public static void Validate(NotchPreferences value)
     {
         if (!Enum.IsDefined(value.Edge) || !Enum.IsDefined(value.Mode))
@@ -53,7 +48,7 @@ public static class PreferenceStore
             throw new InvalidDataException(Localization.T("prefs.invalidMetrics"));
         if (!Enum.IsDefined(value.SettingsTheme))
             throw new InvalidDataException(Localization.T("prefs.invalidTheme"));
-        if (value.Language is { Length: > 0 } language && !ValidLanguageValue(language))
+        if (value.Language is { } language && string.IsNullOrWhiteSpace(language.Code))
             throw new InvalidDataException(Localization.T("prefs.invalidLanguage"));
     }
 
@@ -64,9 +59,10 @@ public static class PreferenceStore
             ?? throw new InvalidDataException(Localization.T("prefs.emptyFile"));
         Validate(value);
 
-        // v0.2 initially stored enum names (Italian/English/French). Normalize them to locale codes,
-        // and gracefully fall back if a future/downgraded build no longer ships an explicit locale.
-        if (value.Language is { Length: > 0 } language)
+        // Older v0.2 settings stored enum names such as "Italian". LanguageJsonConverter
+        // accepts those names and turns them into locale codes. A locale no longer shipped
+        // by the current build resolves safely to the English fallback.
+        if (value.Language is { } language)
             value = value with { Language = Localization.NormalizePreference(language) };
 
         return value;
@@ -88,10 +84,4 @@ public static class PreferenceStore
             if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
-
-    private static bool ValidLanguageValue(string language) =>
-        language.Equals("Italian", StringComparison.OrdinalIgnoreCase) ||
-        language.Equals("English", StringComparison.OrdinalIgnoreCase) ||
-        language.Equals("French", StringComparison.OrdinalIgnoreCase) ||
-        LanguageTag.IsMatch(language);
 }
