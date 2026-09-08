@@ -71,6 +71,9 @@ jobs:
       - name: Notch UX regression checks
         run: dotnet run --project tests/EdgePilot.UxChecks --configuration Release
 
+      - name: Input-region regression checks
+        run: dotnet run --project tests/EdgePilot.InputChecks --configuration Release
+
       - name: Localization regression checks
         run: dotnet run --project tests/EdgePilot.LocalizationChecks --configuration Release
 
@@ -119,7 +122,8 @@ jobs:
           timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test &
           smoke_pid=$!
           sleep 2
-          timeout 6s dist/EdgePilot/EdgePilot --settings
+          # A new Unix session must still resolve to the same per-user EdgePilot instance.
+          timeout 6s setsid dist/EdgePilot/EdgePilot --settings
           wait "$smoke_pid"
           dist/EdgePilot/EdgePilot --install
           test -x "$HOME/.local/share/edgepilot/EdgePilot"
