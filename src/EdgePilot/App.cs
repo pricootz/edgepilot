@@ -93,7 +93,16 @@ public sealed class App : Application
             window.Opened += (_, _) =>
             {
                 if (desktop.Args?.Contains("--smoke-test") == true)
+                {
+                    if (OperatingSystem.IsLinux() && !window.HasSafePlatformInput)
+                    {
+                        Console.Error.WriteLine("EdgePilot could not establish a safe Linux input region.");
+                        Environment.ExitCode = 2;
+                        desktop.Shutdown();
+                        return;
+                    }
                     DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(8));
+                }
                 if ((preferences.Mode == NotchDisplayMode.Hidden &&
                     (!window.HasTray || desktop.Args?.Contains("--autostart") != true)) || warning is not null ||
                     desktop.Args?.Contains("--settings") == true || desktop.Args?.Contains("--smoke-test") == true)
