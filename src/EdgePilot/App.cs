@@ -94,11 +94,13 @@ public sealed class App : Application
             {
                 if (desktop.Args?.Contains("--smoke-test") == true)
                 {
-                    if (OperatingSystem.IsLinux() && !window.HasSafePlatformInput)
+                    if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) && !window.HasSafePlatformInput)
                     {
-                        Console.Error.WriteLine("EdgePilot could not establish a safe Linux input region.");
+                        Console.Error.WriteLine("EdgePilot could not establish a safe native input region.");
                         Environment.ExitCode = 2;
-                        desktop.Shutdown();
+                        // Shutting down synchronously from Opened can tear down Avalonia while its
+                        // desktop lifetime is still entering StartCore. Defer by one dispatcher turn.
+                        DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromMilliseconds(1));
                         return;
                     }
                     DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(8));
