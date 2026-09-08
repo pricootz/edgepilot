@@ -20,7 +20,7 @@ public static class DriveSelection
 
     public static IReadOnlyList<DriveChoice> Choices(IReadOnlyList<DriveSnapshot> drives, string? selected)
     {
-        var choices = new List<DriveChoice> { new(null, "Automatico (disco più capiente)") };
+        var choices = new List<DriveChoice> { new(null, Localization.T("drive.auto")) };
         foreach (var drive in drives)
         {
             var capacity = drive.TotalBytes >= 1_000_000_000_000L
@@ -29,7 +29,7 @@ public static class DriveSelection
             choices.Add(new(drive.Name, $"{drive.Label} · {drive.Name} · {capacity}"));
         }
         if (selected is not null && Resolve(drives, selected) is null)
-            choices.Add(new(selected, $"{selected} · non disponibile"));
+            choices.Add(new(selected, Localization.T("drive.unavailableSuffix", selected)));
         return choices;
     }
 }

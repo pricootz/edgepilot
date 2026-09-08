@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using EdgePilot.Core;
 
 namespace EdgePilot.UI;
 
@@ -17,6 +18,8 @@ public sealed record NotchPreferences(EdgeSide Edge = EdgeSide.Right,
     public int RefreshIntervalMs { get; init; } = 1000;
     public HoverSensitivity Sensitivity { get; init; } = HoverSensitivity.Normal;
     public VisibleMetrics Metrics { get; init; } = VisibleMetrics.All;
+    // Null means "follow the system language".
+    public Language? Language { get; init; }
 }
 
 public static class PreferenceStore
@@ -34,20 +37,22 @@ public static class PreferenceStore
     public static void Validate(NotchPreferences value)
     {
         if (!Enum.IsDefined(value.Edge) || !Enum.IsDefined(value.Mode))
-            throw new InvalidDataException("Bordo o modalità di visualizzazione non supportati.");
+            throw new InvalidDataException(Localization.T("prefs.invalidEdgeMode"));
         if (value.RefreshIntervalMs is not (500 or 1000 or 2000 or 5000))
-            throw new InvalidDataException("Intervallo di aggiornamento non supportato.");
+            throw new InvalidDataException(Localization.T("prefs.invalidRefresh"));
         if (!Enum.IsDefined(value.Sensitivity))
-            throw new InvalidDataException("Sensibilità non supportata.");
+            throw new InvalidDataException(Localization.T("prefs.invalidSensitivity"));
         if (value.Metrics == 0 || (value.Metrics & ~VisibleMetrics.All) != 0)
-            throw new InvalidDataException("Seleziona almeno una metrica valida.");
+            throw new InvalidDataException(Localization.T("prefs.invalidMetrics"));
+        if (value.Language is { } language && !Enum.IsDefined(language))
+            throw new InvalidDataException(Localization.T("prefs.invalidLanguage"));
     }
 
     public static NotchPreferences Load(string path)
     {
         if (!File.Exists(path)) return new();
         var value = JsonSerializer.Deserialize<NotchPreferences>(File.ReadAllText(path), Options)
-            ?? throw new InvalidDataException("Il file delle impostazioni è vuoto.");
+            ?? throw new InvalidDataException(Localization.T("prefs.emptyFile"));
         Validate(value);
         return value;
     }
