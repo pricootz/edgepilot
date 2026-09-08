@@ -11,7 +11,7 @@
 
 **v0.2 preview.** EdgePilot lives at the edge of the desktop and stays out of the way until it is useful. The current System module surfaces live local machine activity; the project is evolving toward contextual signals and actions that appear only when they matter.
 
-No account, server or telemetry uploader is required. The interface ships in **Italian, English and French**, follows the system language automatically, and can be extended with additional locale files.
+No account, server or telemetry uploader is required. The interface ships in **Italian, English, French and Spanish**, follows the system language automatically, and can be extended with additional locale files.
 
 <p align="center">
   <img src="docs/assets/windows11-notch.png" width="150" alt="Expanded EdgePilot notch showing system metrics on Windows 11">
@@ -23,7 +23,7 @@ No account, server or telemetry uploader is required. The interface ships in **I
 - Redesigned responsive Settings experience with dedicated **General, Edge, Monitor, Behavior, Startup and About** sections.
 - General page for interface language and Settings appearance (`System`, `Light`, `Dark`).
 - Interactive metric cards and contextual options: disabling Disk also hides its volume selector.
-- IT / EN / FR localization across Settings, tray, tooltips, installer messages and persisted preferences.
+- IT / EN / FR / ES localization across Settings, tray, tooltips, installer messages and persisted preferences.
 - Translator-friendly locale architecture under `Assets/Locales`: new languages are contributed as JSON files instead of C# catalog edits.
 - Safe locale fallback and backward-compatible migration from the first v0.2 language preferences.
 - Direct rendering of the canonical EdgePilot SVG in the app; Windows keeps a generated native ICO.
@@ -39,6 +39,7 @@ No account, server or telemetry uploader is required. The interface ships in **I
 - Placement on any of the four screen edges, with upright metric labels.
 - Persistent display modes, visible metrics, refresh interval, hover sensitivity, language, Settings appearance and disk selection.
 - Responsive Settings UI; Settings can follow the system theme or use an explicit light/dark choice.
+- Automatic language detection plus manual selection from the shipped IT / EN / FR / ES locale files.
 - Tray menu, optional start at login, per-user installation and single-instance activation.
 - Windows and Ubuntu CI builds, UX checks, localization checks, packaged launch and installation checks.
 - Local-first operation: no account, required cloud backend or telemetry uploader.
@@ -54,6 +55,8 @@ The first planned signals are intentionally small and reliable:
 - Sustained unusual CPU activity.
 
 The design goal is simple: **you should not have to open EdgePilot to discover that something important happened.**
+
+Signals are currently being developed separately and are not part of the v0.2 `main` behavior yet.
 
 ## Download and install
 
@@ -103,7 +106,7 @@ EdgePilot is created and primarily maintained by [@pricootz](https://github.com/
 
 The IT / EN / FR localization foundation was contributed by [@IamArayel](https://github.com/IamArayel) through [PR #5](https://github.com/pricootz/edgepilot/pull/5) and reconciled with the v0.2 Settings architecture.
 
-The file-based locale architecture, translator workflow, fallback strategy and localization validation ideas were contributed by [@ArnieGA](https://github.com/ArnieGA) through [PR #8](https://github.com/pricootz/edgepilot/pull/8) and reconciled without dropping the French localization or the current Settings design.
+The file-based locale architecture, translator workflow, fallback strategy and localization validation ideas were contributed by [@ArnieGA](https://github.com/ArnieGA) through [PR #8](https://github.com/pricootz/edgepilot/pull/8) and reconciled without dropping the French localization or the current Settings design. [@ArnieGA](https://github.com/ArnieGA) then contributed the shipped Spanish locale through [PR #12](https://github.com/pricootz/edgepilot/pull/12), validating the one-file-per-language workflow against current `main`.
 
 - [Settings](docs/SETTINGS.md) · [Desktop integration](docs/DESKTOP-INTEGRATION.md) · [Translating](docs/TRANSLATING.md)
 - [Architecture](docs/ARCHITECTURE.md) · [Product scope](docs/PRODUCT.md) · [Roadmap](docs/ROADMAP.md)
