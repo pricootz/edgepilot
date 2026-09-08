@@ -133,7 +133,7 @@ jobs:
           # A new Unix session must still resolve to the same per-user EdgePilot instance.
           timeout 6s setsid dist/EdgePilot/EdgePilot --settings
           wait "$smoke_pid"
-          dist/EdgePilot/EdgePilot --install
+          bash dist/EdgePilot/install.sh
           test -x "$HOME/.local/share/edgepilot/EdgePilot"
           test -f "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
           grep -F 'edgepilot.svg' "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
