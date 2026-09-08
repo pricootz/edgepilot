@@ -9,7 +9,7 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        Localization.SetLanguage(null);
+        Localization.SetLanguage(Localization.DetectSystemLanguage());
         if (args.Contains("--version"))
         {
             Console.WriteLine("EdgePilot " + typeof(Program).Assembly.GetName().Version);
