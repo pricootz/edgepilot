@@ -12,13 +12,14 @@ Pointer exit starts one 450 ms fold timer. Reentry cancels it. Pin prevents fold
 
 `EdgeWindow` intentionally remains larger than the visible notch because the same surface must accommodate spring animation, all four edge orientations and the detail tooltip. Transparency is visual only: the native top-level must also be prevented from receiving pointer input outside EdgePilot's live regions.
 
-The live input model contains only the current notch silhouette, the configured Hover hot-zone in Hover mode, and the visible tooltip plus its bridge. Hidden mode has no live input region. The curved/concave notch is represented by conservative scanline strips rather than its rectangular bounds, so transparent notch corners and shoulders are not accidentally promoted to native input.
+The live input model contains only the current notch silhouette, the configured Hover hot-zone in Hover mode, and the visible tooltip plus its bridge. Hidden mode has no live input region. The curved/concave notch is represented by conservative one-DIP scanline strips rather than its rectangular bounds, so transparent notch corners and shoulders are not accidentally promoted to native input.
 
 Windows and Linux consume this same model:
 
 - Windows applies a real `HWND` window region with `SetWindowRgn`. This is intentionally not based on `HTTRANSPARENT`: Win32 only forwards `HTTRANSPARENT` hit tests through windows owned by the same thread, which is insufficient for browser/desktop applications in other processes.
 - Linux X11/XWayland applies the same live rectangles to the X Shape `ShapeInput` region and updates it during spring motion, tooltip changes, scaling and preference changes.
-- Native rectangle conversion rounds inward. A one-pixel EdgePilot fringe becoming non-interactive is preferable to claiming a pixel that belongs to the application underneath.
+- Logical strip boundaries are quantized to the nearest native pixel. Adjacent strips therefore share a boundary even at fractional DPI instead of creating one-pixel seams through the animated notch.
+- Windows reads the applied region back once and verifies it; Linux sends a checked XCB SHAPE request so native package smoke tests fail if the display server rejects the region.
 - If Windows or Linux cannot establish its safe native region, EdgePilot fails closed by hiding the edge surface instead of leaving a large transparent topmost rectangle that could block the desktop.
 
 The intentional Hover hot-zone remains transparent and interactive: it is the small configured edge area used to wake the collapsed notch. Outside the notch/hot-zone/tooltip/bridge, the large layout window must never receive pointer input.
