@@ -6,12 +6,18 @@ public static class Localization
 {
     public static Language Current { get; private set; } = Language.English;
 
-    public static Language DetectSystemLanguage() => CultureInfo.InstalledUICulture.TwoLetterISOLanguageName switch
+    internal static Func<Language>? SystemLanguageDetectorOverride { get; set; }
+
+    public static Language DetectSystemLanguage()
     {
-        "it" => Language.Italian,
-        "fr" => Language.French,
-        _ => Language.English
-    };
+        if (SystemLanguageDetectorOverride is not null) return SystemLanguageDetectorOverride();
+        return CultureInfo.InstalledUICulture.TwoLetterISOLanguageName switch
+        {
+            "it" => Language.Italian,
+            "fr" => Language.French,
+            _ => Language.English
+        };
+    }
 
     public static void SetLanguage(Language language)
     {
