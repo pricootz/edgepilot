@@ -19,9 +19,9 @@ public sealed class App : Application
 
     public override void Initialize()
     {
-        Localization.SetLanguage(Localization.DetectSystemLanguage());
+        Localization.SetLanguage(null);
         Styles.Add(new FluentTheme());
-        RequestedThemeVariant = OperatingSystem.IsLinux() ? ThemeVariant.Default : ThemeVariant.Dark;
+        RequestedThemeVariant = ThemeVariant.Default;
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -39,7 +39,7 @@ public sealed class App : Application
                 System.Diagnostics.Trace.WriteLine(ex);
                 warning = Localization.T("warning.loadFailed");
             }
-            if (preferences.Language is { } language) Localization.SetLanguage(language);
+            Localization.SetLanguage(preferences.Language);
             // Preserve the existing development override without writing it to disk.
             if (Environment.GetEnvironmentVariable("EDGEPILOT_EDGE") is { Length: > 0 })
                 preferences = preferences with { Edge = EdgePlacement.FromEnvironment() };
