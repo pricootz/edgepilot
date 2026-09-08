@@ -57,6 +57,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Linux input-region runtime dependency
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0
+          ldconfig -p | grep -F 'libxcb-shape.so.0'
+
       - name: Verify vector brand assets
         if: runner.os == 'Linux'
         shell: bash
@@ -92,7 +100,7 @@ jobs:
           $exe = (Resolve-Path dist/EdgePilot/EdgePilot.exe).Path
           $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
           Start-Sleep -Milliseconds 1500
-          if ($smoke.HasExited) { throw 'Primary instance exited prematurely.' }
+          if ($smoke.HasExited) { throw 'Primary instance exited prematurely or native input-region initialization failed.' }
           $second = Start-Process -FilePath $exe -ArgumentList '--settings' -PassThru -WindowStyle Hidden
           if (-not $second.WaitForExit(10000)) {
             $second.Kill()
@@ -103,7 +111,7 @@ jobs:
             $smoke.Kill()
             throw 'Package smoke check timed out.'
           }
-          if ($smoke.ExitCode -ne 0) { throw "Launch failed: $($smoke.ExitCode)" }
+          if ($smoke.ExitCode -ne 0) { throw "Launch/native input-region check failed: $($smoke.ExitCode)" }
           $install = Start-Process -FilePath $exe -ArgumentList '--install' -Wait -PassThru -WindowStyle Hidden
           if ($install.ExitCode -ne 0) { throw 'Per-user installation failed.' }
           $installed = Join-Path $env:LOCALAPPDATA 'Programs/EdgePilot/EdgePilot.exe'
