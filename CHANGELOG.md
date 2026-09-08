@@ -9,7 +9,7 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 - Responsive Settings shell with dedicated General, Edge, Monitor, Behavior, Startup and About sections.
 - General page for interface language and Settings appearance (`System`, `Light`, `Dark`).
 - Interactive metric cards with contextual configuration; the disk-volume selector is hidden when Disk is disabled.
-- Italian, English and French interface localization with automatic system-language detection and a persisted manual override.
+- Italian, English, French and Spanish interface localization with automatic system-language detection and a persisted manual override.
 - File-based locale assets under `Assets/Locales`, discovered automatically at build time so a new language is contributed as one JSON file rather than a C# catalog edit.
 - Safe language fallback: exact locale, neutral locale, English, then the key itself.
 - Backward-compatible migration of the original v0.2 `Italian` / `English` / `French` preference values to `it` / `en` / `fr`.
@@ -32,6 +32,7 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 
 - IT / EN / FR localization foundation contributed by [@IamArayel](https://github.com/IamArayel) in [PR #5](https://github.com/pricootz/edgepilot/pull/5), then reconciled with the v0.2 Settings redesign.
 - File-based locale architecture, translator-friendly workflow, fallback strategy, Linux locale metadata and translation validation ideas contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #8](https://github.com/pricootz/edgepilot/pull/8), reconciled without dropping the French localization or the current Settings architecture.
+- Spanish localization contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #12](https://github.com/pricootz/edgepilot/pull/12), using the file-per-language workflow against current `main`.
 
 ## 0.1.0-preview.1
 
