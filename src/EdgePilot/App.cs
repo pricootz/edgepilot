@@ -103,6 +103,8 @@ public sealed class App : Application
             desktop.MainWindow = window;
             window.Opened += (_, _) =>
             {
+                if (desktop.Args?.Contains("--signal-demo") == true)
+                    _signals?.RunDemo();
                 if (desktop.Args?.Contains("--smoke-test") == true)
                     DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(8));
                 if ((preferences.Mode == NotchDisplayMode.Hidden &&
