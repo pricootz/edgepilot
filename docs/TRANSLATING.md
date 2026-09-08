@@ -2,10 +2,17 @@
 
 EdgePilot interface text lives in `src/EdgePilot/Assets/Locales`. Each shipped language is one JSON file, embedded at build time.
 
+Current `main` ships:
+
+- `en.json` — English
+- `it.json` — Italiano
+- `fr.json` — Français
+- `es.json` — Español
+
 ## Add a language
 
-1. Copy `src/EdgePilot/Assets/Locales/en.json` to a new file named with the language tag, for example `de.json`, `es.json` or `pt-BR.json`.
-2. Set `_language` to the name of the language written in that language, for example `Deutsch`, `Español` or `Português (Brasil)`.
+1. Copy `src/EdgePilot/Assets/Locales/en.json` to a new file named with the language tag, for example `de.json` or `pt-BR.json`.
+2. Set `_language` to the name of the language written in that language, for example `Deutsch` or `Português (Brasil)`.
 3. Translate the values on the right-hand side. Do not change the keys.
 4. Keep placeholders such as `{0}` and format specifiers such as `{0:0.##}` intact.
 5. Run the repository and localization checks before opening a pull request.
@@ -33,6 +40,8 @@ Automatic mode follows the operating-system UI culture. If a saved language is n
 
 The v0.2 preview originally stored the enum names `Italian`, `English` and `French`. The current preference loader accepts those legacy values and maps them to `it`, `en` and `fr`, so upgrading does not discard existing settings.
 
+Spanish was added after the file-based locale architecture was introduced and therefore needs no special migration value.
+
 ## Rules enforced by CI
 
 - `en.json` is the canonical key set.
@@ -57,7 +66,7 @@ Format specifiers control numeric formatting:
 "drive.capacity.tb": "{0:0.##} TB"
 ```
 
-Keep the format specifier intact. Decimal separators follow the selected locale, so a value can appear as `16.5 TB` in English and `16,5 TB` in Italian or French.
+Keep the format specifier intact. Decimal separators follow the selected locale, so a value can appear as `16.5 TB` in English and `16,5 TB` in Italian, French or Spanish.
 
 ## Short labels
 
@@ -68,3 +77,5 @@ The collapsed notch has limited space. Keep values such as ring captions (`ring.
 The first IT / EN / FR localization foundation was contributed by [@IamArayel](https://github.com/IamArayel) in [PR #5](https://github.com/pricootz/edgepilot/pull/5).
 
 The file-based locale architecture, translation workflow, fallback strategy and repository validation ideas were proposed by [@ArnieGA](https://github.com/ArnieGA) in [PR #8](https://github.com/pricootz/edgepilot/pull/8) and reconciled with the current v0.2 Settings architecture.
+
+The Spanish locale was then contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #12](https://github.com/pricootz/edgepilot/pull/12), demonstrating that a new shipped language can be added as a single locale JSON file without changing the Settings or localization C# architecture.
