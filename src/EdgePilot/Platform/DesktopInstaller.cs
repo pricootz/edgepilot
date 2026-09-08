@@ -1,3 +1,5 @@
+using EdgePilot.Localization;
+
 namespace EdgePilot.Platform;
 
 public static class DesktopInstaller
@@ -13,7 +15,7 @@ public static class DesktopInstaller
         if (!string.Equals(source, target, comparison))
         {
             if (target.StartsWith(source + Path.DirectorySeparatorChar, comparison))
-                throw new IOException("Estrai il pacchetto in una cartella separata prima di installarlo.");
+                throw new IOException(Strings.Get("platform.error.extract"));
             Directory.CreateDirectory(target);
             var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
             foreach (var file in Directory.EnumerateFiles(source, "*", options))
@@ -52,7 +54,7 @@ public static class DesktopInstaller
         if (!OperatingSystem.IsWindows()) return;
         var programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
         Directory.CreateDirectory(programs);
-        var type = Type.GetTypeFromProgID("WScript.Shell") ?? throw new IOException("Menu Start non disponibile.");
+        var type = Type.GetTypeFromProgID("WScript.Shell") ?? throw new IOException(Strings.Get("platform.error.startmenu"));
         dynamic shell = Activator.CreateInstance(type)!;
         dynamic shortcut = shell.CreateShortcut(Path.Combine(programs, "EdgePilot.lnk"));
         shortcut.TargetPath = executable;

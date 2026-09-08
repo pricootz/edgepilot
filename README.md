@@ -9,7 +9,7 @@
 [![Build](https://github.com/pricootz/edgepilot/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/pricootz/edgepilot/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Early preview — v0.1.** EdgePilot unfolds from the edge of your screen to show local system activity. No account or server is required. The application interface is currently **Italian**; repository documentation is in English.
+**Early preview — v0.1.** EdgePilot unfolds from the edge of your screen to show local system activity. No account or server is required. The interface is available in **English and Italian**, chosen in the settings or taken from your system.
 
 ## See it in action
 
@@ -27,10 +27,11 @@
 </tr>
 </table>
 
-These are real, unaltered Windows 11 screenshots supplied by the maintainer. The application interface is Italian; CPU, memory and disk are enabled in these captures. Ubuntu screenshots are still to come.
+These are real, unaltered Windows 11 screenshots supplied by the maintainer. They were captured with the interface in Italian, which is still one of the available languages; CPU, memory and disk are enabled. Ubuntu screenshots are still to come.
 
 ## What works today
 
+- English and Italian interface, following the system by default and switchable without a restart.
 - Live CPU and memory usage, disk capacity, network download/upload rates.
 - Details for the network interface, uptime, host and operating system.
 - Rounded collapsed pill, spring motion, hover expansion, delayed folding and click-to-pin.
@@ -59,7 +60,7 @@ cd edgepilot
 dotnet run --project src/EdgePilot/EdgePilot.csproj -c Release -- --settings
 ```
 
-Right-click the notch to open settings. **Applica** saves changes; **Esci** exits. Starting EdgePilot again opens the settings of the running instance.
+Right-click the notch to open settings. **Apply** saves changes; **Exit** closes EdgePilot. Starting EdgePilot again opens the settings of the running instance.
 
 To build and run the executable regression suite:
 
@@ -84,7 +85,7 @@ Metrics are sampled on the local computer. The app has no account, cloud backend
 
 ## Documentation and contributing
 
-- [Settings](docs/SETTINGS.md) · [Desktop integration](docs/DESKTOP-INTEGRATION.md)
+- [Settings](docs/SETTINGS.md) · [Desktop integration](docs/DESKTOP-INTEGRATION.md) · [Translating](docs/TRANSLATING.md)
 - [Architecture](docs/ARCHITECTURE.md) · [Product scope](docs/PRODUCT.md) · [Roadmap](docs/ROADMAP.md)
 - [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 - [Release checklist](docs/RELEASING.md) · [Brand assets](docs/BRANDING.md)

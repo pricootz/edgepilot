@@ -1,4 +1,5 @@
 using EdgePilot.Core;
+using EdgePilot.Localization;
 
 namespace EdgePilot.UI;
 
@@ -20,16 +21,16 @@ public static class DriveSelection
 
     public static IReadOnlyList<DriveChoice> Choices(IReadOnlyList<DriveSnapshot> drives, string? selected)
     {
-        var choices = new List<DriveChoice> { new(null, "Automatico (disco più capiente)") };
+        var choices = new List<DriveChoice> { new(null, Strings.Get("drive.automatic")) };
         foreach (var drive in drives)
         {
             var capacity = drive.TotalBytes >= 1_000_000_000_000L
-                ? $"{drive.TotalBytes / 1_000_000_000_000d:0.##} TB"
-                : $"{drive.TotalBytes / 1_000_000_000d:0.##} GB";
-            choices.Add(new(drive.Name, $"{drive.Label} · {drive.Name} · {capacity}"));
+                ? Strings.Get("drive.capacity.tb", drive.TotalBytes / 1_000_000_000_000d)
+                : Strings.Get("drive.capacity.gb", drive.TotalBytes / 1_000_000_000d);
+            choices.Add(new(drive.Name, Strings.Get("drive.caption", drive.Label, drive.Name, capacity)));
         }
         if (selected is not null && Resolve(drives, selected) is null)
-            choices.Add(new(selected, $"{selected} · non disponibile"));
+            choices.Add(new(selected, Strings.Get("drive.unavailable", selected)));
         return choices;
     }
 }

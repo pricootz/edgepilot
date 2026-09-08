@@ -1,6 +1,6 @@
 # Contributing to EdgePilot
 
-EdgePilot is an early Windows/Linux desktop preview. Small, focused fixes and real-desktop test reports are welcome. Please use English for issues, pull requests and documentation. Keep existing Italian application strings consistent; do not translate the app as part of an unrelated change.
+EdgePilot is an early Windows/Linux desktop preview. Small, focused fixes and real-desktop test reports are welcome. Please use English for issues, pull requests and documentation. Interface text lives in `src/EdgePilot/Assets/Locales`, one JSON file per language; adding or correcting a language is described in [Translating](docs/TRANSLATING.md). Do not change interface wording as part of an unrelated change.
 
 ## Development
 

@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using EdgePilot.UI;
 using EdgePilot.Core;
 using EdgePilot.Platform;
+using EdgePilot.Localization;
 
 AppBuilder.Configure<Application>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
 var passed = 0;
@@ -280,7 +281,7 @@ try
     applied = null;
     applyButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied is null, "empty metric selection is not applied");
-    Check(((TextBlock)SettingsField(settings, "_status")!).Text?.StartsWith("Seleziona almeno una metrica") == true,
+    Check(((TextBlock)SettingsField(settings, "_status")!).Text == Strings.Get("settings.error.metric"),
         "empty metric selection is visible");
     metricChecks[3].IsChecked = true;
     applyButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
@@ -296,7 +297,7 @@ try
     ((Button)SettingsField(failingSettings, "_applyButton")!).RaiseEvent(
         new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     Check(applied is null, "save failure does not apply changes");
-    Check(((TextBlock)SettingsField(failingSettings, "_status")!).Text?.StartsWith("Impossibile salvare") == true,
+    Check(((TextBlock)SettingsField(failingSettings, "_status")!).Text == Strings.Get("settings.error.save"),
         "save failure is visible");
     failingSettings.Close();
 
@@ -364,6 +365,81 @@ trayRecovery.ShowSettings();
 Check(!((CancellationTokenSource)Field(trayRecovery, "_lifetime")!).IsCancellationRequested,
     "tray keeps hidden app alive after closing settings");
 trayRecovery.RequestExit();
+
+// Every shipped language must define exactly the keys English defines, so a
+// half-translated contribution fails here instead of blanking labels at runtime.
+var english = Strings.Keys(Strings.FallbackCode);
+Check(english.Count > 0, "english language file loads");
+foreach (var language in Strings.Available)
+{
+    var keys = Strings.Keys(language.Code);
+    Check(keys.Count == english.Count && !english.Except(keys).Any(),
+        "language file is complete " + language.Code);
+    Check(language.Name.Length > 0 && language.Name != language.Code,
+        "language names itself " + language.Code);
+}
+Strings.Use("it");
+Check(Strings.ActiveCode == "it" && Strings.Get("settings.save") == "Salva modifiche", "italian is served");
+Check(0.5.ToString("0.0") == "0,5", "number format follows the language");
+Strings.Use("qq-ZZ");
+Check(Strings.ActiveCode == Strings.FallbackCode, "unknown language falls back to english");
+Check(Strings.Get("settings.save") == "Save changes", "english is served");
+Check(Strings.Get("no.such.key") == "no.such.key", "missing key degrades to its own name");
+Strings.Use(null);
+Check(Strings.Requested is null, "an empty request follows the system");
+PreferenceStore.Validate(new NotchPreferences { Language = "pt-BR" });
+Check(true, "a language this build does not ship is still accepted");
+var malformed = false;
+try { PreferenceStore.Validate(new NotchPreferences { Language = "not a tag" }); }
+catch (InvalidDataException) { malformed = true; }
+Check(malformed, "a malformed language tag is rejected");
+
+// Switching language must reach the parts written once: the ring captions, the
+// tray menu and the settings window itself.
+var localized = new EdgeWindow();
+localized.ApplyPreferences(new NotchPreferences { Language = "it" });
+Check(Strings.ActiveCode == "it", "applying preferences switches the language");
+Check(localized.Preferences.Language == "it", "language survives the preferences round trip");
+// A metric cell is a StackPanel of ring, value and caption, in that order.
+var diskCell = (StackPanel)((StackPanel)Field(localized, "_metricStack")!).Children[2];
+var diskCaption = (TextBlock)diskCell.Children[2];
+Check(diskCaption.Text == "DISCO", "ring captions follow the language");
+localized.ApplyPreferences(new NotchPreferences { Language = "en" });
+Check(diskCaption.Text == "DISK", "ring captions switch back");
+var languagePath = Path.Combine(Path.GetTempPath(), "edgepilot-language-" + Guid.NewGuid().ToString("N") + ".json");
+PreferenceStore.Save(languagePath, localized.Preferences with { Language = "it" });
+Check(PreferenceStore.Load(languagePath).Language == "it", "the chosen language is stored");
+File.Delete(languagePath);
+localized.RequestExit();
+
+// The window is written in whatever language is active when it is built.
+Strings.Use("it");
+var languageSettings = new SettingsWindow(new NotchPreferences { Language = "it" }, _ => { });
+var languageSelector = (ComboBox)SettingsField(languageSettings, "_language")!;
+Check(((IEnumerable<string>)languageSelector.ItemsSource!).Count() == Strings.Available.Count + 1,
+    "the selector offers the system entry and every shipped language");
+Check(languageSelector.SelectedIndex > 0, "a stored language is preselected");
+Check(languageSettings.Title == "EdgePilot \u00b7 Impostazioni", "the window is titled in the stored language");
+languageSettings.Close();
+Strings.Use(null);
+var systemSettings = new SettingsWindow(new NotchPreferences(), _ => { });
+Check(((ComboBox)SettingsField(systemSettings, "_language")!).SelectedIndex == 0,
+    "no stored language selects the system entry");
+systemSettings.Close();
+
+// Rebuilding the settings window in the new language must not read as the user
+// dismissing the last window of a hidden application without a tray.
+var relabelled = new EdgeWindow { HasTray = false };
+relabelled.ApplyPreferences(new NotchPreferences(EdgeSide.Right, NotchDisplayMode.Hidden));
+relabelled.ShowSettings();
+relabelled.ApplyPreferences(new NotchPreferences(EdgeSide.Right, NotchDisplayMode.Hidden) { Language = "it" });
+Dispatcher.UIThread.RunJobs();
+Check(!((CancellationTokenSource)Field(relabelled, "_lifetime")!).IsCancellationRequested,
+    "relabelling does not exit a hidden application");
+Check(Field(relabelled, "_settingsWindow") is not null, "the settings window returns in the new language");
+relabelled.RequestExit();
+Strings.Use(null);
+
 Console.WriteLine($"{passed} checks passed.");
 
 public sealed class MemoryRegistration : IAutostartRegistration

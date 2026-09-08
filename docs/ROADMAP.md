@@ -4,6 +4,7 @@ This roadmap is directional, not a delivery schedule.
 
 ## v0.1 preview — implemented
 
+- [x] English and Italian interface, chosen in the settings or taken from the system.
 - [x] Local CPU, memory, disk, network and machine details.
 - [x] Four-edge notch, rounded pill, spring motion, clipping and tooltips.
 - [x] Hover, delayed fold, pin and visibility modes.
@@ -30,7 +31,7 @@ This roadmap is directional, not a delivery schedule.
 - Explicit network interface selection.
 - More useful CPU, memory and disk details.
 - Keyboard access, reduced motion and accessibility review.
-- English application localization.
+- Further interface languages, each contributed as a single file.
 - Evaluate GPU/temperature/fan providers separately for each OS.
 
 ## Later exploration

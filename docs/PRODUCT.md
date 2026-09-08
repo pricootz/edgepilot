@@ -6,7 +6,7 @@ EdgePilot keeps useful local machine state one screen edge away. Its first previ
 
 Windows and Linux desktop support; CPU, physical memory, disk capacity, network throughput and interface details; uptime and machine identity; four-edge placement; hover expansion, delayed fold, pinning and tooltips; persistent settings; disk selection; tray integration; optional start at login; per-user installation.
 
-Refresh intervals are 0.5, 1, 2 or 5 seconds. Settings use Italian labels. Repository documentation uses English.
+Refresh intervals are 0.5, 1, 2 or 5 seconds. The interface ships in English and Italian and follows the operating system until the user chooses otherwise. Repository documentation uses English.
 
 ## Interaction contract
 
@@ -15,8 +15,9 @@ Refresh intervals are 0.5, 1, 2 or 5 seconds. Settings use Italian labels. Repos
 3. Pinning retains the expanded view; moving into the tooltip must not fold the notch.
 4. Always-open and hidden modes are available independently of pointer interaction.
 5. Reopening the executable recovers settings through the running instance.
-6. Missing readings and missing selected volumes degrade visibly without inventing replacement data.
+6. Changing the interface language takes effect at once, without a restart.
+7. Missing readings and missing selected volumes degrade visibly without inventing replacement data.
 
 ## Future scope
 
-Network interface selection, richer metrics, accessibility and broader desktop validation come before additional modules. Remote servers, Docker, clipboard tools and quick actions are ideas, not shipped features. GPU, temperature and fan sensors are not part of this preview.
+Network interface selection, richer metrics, accessibility, further languages and broader desktop validation come before additional modules. Remote servers, Docker, clipboard tools and quick actions are ideas, not shipped features. GPU, temperature and fan sensors are not part of this preview.

@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.Win32;
 using EdgePilot.UI;
+using EdgePilot.Localization;
 
 namespace EdgePilot.Platform;
 
@@ -14,12 +15,12 @@ public sealed record LaunchCommand(string Executable, IReadOnlyList<string> Argu
 {
     public static LaunchCommand Current()
     {
-        var executable = Environment.ProcessPath ?? throw new IOException("Percorso dell’app non disponibile.");
+        var executable = Environment.ProcessPath ?? throw new IOException(Strings.Get("platform.error.path"));
         var arguments = new List<string>();
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
         {
             var assembly = Assembly.GetEntryAssembly()?.Location;
-            if (string.IsNullOrEmpty(assembly)) throw new IOException("Percorso dell’app non disponibile.");
+            if (string.IsNullOrEmpty(assembly)) throw new IOException(Strings.Get("platform.error.path"));
             arguments.Add(assembly);
         }
         arguments.Add("--autostart");
@@ -29,22 +30,38 @@ public sealed record LaunchCommand(string Executable, IReadOnlyList<string> Argu
     public string WindowsCommand()
     {
         var result = string.Join(" ", new[] { Executable }.Concat(Arguments).Select(QuoteWindows));
-        if (result.Length > 260) throw new IOException("Percorso troppo lungo per l’avvio automatico di Windows.");
+        if (result.Length > 260) throw new IOException(Strings.Get("platform.error.path.long"));
         return result;
     }
 
     public string DesktopEntry()
     {
         var command = string.Join(" ", new[] { Executable }.Concat(Arguments).Select(QuoteDesktop));
-        return "[Desktop Entry]\nType=Application\nName=EdgePilot\nComment=Monitoraggio del sistema\nExec=" +
+        return "[Desktop Entry]\nType=Application\nName=EdgePilot\n" + Comments() + "Exec=" +
             command.Replace("\\", "\\\\") +
             "\nTerminal=false\nX-GNOME-Autostart-enabled=true\n";
+    }
+
+    // The desktop session reads this file, not EdgePilot, so every shipped
+    // language is offered and the session picks the one it wants.
+    private static string Comments()
+    {
+        var comments = new System.Text.StringBuilder();
+        comments.Append("Comment=")
+            .Append(Strings.In(Strings.FallbackCode, "platform.desktop.comment")).Append('\n');
+        foreach (var language in Strings.Available)
+        {
+            if (string.Equals(language.Code, Strings.FallbackCode, StringComparison.OrdinalIgnoreCase)) continue;
+            comments.Append("Comment[").Append(language.Code).Append("]=")
+                .Append(Strings.In(language.Code, "platform.desktop.comment")).Append('\n');
+        }
+        return comments.ToString();
     }
 
     private static void ValidateArgument(string value)
     {
         if (value.IndexOfAny(['\r', '\n', '\0']) >= 0)
-            throw new IOException("Il percorso dell’app contiene caratteri non supportati.");
+            throw new IOException(Strings.Get("platform.error.path.chars"));
     }
 
     public static string QuoteWindows(string value)
@@ -103,7 +120,7 @@ public sealed class AutostartRegistration : IAutostartRegistration
         if (OperatingSystem.IsWindows())
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey)
-                ?? throw new IOException("Impossibile aggiornare l’avvio automatico.");
+                ?? throw new IOException(Strings.Get("platform.error.autostart"));
             if (content is null) key.DeleteValue(ValueName, false);
             else key.SetValue(ValueName, content, RegistryValueKind.String);
             return;

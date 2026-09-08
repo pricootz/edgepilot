@@ -9,6 +9,7 @@ using Path = Avalonia.Controls.Shapes.Path;
 using EdgePilot.Core;
 using EdgePilot.Core.Monitoring;
 using EdgePilot.Platform;
+using EdgePilot.Localization;
 
 namespace EdgePilot.UI;
 
@@ -63,6 +64,8 @@ public sealed class EdgeWindow : Window
     private bool _screensSubscribed;
     private bool _started;
     private NotchDisplayMode _mode;
+    private string? _language;
+    private bool _relabelling;
     private string? _selectedDrive;
     private bool _startAtLogin;
     public bool HasTray { get; set; }
@@ -95,10 +98,10 @@ public sealed class EdgeWindow : Window
             IsHitTestVisible = false
         };
 
-        _cpuRing = new MetricRing("C", "CPU");
-        _ramRing = new MetricRing("M", "RAM");
-        _diskRing = new MetricRing("D", "DISCO");
-        _networkRing = new MetricRing("↕", "RETE");
+        _cpuRing = new MetricRing("C", Strings.Get("notch.metric.cpu"));
+        _ramRing = new MetricRing("M", Strings.Get("notch.metric.memory"));
+        _diskRing = new MetricRing("D", Strings.Get("notch.metric.disk"));
+        _networkRing = new MetricRing("↕", Strings.Get("notch.metric.network"));
 
         _metricStack = new StackPanel
         {
@@ -249,11 +252,11 @@ public sealed class EdgeWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            _tooltipTitle.Text = "MONITORAGGIO SISTEMA";
-            _tooltipValue.Text = "ERRORE";
+            _tooltipTitle.Text = Strings.Get("notch.error.title");
+            _tooltipValue.Text = Strings.Get("notch.error.value");
             System.Diagnostics.Trace.WriteLine(exception);
-            _tooltipLine1.Text = "Impossibile aggiornare i dati del sistema.";
-            _tooltipLine2.Text = "Nuovo tentativo al prossimo aggiornamento.";
+            _tooltipLine1.Text = Strings.Get("notch.error.line1");
+            _tooltipLine2.Text = Strings.Get("notch.error.line2");
             _tooltipLine3.Text = "";
         });
     }
@@ -267,10 +270,13 @@ public sealed class EdgeWindow : Window
         var ram = Math.Clamp(snapshot.MemoryUsedPercent, 0, 100);
         var drive = DriveSelection.Resolve(snapshot.Drives, _selectedDrive);
 
-        _cpuRing.SetValue(cpu, $"{cpu:0}%");
-        _ramRing.SetValue(ram, $"{ram:0}%");
-        _diskRing.SetValue(drive?.UsedPercent, drive is null ? "—" : $"{drive.UsedPercent:0}%");
-        _networkRing.SetValue(null, snapshot.Network.Connected ? "SÌ" : "NO");
+        _cpuRing.SetValue(cpu, Strings.Get("format.percent", cpu));
+        _ramRing.SetValue(ram, Strings.Get("format.percent", ram));
+        _diskRing.SetValue(drive?.UsedPercent, drive is null
+            ? Strings.Get("notch.value.unavailable")
+            : Strings.Get("format.percent", drive.UsedPercent));
+        _networkRing.SetValue(null, Strings.Get(snapshot.Network.Connected
+            ? "notch.network.up" : "notch.network.down"));
 
         if (_hoveredMetric is not null)
         {
@@ -444,49 +450,54 @@ public sealed class EdgeWindow : Window
         switch (index)
         {
             case 0:
-                _tooltipTitle.Text = "CPU";
-                _tooltipValue.Text = $"{cpu:0}%";
-                _tooltipLine1.Text = $"{Environment.ProcessorCount} processori logici";
+                _tooltipTitle.Text = Strings.Get("notch.cpu.title");
+                _tooltipValue.Text = Strings.Get("format.percent", cpu);
+                _tooltipLine1.Text = Strings.Get("notch.cpu.processors", Environment.ProcessorCount);
                 _tooltipLine2.Text = snapshot.HostName;
                 _tooltipLine3.Text = snapshot.OperatingSystem;
                 break;
 
             case 1:
-                _tooltipTitle.Text = "MEMORIA";
-                _tooltipValue.Text = $"{ram:0}%";
-                _tooltipLine1.Text = $"{DisplayFormat.Bytes(snapshot.MemoryUsedBytes)} utilizzati";
-                _tooltipLine2.Text = $"{DisplayFormat.Bytes(snapshot.MemoryAvailableBytes)} disponibili";
-                _tooltipLine3.Text = $"{DisplayFormat.Bytes(snapshot.MemoryTotalBytes)} totali";
+                _tooltipTitle.Text = Strings.Get("notch.memory.title");
+                _tooltipValue.Text = Strings.Get("format.percent", ram);
+                _tooltipLine1.Text = Strings.Get("notch.memory.used", DisplayFormat.Bytes(snapshot.MemoryUsedBytes));
+                _tooltipLine2.Text = Strings.Get("notch.memory.available", DisplayFormat.Bytes(snapshot.MemoryAvailableBytes));
+                _tooltipLine3.Text = Strings.Get("notch.memory.total", DisplayFormat.Bytes(snapshot.MemoryTotalBytes));
                 break;
 
             case 2:
-                _tooltipTitle.Text = "ARCHIVIAZIONE";
+                _tooltipTitle.Text = Strings.Get("notch.disk.title");
                 if (drive is null)
                 {
-                    _tooltipValue.Text = "—";
-                    _tooltipLine1.Text = _selectedDrive is null ? "Nessun disco disponibile" : "Il disco scelto non è disponibile";
+                    _tooltipValue.Text = Strings.Get("notch.value.unavailable");
+                    _tooltipLine1.Text = Strings.Get(_selectedDrive is null
+                        ? "notch.disk.none" : "notch.disk.unavailable");
                     _tooltipLine2.Text = _selectedDrive ?? "";
-                    _tooltipLine3.Text = "Scegli il disco nelle impostazioni.";
+                    _tooltipLine3.Text = Strings.Get("notch.disk.choose");
                 }
                 else
                 {
-                    _tooltipValue.Text = $"{drive.UsedPercent:0}%";
+                    _tooltipValue.Text = Strings.Get("format.percent", drive.UsedPercent);
                     _tooltipLine1.Text = drive.Label;
-                    _tooltipLine2.Text = $"{DisplayFormat.Bytes(drive.FreeBytes)} liberi";
-                    _tooltipLine3.Text = $"{DisplayFormat.Bytes(drive.TotalBytes)} totali";
+                    _tooltipLine2.Text = Strings.Get("notch.disk.free", DisplayFormat.Bytes(drive.FreeBytes));
+                    _tooltipLine3.Text = Strings.Get("notch.disk.total", DisplayFormat.Bytes(drive.TotalBytes));
                 }
                 break;
 
             default:
-                _tooltipTitle.Text = "RETE";
-                _tooltipValue.Text = snapshot.Network.Connected ? "CONNESSA" : "DISCONNESSA";
-                _tooltipLine1.Text = snapshot.Network.Connected ? snapshot.Network.InterfaceName : "Nessuna interfaccia di rete attiva";
+                _tooltipTitle.Text = Strings.Get("notch.network.title");
+                _tooltipValue.Text = Strings.Get(snapshot.Network.Connected
+                    ? "notch.network.connected" : "notch.network.disconnected");
+                _tooltipLine1.Text = snapshot.Network.Connected
+                    ? snapshot.Network.InterfaceName : Strings.Get("notch.network.none");
                 _tooltipLine2.Text = snapshot.Network.Connected
-                    ? $"↓ {DisplayFormat.Rate(snapshot.Network.ReceiveBytesPerSecond)}   ↑ {DisplayFormat.Rate(snapshot.Network.SendBytesPerSecond)}"
+                    ? Strings.Get("notch.network.throughput",
+                        DisplayFormat.Rate(snapshot.Network.ReceiveBytesPerSecond),
+                        DisplayFormat.Rate(snapshot.Network.SendBytesPerSecond))
                     : "";
                 _tooltipLine3.Text = snapshot.Network.LinkSpeedBitsPerSecond > 0
-                    ? $"Velocità collegamento: {snapshot.Network.LinkSpeedBitsPerSecond / 1_000_000d:0} Mbps"
-                    : $"Tempo di attività: {DisplayFormat.Uptime(snapshot.Uptime)}";
+                    ? Strings.Get("notch.network.link", snapshot.Network.LinkSpeedBitsPerSecond / 1_000_000d)
+                    : Strings.Get("notch.network.uptime", DisplayFormat.Uptime(snapshot.Uptime));
                 break;
         }
     }
@@ -494,13 +505,16 @@ public sealed class EdgeWindow : Window
     public NotchPreferences Preferences => new(_edge, _mode)
     {
         SelectedDrive = _selectedDrive, StartAtLogin = _startAtLogin,
-        Metrics = _metrics, Sensitivity = _sensitivity,
+        Metrics = _metrics, Sensitivity = _sensitivity, Language = _language,
         RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds
     };
 
     public void ApplyPreferences(NotchPreferences preferences)
     {
         PreferenceStore.Validate(preferences);
+        var languageChanged = !string.Equals(_language, preferences.Language, StringComparison.Ordinal);
+        _language = preferences.Language;
+        if (languageChanged) Relabel();
         CancelFold();
         SetHoveredMetric(null);
         _pinned = false;
@@ -534,6 +548,34 @@ public sealed class EdgeWindow : Window
         }
         if (_latestSnapshot is not null) RenderSnapshot(_latestSnapshot);
         Relocate();
+        if (languageChanged) ReopenSettings();
+    }
+
+    /// <summary>Puts the new language on the parts that are written once.</summary>
+    private void Relabel()
+    {
+        Strings.Use(_language);
+        _cpuRing.SetCaption(Strings.Get("notch.metric.cpu"));
+        _ramRing.SetCaption(Strings.Get("notch.metric.memory"));
+        _diskRing.SetCaption(Strings.Get("notch.metric.disk"));
+        _networkRing.SetCaption(Strings.Get("notch.metric.network"));
+    }
+
+    // The settings window writes its labels when it is built, so the shortest
+    // honest way to relabel it is to build it again. It happens after the
+    // click handler returns, and _relabelling keeps the close from being read
+    // as the user dismissing the last window of a hidden, trayless app.
+    private void ReopenSettings()
+    {
+        if (_settingsWindow is null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_settingsWindow is null || _lifetime.IsCancellationRequested) return;
+            _relabelling = true;
+            try { _settingsWindow.Close(); }
+            finally { _relabelling = false; }
+            ShowSettings();
+        });
     }
 
     public void RequestExit()
@@ -562,6 +604,7 @@ public sealed class EdgeWindow : Window
         _settingsWindow.Closed += (_, _) =>
         {
             _settingsWindow = null;
+            if (_relabelling) return;
             if (_mode == NotchDisplayMode.Hidden && !HasTray && !_lifetime.IsCancellationRequested)
                 Close();
         };

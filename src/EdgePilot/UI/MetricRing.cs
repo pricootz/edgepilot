@@ -15,6 +15,7 @@ internal sealed class MetricRing : StackPanel
     private readonly Path _progress;
     private readonly TextBlock _glyph;
     private readonly TextBlock _value;
+    private readonly TextBlock _caption;
 
     public MetricRing(string glyph, string caption)
     {
@@ -74,7 +75,7 @@ internal sealed class MetricRing : StackPanel
             TextAlignment = TextAlignment.Center
         };
 
-        var label = new TextBlock
+        _caption = new TextBlock
         {
             Text = caption,
             FontSize = 8,
@@ -87,10 +88,12 @@ internal sealed class MetricRing : StackPanel
 
         Children.Add(ring);
         Children.Add(_value);
-        Children.Add(label);
+        Children.Add(_caption);
 
         SetValue(null, "—");
     }
+
+    public void SetCaption(string caption) => _caption.Text = caption;
 
     public void SetValue(double? percent, string text)
     {

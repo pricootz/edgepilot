@@ -1,5 +1,7 @@
 using Avalonia;
 using EdgePilot.Platform;
+using EdgePilot.UI;
+using EdgePilot.Localization;
 
 namespace EdgePilot;
 
@@ -13,12 +15,21 @@ internal static class Program
             Console.WriteLine("EdgePilot " + typeof(Program).Assembly.GetName().Version);
             return;
         }
+        // Console messages are written before Avalonia exists, so the stored
+        // language has to be applied here too.
+        try { Strings.Use(PreferenceStore.Load(PreferenceStore.DefaultPath).Language); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or System.Text.Json.JsonException or ArgumentException or InvalidDataException)
+        {
+            System.Diagnostics.Trace.WriteLine(ex);
+            Strings.Use(null);
+        }
         if (args.Contains("--install"))
         {
-            try { Console.WriteLine("EdgePilot installato in " + DesktopInstaller.Install()); }
+            try { Console.WriteLine(Strings.Get("cli.installed", DesktopInstaller.Install())); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
             {
-                Console.Error.WriteLine("Installazione non riuscita. Chiudi EdgePilot e riprova. " + ex.Message);
+                Console.Error.WriteLine(Strings.Get("cli.install.failed", ex.Message));
                 Environment.ExitCode = 1;
             }
             return;
@@ -28,7 +39,7 @@ internal static class Program
         {
             if (!args.Contains("--autostart") && !instance.NotifyPrimary())
             {
-                Console.Error.WriteLine("EdgePilot è già aperto ma non risponde. Chiudilo e riprova.");
+                Console.Error.WriteLine(Strings.Get("cli.already.running"));
                 Environment.ExitCode = 1;
             }
             return;

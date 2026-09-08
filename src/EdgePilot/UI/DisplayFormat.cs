@@ -1,3 +1,5 @@
+using EdgePilot.Localization;
+
 namespace EdgePilot.UI;
 
 internal static class DisplayFormat
@@ -5,7 +7,9 @@ internal static class DisplayFormat
     public static string Bytes(long bytes)
     {
         if (bytes < 0) bytes = 0;
-        string[] units = ["B", "KB", "MB", "GB", "TB", "PB"];
+        var units = Strings.Get("format.bytes.units")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (units.Length == 0) units = ["B", "KB", "MB", "GB", "TB", "PB"];
         double value = bytes;
         var unit = 0;
 
@@ -23,8 +27,9 @@ internal static class DisplayFormat
 
     public static string Uptime(TimeSpan uptime)
     {
-        if (uptime.TotalDays >= 1) return $"{(int)uptime.TotalDays} g {uptime.Hours} h {uptime.Minutes} min";
-        if (uptime.TotalHours >= 1) return $"{uptime.Hours} h {uptime.Minutes} min";
-        return $"{uptime.Minutes} min {uptime.Seconds} s";
+        if (uptime.TotalDays >= 1)
+            return Strings.Get("format.uptime.days", (int)uptime.TotalDays, uptime.Hours, uptime.Minutes);
+        if (uptime.TotalHours >= 1) return Strings.Get("format.uptime.hours", uptime.Hours, uptime.Minutes);
+        return Strings.Get("format.uptime.minutes", uptime.Minutes, uptime.Seconds);
     }
 }
