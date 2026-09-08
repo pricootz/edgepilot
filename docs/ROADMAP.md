@@ -21,8 +21,9 @@ This roadmap is directional, not a delivery schedule.
 - [x] Interactive metric cards and conditional disk configuration.
 - [x] Canonical SVG branding inside the app and native Windows icon generation.
 - [x] Product-focused About page with author and GitHub links.
-- [x] Italian, English and French application localization.
+- [x] Italian, English, French and Spanish application localization.
 - [x] Automatic system-language detection plus persisted manual language selection.
+- [x] File-per-language JSON locale architecture with automatic discovery and safe fallback.
 - [x] Localized tray, tooltip, installer and system-monitor strings.
 - [x] Split Settings implementation into shell, pages and reusable controls.
 - [x] Localization regression checks alongside existing UX/package CI.
@@ -33,26 +34,41 @@ This roadmap is directional, not a delivery schedule.
 - [ ] Verify real logout/login startup and tray behavior.
 - [ ] Test Settings at common scaling levels (100%, 125%, 150%) and smaller window sizes.
 - [ ] Validate all four edges and monitor changes on physical multi-monitor systems.
-- [ ] Confirm language switching and Automatic mode on Italian, English and French desktop locales.
-- [ ] Add current v0.2 Windows and Ubuntu screenshots.
+- [ ] Confirm language switching and Automatic mode on Italian, English, French and Spanish desktop locales.
+- [ ] Add current v0.2 Windows and Ubuntu screenshots/GIFs.
 - [ ] Gather feedback from the preview release.
 
-## v0.3 direction — Signals / ambient awareness
+## v0.3 — Signals / ambient awareness — in development
 
-The next major feature is a signal engine following the model **Observe → Decide → Surface → Act**. Signals should be temporary, deduplicated and context-aware rather than behaving like a traditional notification center.
+Signals follow **Observe → Decide → Surface → Act**. They should be temporary, deduplicated and context-aware rather than behaving like a traditional notification center.
 
-Initial scope:
+### Foundation
 
-- Internet connection lost / restored.
-- Low disk space.
-- Sustained unusual CPU activity.
+- [x] Immutable Signal model with source/severity metadata.
+- [x] Priority, deduplication, preemption, pending promotion and expiry.
+- [x] Network connectivity transition detector with silent initial state.
+- [x] Live coordination from `SystemSnapshot` updates.
+- [x] Transient edge Signal presentation and automatic restoration of the previous EdgePilot state.
+- [x] Four-edge Signal placement/orientation.
+- [x] Non-activating/click-through Signal surface.
+- [x] Deterministic demo and CI smoke modes.
+- [x] Dedicated Signal regression suite in Windows/Ubuntu CI.
 
-Architecture direction:
+### Before the first Signals preview
 
-- Sensors / detectors publish normalized signals.
-- A signal service handles priority, deduplication, coalescing, rate limiting and expiry.
-- The edge temporarily morphs from its normal content into the active signal, then returns automatically.
-- Later signals may expose actions.
+- [ ] Review Signal visuals on a physical Windows desktop.
+- [ ] Test real Internet disconnect/reconnect transitions.
+- [ ] Validate physical Linux desktop behavior on X11/Wayland where available.
+- [ ] Decide whether the separate transient Signal surface is visually seamless enough or should be folded into the main notch window.
+- [ ] Finalize dedicated localized Signal copy across all shipped locales.
+- [ ] Add focused regression coverage for issues found during manual QA.
+- [ ] Capture screenshots/GIFs of the final network Signal flow.
+
+### Next Signals after network is proven
+
+- [ ] Low disk space, with threshold crossing rather than repeated polling notifications.
+- [ ] Sustained unusual CPU activity, using duration/hysteresis rather than a single instant threshold.
+- [ ] Signal-specific actions only after the presentation and lifecycle model are stable.
 
 ## Later exploration
 
