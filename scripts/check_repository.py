@@ -60,9 +60,10 @@ if "en.json" in locale_catalogs:
 
     used_keys = set()
     source_root = root / "src" / "EdgePilot"
+    key_pattern = r'([A-Za-z][A-Za-z0-9._]*)'
     patterns = (
-        re.compile(r'Localization\.T\(\s*"([a-z][a-z0-9._]*)"'),
-        re.compile(r'Localization\.In\([^,\n]+,\s*"([a-z][a-z0-9._]*)"'),
+        re.compile(r'Localization\.T\(\s*"' + key_pattern + r'"'),
+        re.compile(r'Localization\.In\([^,\n]+,\s*"' + key_pattern + r'"'),
     )
     for source in sorted(source_root.rglob("*.cs")):
         if any(part in ("bin", "obj") for part in source.parts):
