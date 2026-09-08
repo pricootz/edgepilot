@@ -13,8 +13,8 @@ namespace EdgePilot.Platform;
 internal sealed class PlatformInputRegion : IDisposable
 {
     private readonly Window _window;
-    private IntPtr _display;
-    private IntPtr _xid;
+    private IntPtr _connection;
+    private uint _xid;
     private bool _initializationAttempted;
     private bool _ready;
 
@@ -35,17 +35,19 @@ internal sealed class PlatformInputRegion : IDisposable
         var windowHeight = Math.Max(0, (int)Math.Ceiling(logicalWindowSize.Height * scaling));
         var rectangles = ToXRectangles(logicalRects, scaling, windowWidth, windowHeight);
 
-        // XShapeCombineRectangles with one empty rectangle produces an empty ShapeInput
-        // region. Passing a stable array also avoids platform marshalling edge cases for
-        // zero-length arrays.
-        if (rectangles.Length == 0)
-            rectangles = [new XRectangle()];
-
         try
         {
-            XShapeCombineRectangles(_display, _xid, ShapeInput, 0, 0,
-                rectangles, rectangles.Length, ShapeSet, Unsorted);
-            XFlush(_display);
+            // XCB uses a connection independent from Avalonia's own X11 connection. This avoids
+            // introducing Xlib locking/threading into Avalonia's event loop while still applying
+            // SHAPE 1.1's ShapeInput region to the Avalonia-owned XID.
+            _ = XcbShapeRectangles(_connection, ShapeSet, ShapeInput, Unsorted, _xid, 0, 0,
+                (uint)rectangles.Length, rectangles);
+            if (XcbFlush(_connection) <= 0 || XcbConnectionHasError(_connection) != 0)
+            {
+                System.Diagnostics.Trace.WriteLine("EdgePilot lost the X11 connection used for input-region safety.");
+                _ready = false;
+                return false;
+            }
             return true;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
@@ -74,34 +76,50 @@ internal sealed class PlatformInputRegion : IDisposable
                 return false;
             }
 
-            _display = XOpenDisplay(IntPtr.Zero);
-            if (_display == IntPtr.Zero)
+            _connection = XcbConnect(IntPtr.Zero, out _);
+            if (_connection == IntPtr.Zero || XcbConnectionHasError(_connection) != 0)
             {
-                System.Diagnostics.Trace.WriteLine("EdgePilot could not open the X11 display for input-region safety.");
+                System.Diagnostics.Trace.WriteLine("EdgePilot could not open an XCB connection for input-region safety.");
+                Disconnect();
                 return false;
             }
 
-            if (XShapeQueryExtension(_display, out _, out _) == 0)
+            var cookie = XcbShapeQueryVersion(_connection);
+            var reply = XcbShapeQueryVersionReply(_connection, cookie, out var error);
+            try
             {
-                System.Diagnostics.Trace.WriteLine("EdgePilot requires the X Shape extension to constrain the Linux edge input region.");
-                XCloseDisplay(_display);
-                _display = IntPtr.Zero;
-                return false;
+                if (error != IntPtr.Zero || reply == IntPtr.Zero)
+                {
+                    System.Diagnostics.Trace.WriteLine("EdgePilot could not query the X Shape extension.");
+                    return false;
+                }
+
+                var version = Marshal.PtrToStructure<XcbShapeQueryVersionReply>(reply);
+                if (version.MajorVersion < 1 || (version.MajorVersion == 1 && version.MinorVersion < 1))
+                {
+                    System.Diagnostics.Trace.WriteLine($"EdgePilot requires X Shape 1.1 for ShapeInput; server reports {version.MajorVersion}.{version.MinorVersion}.");
+                    return false;
+                }
+            }
+            finally
+            {
+                if (error != IntPtr.Zero) LibcFree(error);
+                if (reply != IntPtr.Zero) LibcFree(reply);
             }
 
-            _xid = handle.Handle;
+            _xid = unchecked((uint)handle.Handle.ToInt64());
             _ready = true;
             return true;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
             System.Diagnostics.Trace.WriteLine($"EdgePilot could not initialize X11 input-region safety: {ex.Message}");
-            if (_display != IntPtr.Zero)
-            {
-                try { XCloseDisplay(_display); } catch { }
-                _display = IntPtr.Zero;
-            }
             return false;
+        }
+        finally
+        {
+            if (!_ready)
+                Disconnect();
         }
     }
 
@@ -136,21 +154,26 @@ internal sealed class PlatformInputRegion : IDisposable
     public void Dispose()
     {
         _ready = false;
-        _xid = IntPtr.Zero;
-        if (_display == IntPtr.Zero)
+        _xid = 0;
+        Disconnect();
+    }
+
+    private void Disconnect()
+    {
+        if (_connection == IntPtr.Zero)
             return;
 
-        try { XCloseDisplay(_display); }
+        try { XcbDisconnect(_connection); }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
             System.Diagnostics.Trace.WriteLine(ex);
         }
-        _display = IntPtr.Zero;
+        _connection = IntPtr.Zero;
     }
 
-    private const int ShapeInput = 2;
-    private const int ShapeSet = 0;
-    private const int Unsorted = 0;
+    private const byte ShapeSet = 0;
+    private const byte ShapeInput = 2;
+    private const byte Unsorted = 0;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct XRectangle
@@ -161,19 +184,53 @@ internal sealed class PlatformInputRegion : IDisposable
         public ushort Height;
     }
 
-    [DllImport("libX11.so.6")]
-    private static extern IntPtr XOpenDisplay(IntPtr displayName);
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct XcbShapeQueryVersionCookie
+    {
+        public readonly uint Sequence;
+    }
 
-    [DllImport("libX11.so.6")]
-    private static extern int XCloseDisplay(IntPtr display);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XcbShapeQueryVersionReply
+    {
+        public byte ResponseType;
+        public byte Pad0;
+        public ushort Sequence;
+        public uint Length;
+        public ushort MajorVersion;
+        public ushort MinorVersion;
+    }
 
-    [DllImport("libX11.so.6")]
-    private static extern int XFlush(IntPtr display);
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct XcbVoidCookie
+    {
+        public readonly uint Sequence;
+    }
 
-    [DllImport("libXext.so.6")]
-    private static extern int XShapeQueryExtension(IntPtr display, out int eventBase, out int errorBase);
+    [DllImport("libxcb.so.1", EntryPoint = "xcb_connect")]
+    private static extern IntPtr XcbConnect(IntPtr displayName, out int screen);
 
-    [DllImport("libXext.so.6")]
-    private static extern void XShapeCombineRectangles(IntPtr display, IntPtr destination, int destinationKind,
-        int xOffset, int yOffset, [In] XRectangle[] rectangles, int rectangleCount, int operation, int ordering);
+    [DllImport("libxcb.so.1", EntryPoint = "xcb_connection_has_error")]
+    private static extern int XcbConnectionHasError(IntPtr connection);
+
+    [DllImport("libxcb.so.1", EntryPoint = "xcb_flush")]
+    private static extern int XcbFlush(IntPtr connection);
+
+    [DllImport("libxcb.so.1", EntryPoint = "xcb_disconnect")]
+    private static extern void XcbDisconnect(IntPtr connection);
+
+    [DllImport("libxcb-shape.so.0", EntryPoint = "xcb_shape_query_version")]
+    private static extern XcbShapeQueryVersionCookie XcbShapeQueryVersion(IntPtr connection);
+
+    [DllImport("libxcb-shape.so.0", EntryPoint = "xcb_shape_query_version_reply")]
+    private static extern IntPtr XcbShapeQueryVersionReply(IntPtr connection,
+        XcbShapeQueryVersionCookie cookie, out IntPtr error);
+
+    [DllImport("libxcb-shape.so.0", EntryPoint = "xcb_shape_rectangles")]
+    private static extern XcbVoidCookie XcbShapeRectangles(IntPtr connection, byte operation,
+        byte destinationKind, byte ordering, uint destinationWindow, short xOffset, short yOffset,
+        uint rectanglesLength, [In] XRectangle[] rectangles);
+
+    [DllImport("libc.so.6", EntryPoint = "free")]
+    private static extern void LibcFree(IntPtr pointer);
 }
