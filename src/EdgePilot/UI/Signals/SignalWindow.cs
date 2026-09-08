@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Path = Avalonia.Controls.Shapes.Path;
 using EdgePilot.Core.Signals;
 using EdgePilot.Platform;
 
