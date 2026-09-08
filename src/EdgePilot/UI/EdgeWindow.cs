@@ -74,6 +74,7 @@ public sealed class EdgeWindow : Window
     private int? _hoveredMetric;
 
     private readonly Win32Properties.CustomWndProcHookCallback? _wndProcHook;
+    private readonly PlatformInputRegion _inputRegion;
 
     public EdgeWindow()
     {
@@ -89,6 +90,8 @@ public sealed class EdgeWindow : Window
         Background = Brushes.Transparent;
         TransparencyBackgroundFallback = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+
+        _inputRegion = new PlatformInputRegion(this);
 
         _notchShape = new Path
         {
@@ -194,7 +197,11 @@ public sealed class EdgeWindow : Window
 
         Opened += OnOpened;
         Closed += OnClosed;
-        ScalingChanged += (_, _) => Relocate();
+        ScalingChanged += (_, _) =>
+        {
+            Relocate();
+            UpdatePlatformInputRegion();
+        };
 
         _cursorTimer = new DispatcherTimer
         {
@@ -209,6 +216,8 @@ public sealed class EdgeWindow : Window
         }
     }
 
+    internal bool HasSafePlatformInput => !OperatingSystem.IsLinux() || _inputRegion.IsReady;
+
     private void OnOpened(object? sender, EventArgs e)
     {
         Relocate();
@@ -216,9 +225,16 @@ public sealed class EdgeWindow : Window
         _started = true;
         Screens.Changed += OnScreensChanged;
         _screensSubscribed = true;
-        _cursorTimer.Start();
         _ = Task.Run(() => _monitor.RunAsync(_lifetime.Token));
-        if (_mode == NotchDisplayMode.Hidden) { _cursorTimer.Stop(); Hide(); }
+        if (_mode == NotchDisplayMode.Hidden)
+        {
+            _cursorTimer.Stop();
+            Hide();
+        }
+        else if (UpdatePlatformInputRegion())
+        {
+            _cursorTimer.Start();
+        }
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -235,8 +251,7 @@ public sealed class EdgeWindow : Window
         if (_wndProcHook is not null)
             Win32Properties.RemoveWndProcHookCallback(this, _wndProcHook);
 
-
-
+        _inputRegion.Dispose();
         _lifetime.Dispose();
     }
 
@@ -278,6 +293,7 @@ public sealed class EdgeWindow : Window
         {
             RenderTooltip(_hoveredMetric.Value);
             PositionTooltip(_hoveredMetric.Value);
+            UpdatePlatformInputRegion();
         }
     }
 
@@ -346,6 +362,7 @@ public sealed class EdgeWindow : Window
         if (_expanded) return;
         _expanded = true;
         StartMotion(1);
+        UpdatePlatformInputRegion();
     }
 
     private void ScheduleFold()
@@ -388,6 +405,8 @@ public sealed class EdgeWindow : Window
             _tooltipCard.IsVisible = true;
             _tooltipCard.Opacity = Math.Clamp((p - 0.78) / 0.22, 0, 1);
         }
+
+        UpdatePlatformInputRegion();
     }
 
     private int? MetricIndexAt(Point point)
@@ -424,6 +443,7 @@ public sealed class EdgeWindow : Window
         {
             _tooltipCard.Opacity = 0;
             _tooltipCard.IsVisible = false;
+            UpdatePlatformInputRegion();
             return;
         }
 
@@ -431,6 +451,7 @@ public sealed class EdgeWindow : Window
         PositionTooltip(index.Value);
         _tooltipCard.IsVisible = true;
         _tooltipCard.Opacity = 1;
+        UpdatePlatformInputRegion();
     }
 
     private void RenderTooltip(int index)
@@ -536,7 +557,8 @@ public sealed class EdgeWindow : Window
             else
             {
                 Show();
-                _cursorTimer.Start();
+                if (UpdatePlatformInputRegion()) _cursorTimer.Start();
+                else _cursorTimer.Stop();
             }
         }
         if (_latestSnapshot is not null) RenderSnapshot(_latestSnapshot);
@@ -665,15 +687,44 @@ public sealed class EdgeWindow : Window
         };
     }
 
-    private bool IsInteractive(Point point)
+    private Rect[] InteractiveRects()
     {
-        if (_mode == NotchDisplayMode.Hidden) return false;
-        if (!_expanded)
-            return HotZoneRect().Contains(point) || ShapeRect().Contains(point);
+        if (_mode == NotchDisplayMode.Hidden)
+            return [];
 
-        return ExpandedLiveRect().Contains(point)
-            || TooltipLiveRect().Contains(point)
-            || BridgeRect().Contains(point);
+        var regions = new List<Rect>(4);
+        if (_mode == NotchDisplayMode.Hover)
+            regions.Add(HotZoneRect());
+
+        regions.Add(ShapeRect());
+
+        var tooltip = TooltipLiveRect();
+        if (tooltip.Width > 0 && tooltip.Height > 0)
+            regions.Add(tooltip);
+
+        var bridge = BridgeRect();
+        if (bridge.Width > 0 && bridge.Height > 0)
+            regions.Add(bridge);
+
+        return regions.ToArray();
+    }
+
+    private bool IsInteractive(Point point) => InteractiveRects().Any(rect => rect.Contains(point));
+
+    private bool UpdatePlatformInputRegion()
+    {
+        if (!OperatingSystem.IsLinux() || !_started || !IsVisible)
+            return true;
+
+        if (_inputRegion.TryApply(InteractiveRects(), RenderScaling, new Size(Width, Height)))
+            return true;
+
+        // Failing closed is intentional: a hidden edge surface is preferable to leaving a
+        // large transparent topmost rectangle that blocks the user's desktop.
+        System.Diagnostics.Trace.WriteLine("EdgePilot disabled the Linux edge surface because a safe native input region could not be established.");
+        _cursorTimer.Stop();
+        Hide();
+        return false;
     }
 
     private bool TryGetCursorLocal(out Point point)
