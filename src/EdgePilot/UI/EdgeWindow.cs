@@ -5,10 +5,10 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Path = Avalonia.Controls.Shapes.Path;
 using EdgePilot.Core;
 using EdgePilot.Core.Monitoring;
 using EdgePilot.Platform;
+using Path = Avalonia.Controls.Shapes.Path;
 
 namespace EdgePilot.UI;
 
@@ -63,6 +63,8 @@ public sealed class EdgeWindow : Window
     private bool _screensSubscribed;
     private bool _started;
     private NotchDisplayMode _mode;
+    private SettingsBackdrop _backdrop = SettingsBackdrop.Flat;
+    private SettingsThemePreference _settingsTheme = SettingsThemePreference.System;
     private string? _selectedDrive;
     private bool _startAtLogin;
     private Language? _language;
@@ -362,6 +364,96 @@ public sealed class EdgeWindow : Window
         _motionClock.Restart();
         _motionTimer.Start();
     }
+    private void ApplyBackdrop()
+    {
+        var glass = Glass.IsGlass(_backdrop);
+
+        // Mica and Acrylic are real OS backdrops; UpdateNotchVisual clips the window to the
+        // pill (and popup) so the backdrop only shows there. Flat draws its own opaque tab
+        // over a per-pixel-transparent window.
+        var mica = _backdrop == SettingsBackdrop.Mica;
+        TransparencyLevelHint = _backdrop switch
+        {
+            SettingsBackdrop.Mica =>
+                [WindowTransparencyLevel.Mica, WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent],
+            SettingsBackdrop.Acrylic =>
+                [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Blur, WindowTransparencyLevel.Transparent],
+            _ => [WindowTransparencyLevel.Transparent]
+        };
+
+        // The notch and popup track the settings theme, so light gets dark text and vice
+        // versa — the same flip the settings window does.
+        var dark = ThemeIsDark();
+
+        // Mica is a theme-toned OS base, so the window must render in that theme for the
+        // wallpaper tint to come out light in Light mode; Flat/Acrylic keep the dark notch.
+        RequestedThemeVariant = mica && !dark
+            ? Avalonia.Styling.ThemeVariant.Light
+            : Avalonia.Styling.ThemeVariant.Dark;
+
+        if (glass)
+        {
+            // Pill fill is set per-frame in UpdateNotchVisual (collapsed reads stronger).
+            _notchShape.Stroke = null;
+            _notchShape.StrokeThickness = 0;
+
+            // Mica lays only a thin layer over the OS wallpaper base so it doesn't read as a
+            // solid tab; the light layer is a touch denser so the popup's dark text still reads.
+            _tooltipCard.Background = mica
+                ? new SolidColorBrush(dark ? Color.FromArgb(0x0D, 255, 255, 255) : Color.FromArgb(0x80, 255, 255, 255))
+                : Glass.AcrylicCard(dark);
+            _tooltipCard.BorderBrush = mica ? Glass.MicaCardStroke(dark) : Glass.EdgeBrush(dark);
+            _tooltipCard.BorderThickness = mica ? new Thickness(1) : Glass.EdgeThickness;
+            ApplyTooltipTextColors(dark, lighten: dark && !mica);
+        }
+        else
+        {
+            // Flat is an opaque tab: dark keeps the owner's near-black; light is a clean solid
+            // panel (deliberately not the wallpaper-tinted look a blurred surface would give).
+            _notchShape.Fill = Brush(dark ? "#050608" : "#EDEEF1");
+            _notchShape.Stroke = null;
+            _notchShape.StrokeThickness = 0;
+
+            _tooltipCard.Background = Brush(dark ? "#101318" : "#FBFBFC");
+            _tooltipCard.BorderBrush = Brush(dark ? "#2A3039" : "#D4D7DC");
+            _tooltipCard.BorderThickness = new Thickness(1);
+            ApplyTooltipTextColors(dark, lighten: false);
+        }
+
+        foreach (var ring in new[] { _cpuRing, _ramRing, _diskRing, _networkRing })
+            ring.SetTheme(dark);
+
+        UpdateNotchVisual();
+    }
+
+    // The notch is a shaped window with its own bespoke painting, but it resolves light/dark
+    // from the same shared helper the full-window screens use.
+    private bool ThemeIsDark() => Glass.ResolveDark(_settingsTheme);
+
+    // Light theme uses dark popup text; dark theme keeps the light greys (lifted over Acrylic).
+    private void ApplyTooltipTextColors(bool dark, bool lighten)
+    {
+        if (dark)
+        {
+            _tooltipTitle.Foreground = TextBrush("#858E9B", lighten, 0.40);
+            _tooltipValue.Foreground = Brush("#F5F7FA");
+            _tooltipLine1.Foreground = TextBrush("#C9D0D8", lighten, 0.40);
+            _tooltipLine2.Foreground = TextBrush("#8B93A1", lighten, 0.45);
+            _tooltipLine3.Foreground = TextBrush("#68717E", lighten, 0.50);
+        }
+        else
+        {
+            _tooltipTitle.Foreground = Brush("#55585E");
+            _tooltipValue.Foreground = Brush("#1A1C21");
+            _tooltipLine1.Foreground = Brush("#3A3D42");
+            _tooltipLine2.Foreground = Brush("#55585E");
+            _tooltipLine3.Foreground = Brush("#6A6D73");
+        }
+    }
+
+    private static IBrush TextBrush(string hex, bool lighten, double amount) =>
+        new SolidColorBrush(lighten ? Glass.Lighten(Color.Parse(hex), amount) : Color.Parse(hex));
+
     private void UpdateNotchVisual()
     {
         var p = Math.Clamp(_expansion, 0, 1.025);
@@ -372,6 +464,16 @@ public sealed class EdgeWindow : Window
         geometry.Transform = new MatrixTransform(NotchLayout.Transform(_edge));
         _notchShape.Data = geometry;
         _notchContent.Clip = geometry;
+
+        if (Glass.IsGlass(_backdrop))
+        {
+            // Collapsed and expanded share the same surface layer over the OS backdrop.
+            var dark = ThemeIsDark();
+            _notchShape.Fill = _backdrop == SettingsBackdrop.Mica
+                // Thin layer over the OS Mica wallpaper base so the pill shows the tint, not a solid.
+                ? new SolidColorBrush(dark ? Color.FromArgb(0x0D, 255, 255, 255) : Color.FromArgb(0x40, 255, 255, 255))
+                : Glass.AcrylicCard(dark);
+        }
 
         var contentProgress = Math.Clamp((p - 0.16) / 0.72, 0, 1);
         _notchContent.Opacity = contentProgress;
@@ -388,6 +490,44 @@ public sealed class EdgeWindow : Window
             _tooltipCard.IsVisible = true;
             _tooltipCard.Opacity = Math.Clamp((p - 0.78) / 0.22, 0, 1);
         }
+
+        UpdateRegion();
+    }
+
+    // Clip the window to the pill silhouette (plus the popup when shown) so the OS acrylic
+    // shows only there. Cleared in flat mode, where per-pixel transparency shapes it instead.
+    private void UpdateRegion()
+    {
+        if (!Glass.IsGlass(_backdrop))
+        {
+            NotchRegion.Apply(this, null, null, 0);
+            return;
+        }
+
+        var scale = RenderScaling <= 0 ? 1 : RenderScaling;
+        // Rebuild the outline in design space, apply the same edge transform, then scale.
+        var p = Math.Clamp(_expansion, 0, 1.025);
+        var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
+        var length = Lerp(CollapsedLength, ExpandedLength, p);
+        var matrix = NotchLayout.Transform(_edge);
+        var outline = EdgeNotchGeometry.OutlinePoints(WindowWidth, WindowHeight, depth, length);
+        var pill = new Point[outline.Length];
+        for (var i = 0; i < outline.Length; i++)
+        {
+            var q = outline[i].Transform(matrix);
+            pill[i] = new Point(q.X * scale, q.Y * scale);
+        }
+
+        Rect? tooltip = null;
+        if (_tooltipCard.IsVisible && _hoveredMetric is not null)
+        {
+            var x = Canvas.GetLeft(_tooltipCard);
+            var y = Canvas.GetTop(_tooltipCard);
+            var h = Math.Max(174, _tooltipCard.Bounds.Height);
+            tooltip = new Rect(x * scale, y * scale, 270 * scale, h * scale);
+        }
+
+        NotchRegion.Apply(this, pill, tooltip, 14 * scale);
     }
 
     private int? MetricIndexAt(Point point)
@@ -424,6 +564,7 @@ public sealed class EdgeWindow : Window
         {
             _tooltipCard.Opacity = 0;
             _tooltipCard.IsVisible = false;
+            if (Glass.IsGlass(_backdrop)) UpdateRegion();
             return;
         }
 
@@ -431,6 +572,7 @@ public sealed class EdgeWindow : Window
         PositionTooltip(index.Value);
         _tooltipCard.IsVisible = true;
         _tooltipCard.Opacity = 1;
+        if (Glass.IsGlass(_backdrop)) UpdateRegion();
     }
 
     private void RenderTooltip(int index)
@@ -495,10 +637,14 @@ public sealed class EdgeWindow : Window
 
     public NotchPreferences Preferences => new(_edge, _mode)
     {
-        SelectedDrive = _selectedDrive, StartAtLogin = _startAtLogin,
-        Metrics = _metrics, Sensitivity = _sensitivity,
+        SelectedDrive = _selectedDrive,
+        StartAtLogin = _startAtLogin,
+        Metrics = _metrics,
+        Sensitivity = _sensitivity,
         RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds,
-        Language = _language
+        Language = _language,
+        Backdrop = _backdrop,
+        SettingsTheme = _settingsTheme
     };
 
     public void ApplyPreferences(NotchPreferences preferences)
@@ -514,6 +660,9 @@ public sealed class EdgeWindow : Window
         _metrics = preferences.Metrics;
         _sensitivity = preferences.Sensitivity;
         _language = preferences.Language;
+        _backdrop = preferences.Backdrop;
+        _settingsTheme = preferences.SettingsTheme;
+        ApplyBackdrop();
         Localization.SetLanguage(preferences.Language ?? Localization.DetectSystemLanguage());
         _diskRing.SetCaption(Localization.T("ring.disk"));
         _networkRing.SetCaption(Localization.T("ring.network"));
@@ -623,6 +772,8 @@ public sealed class EdgeWindow : Window
         };
         Canvas.SetLeft(_tooltipCard, x);
         Canvas.SetTop(_tooltipCard, Math.Max(0, y));
+
+        if (Glass.IsGlass(_backdrop)) UpdateRegion();
     }
 
     private Rect HotZoneRect() => NotchLayout.ToScreen(new Rect(

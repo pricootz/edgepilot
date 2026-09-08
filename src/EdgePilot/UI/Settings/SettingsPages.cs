@@ -140,6 +140,13 @@ public sealed partial class SettingsWindow
 
     private Control BuildGeneralPage()
     {
+        // Mica/Acrylic are Windows 11 only; the selector is hidden elsewhere.
+        _surfaceCard = Card(
+            SectionTitle("▦", Localization.T("general.surfaceTitle")),
+            Description(Localization.T("general.surfaceDescription")),
+            SegmentRow(_backdropButtons));
+        _surfaceCard.IsVisible = OperatingSystem.IsWindows();
+
         return Page(
             Localization.T("general.pageTitle"),
             Localization.T("general.pageSubtitle"),
@@ -150,7 +157,8 @@ public sealed partial class SettingsWindow
             Card(
                 SectionTitle("◐", Localization.T("general.themeTitle")),
                 Description(Localization.T("general.themeDescription")),
-                SegmentRow(_themeButtons)));
+                SegmentRow(_themeButtons)),
+            _surfaceCard);
     }
 
     private Control BuildEdgePage()

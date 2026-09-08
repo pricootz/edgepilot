@@ -148,5 +148,11 @@
   "network.disconnected": "DÉCONNECTÉ",
   "network.noInterface": "Aucune interface réseau active",
   "network.linkSpeed": "Vitesse de liaison : {0} Mbps",
-  "network.uptime": "Disponibilité : {0}"
+  "network.uptime": "Disponibilité : {0}",
+  "prefs.invalidBackdrop": "Surface de fenêtre non prise en charge.",
+  "general.surfaceTitle": "Surface de la fenêtre",
+  "general.surfaceDescription": "Plat conserve le panneau opaque d'EdgePilot. Mica teinte la fenêtre avec votre fond d'écran ; Acrylique affiche un flou en direct du bureau ; les deux s'accordent avec un bureau en verre Windows 11.",
+  "surface.flat": "Plat",
+  "surface.mica": "Mica",
+  "surface.acrylic": "Acrylique"
 }

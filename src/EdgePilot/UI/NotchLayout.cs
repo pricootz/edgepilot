@@ -1,5 +1,4 @@
 using Avalonia;
-using Avalonia.Media;
 
 namespace EdgePilot.UI;
 

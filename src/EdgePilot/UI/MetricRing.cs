@@ -13,6 +13,7 @@ internal sealed class MetricRing : StackPanel
     private const double TrackInset = 4;
 
     private readonly Path _progress;
+    private readonly Ellipse _track;
     private readonly TextBlock _glyph;
     private readonly TextBlock _value;
     private readonly TextBlock _label;
@@ -44,7 +45,7 @@ internal sealed class MetricRing : StackPanel
             Stretch = Stretch.None
         };
 
-        var track = new Ellipse
+        _track = new Ellipse
         {
             Width = Diameter - TrackInset * 2 + 3,
             Height = Diameter - TrackInset * 2 + 3,
@@ -60,7 +61,7 @@ internal sealed class MetricRing : StackPanel
             Height = Diameter,
             HorizontalAlignment = HorizontalAlignment.Center
         };
-        ring.Children.Add(track);
+        ring.Children.Add(_track);
         ring.Children.Add(_progress);
         ring.Children.Add(_glyph);
 
@@ -101,6 +102,16 @@ internal sealed class MetricRing : StackPanel
     }
 
     public void SetGlyph(string glyph) => _glyph.Text = glyph;
+
+    // Recolour for a light or dark acrylic surface so the ring stays legible under both.
+    public void SetTheme(bool dark)
+    {
+        _glyph.Foreground = Brush(dark ? "#F4F6F8" : "#1A1C21");
+        _value.Foreground = Brush(dark ? "#F4F6F8" : "#1A1C21");
+        _label.Foreground = Brush(dark ? "#777F8C" : "#55585E");
+        _progress.Stroke = Brush(dark ? "#F1F4F7" : "#3A3D42");
+        _track.Stroke = Brush(dark ? "#323741" : "#C9CDD4");
+    }
 
     public void SetCaption(string caption) => _label.Text = caption;
 

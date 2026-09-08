@@ -130,6 +130,22 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
 }
 Set(window, "_edge", EdgeSide.Right);
 Call(window, "ConfigureLayout");
+
+// The notch region outline (used to clip the OS backdrop) must stay a sane polygon:
+// enough points to form the pill, hugging the right edge, and never leaving the window.
+foreach (var (depth, length) in new[] { (10d, 82d), (10d, 104d), (50d, 220d), (88d, 360d) })
+{
+    var outline = EdgeNotchGeometry.OutlinePoints(410, 620, depth, length);
+    Check(outline.Length >= 6, $"outline has vertices ({depth},{length})");
+    Check(outline.All(pt => pt.X >= 410 - depth - 0.001 && pt.X <= 410 + 0.001),
+        $"outline stays within depth ({depth},{length})");
+    Check(outline.All(pt => pt.Y >= -0.001 && pt.Y <= 620 + 0.001),
+        $"outline stays within window ({depth},{length})");
+    Check(outline.Any(pt => Math.Abs(pt.X - 410) < 0.001), $"outline meets the screen edge ({depth},{length})");
+    var span = outline.Max(pt => pt.Y) - outline.Min(pt => pt.Y);
+    Check(Math.Abs(span - Math.Min(length, 620)) < 1.0, $"outline spans the pill length ({depth},{length})");
+}
+
 if (args.Length > 0)
 {
     Directory.CreateDirectory(args[0]);
@@ -197,6 +213,20 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
 }
 window.ApplyPreferences(new NotchPreferences());
 
+// The notch seeds the settings window from its live Preferences, so those must echo the
+// full appearance state or a saved theme/backdrop is lost on reopen.
+foreach (var theme in Enum.GetValues<SettingsThemePreference>())
+{
+    window.ApplyPreferences(new NotchPreferences(EdgeSide.Right) { SettingsTheme = theme });
+    Check(window.Preferences.SettingsTheme == theme, "settings theme round trips " + theme);
+}
+foreach (var backdrop in Enum.GetValues<SettingsBackdrop>())
+{
+    window.ApplyPreferences(new NotchPreferences(EdgeSide.Right) { Backdrop = backdrop });
+    Check(window.Preferences.Backdrop == backdrop, "backdrop round trips " + backdrop);
+}
+window.ApplyPreferences(new NotchPreferences());
+
 window.ApplyPreferences(new NotchPreferences { SelectedDrive = "/mnt/dati16" });
 var snapshot = new SystemSnapshot("host", "Ubuntu", 10, 1000, 500, TimeSpan.FromMinutes(10),
     new NetworkSnapshot("eth0", true, 0, 0, 1000), drives, DateTimeOffset.Now);
@@ -253,10 +283,30 @@ try
     try { PreferenceStore.Load(settingsPath); Check(false, "unknown enum rejected"); }
     catch (InvalidDataException) { Check(true, "unknown enum reported"); }
 
+    // Window surface (backdrop): persists on Windows; a stored glass choice coerces to Flat
+    // on other platforms so an unsupported mode never sticks there.
+    foreach (var backdrop in Enum.GetValues<SettingsBackdrop>())
+    {
+        var withBackdrop = new NotchPreferences(EdgeSide.Right) { Backdrop = backdrop };
+        PreferenceStore.Save(settingsPath, withBackdrop);
+        var expected = OperatingSystem.IsWindows() || backdrop == SettingsBackdrop.Flat
+            ? backdrop : SettingsBackdrop.Flat;
+        Check(PreferenceStore.Load(settingsPath).Backdrop == expected, "backdrop persists " + backdrop);
+    }
+    try
+    {
+        PreferenceStore.Save(settingsPath, new NotchPreferences { Backdrop = (SettingsBackdrop)999 });
+        Check(false, "invalid backdrop rejected");
+    }
+    catch (InvalidDataException) { Check(true, "invalid backdrop reported"); }
+    PreferenceStore.Save(settingsPath, new NotchPreferences());
+
     NotchPreferences? applied = null;
     var settings = new SettingsWindow(new NotchPreferences(), value => applied = value,
         storagePath: settingsPath);
     Check(settings.Content is Grid, "settings uses structured shell");
+    Check(((Border)SettingsField(settings, "_surfaceCard")!).IsVisible == OperatingSystem.IsWindows(),
+        "surface selector is gated to Windows");
     var applyButton = (Button)SettingsField(settings, "_applyButton")!;
     var resetButton = (Button)SettingsField(settings, "_resetButton")!;
     var refreshSelector = (ComboBox)SettingsField(settings, "_refresh")!;

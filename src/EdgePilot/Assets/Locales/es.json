@@ -148,5 +148,11 @@
   "network.disconnected": "DESCONECTADA",
   "network.noInterface": "No hay ninguna interfaz de red activa",
   "network.linkSpeed": "Velocidad del enlace: {0} Mbps",
-  "network.uptime": "Tiempo activo: {0}"
+  "network.uptime": "Tiempo activo: {0}",
+  "prefs.invalidBackdrop": "Superficie de ventana no admitida.",
+  "general.surfaceTitle": "Superficie de la ventana",
+  "general.surfaceDescription": "Plana mantiene el panel sólido propio de EdgePilot. Mica tiñe la ventana con tu fondo de escritorio; Acrílico muestra un desenfoque en vivo del escritorio; ambos combinan con un escritorio de cristal de Windows 11.",
+  "surface.flat": "Plana",
+  "surface.mica": "Mica",
+  "surface.acrylic": "Acrílico"
 }
