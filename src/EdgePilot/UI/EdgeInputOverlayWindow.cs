@@ -91,7 +91,7 @@ internal sealed class EdgeInputOverlayWindow : Window, IDisposable
             Hide();
     }
 
-    public new void Dispose()
+    public void Dispose()
     {
         if (_disposed)
             return;
