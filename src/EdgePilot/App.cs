@@ -112,13 +112,19 @@ public sealed class App : Application
                     DispatcherTimer.RunOnce(() =>
                     {
                         if (_signals is not null && _signals.HasSafePassiveInput)
+                        {
+                            Console.WriteLine("PASS Signal passive native input routing established.");
                             return;
+                        }
 
                         Console.Error.WriteLine("EdgePilot Signal could not establish passive native input routing.");
-                        Environment.ExitCode = 3;
-                        desktop.Shutdown();
+                        Environment.Exit(3);
                     }, TimeSpan.FromSeconds(2));
-                    DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(9));
+
+                    // This is a disposable CI-only process. A transient secondary Avalonia window
+                    // can keep the desktop lifetime alive after MainWindow is hidden, so end the
+                    // smoke process explicitly after the full lost -> restored demo sequence.
+                    DispatcherTimer.RunOnce(() => Environment.Exit(0), TimeSpan.FromSeconds(9));
                 }
 
                 if (desktop.Args?.Contains("--smoke-test") == true)
