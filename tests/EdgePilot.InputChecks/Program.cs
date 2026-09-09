@@ -28,7 +28,19 @@ void Set(EdgeWindow window, string name, object value) =>
 
 Rect[] Regions(EdgeWindow window) => (Rect[])Call(window, "InteractiveRects")!;
 Rect[] ShapeRegions(EdgeWindow window) => (Rect[])Call(window, "ShapeInputRects")!;
+Rect[] GlassRegions(EdgeWindow window) => (Rect[])Call(window, "GlassVisibleRects")!;
 bool Interactive(EdgeWindow window, Point point) => (bool)Call(window, "IsInteractive", point)!;
+
+Point? FindPoint(Rect area, Func<Point, bool> predicate)
+{
+    for (var y = area.Top + 0.5; y < area.Bottom; y += 2)
+    for (var x = area.Left + 0.5; x < area.Right; x += 2)
+    {
+        var point = new Point(x, y);
+        if (predicate(point)) return point;
+    }
+    return null;
+}
 
 var window = new EdgeWindow();
 
@@ -59,6 +71,19 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     Check(Interactive(window, shapeBounds.Center), $"collapsed notch remains interactive on {edge}");
     Check(!Interactive(window, windowRect.Center), $"transparent window center passes through on {edge}");
 
+    // Windows glass uses SetWindowRgn as both visual clipping and hit testing. The adapted
+    // integration must therefore omit the invisible Hover hot-zone from the native glass
+    // region; global cursor polling keeps Hover working on Windows without exposing it.
+    Set(window, "_backdrop", SettingsBackdrop.Mica);
+    var glassCollapsed = GlassRegions(window);
+    var hotOnly = FindPoint(hot, point => !collapsedShape.Any(rect => rect.Contains(point)));
+    Check(glassCollapsed.Length == collapsedShape.Length,
+        $"glass collapsed region contains only visible notch strips on {edge}");
+    Check(hotOnly is not null, $"collapsed hover has an invisible hot-zone sample on {edge}");
+    Check(hotOnly is { } hotPoint && !glassCollapsed.Any(rect => rect.Contains(hotPoint)),
+        $"glass excludes invisible hover hot-zone on {edge}");
+    Set(window, "_backdrop", SettingsBackdrop.Flat);
+
     Set(window, "_expanded", true);
     Set(window, "_expansion", 1d);
     Call(window, "UpdateNotchVisual");
@@ -81,6 +106,21 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     Check(bridge.Width > 0 && bridge.Height > 0 && Interactive(window, bridge.Center),
         $"tooltip bridge stays interactive on {edge}");
     Check(withTooltip.All(windowRect.Contains), $"tooltip regions stay inside window on {edge}");
+
+    // The glass bounding region includes the visible popup, but not the invisible bridge.
+    // Rounded scanline clipping also prevents Mica/Acrylic from showing through the card's
+    // square corner pixels.
+    Set(window, "_backdrop", SettingsBackdrop.Acrylic);
+    var glassWithTooltip = GlassRegions(window);
+    Check(glassWithTooltip.Any(rect => rect.Contains(tooltip.Center)),
+        $"glass includes tooltip center on {edge}");
+    Check(!glassWithTooltip.Any(rect => rect.Contains(bridge.Center)),
+        $"glass excludes tooltip bridge on {edge}");
+    var tooltipCorner = new Point(tooltip.Left + 0.1, tooltip.Top + 0.1);
+    Check(!glassWithTooltip.Any(rect => rect.Contains(tooltipCorner)),
+        $"glass clips rounded tooltip corner on {edge}");
+    Check(glassWithTooltip.All(windowRect.Contains), $"glass visible regions stay inside window on {edge}");
+    Set(window, "_backdrop", SettingsBackdrop.Flat);
 
     window.ApplyPreferences(new NotchPreferences(edge, NotchDisplayMode.Hidden));
     Check(Regions(window).Length == 0, $"hidden mode has an empty native input region on {edge}");
@@ -111,6 +151,21 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     Check(!Interactive(window, transparentShoulder),
         $"transparent notch shoulder passes through on {edge}");
 }
+
+// Appearance state must survive the live EdgeWindow -> SettingsWindow round trip. Unsupported
+// platforms intentionally coerce Mica/Acrylic to Flat rather than persisting a dead choice.
+foreach (var theme in Enum.GetValues<SettingsThemePreference>())
+{
+    window.ApplyPreferences(new NotchPreferences { SettingsTheme = theme });
+    Check(window.Preferences.SettingsTheme == theme, $"settings theme round trips {theme}");
+}
+foreach (var backdrop in Enum.GetValues<SettingsBackdrop>())
+{
+    window.ApplyPreferences(new NotchPreferences { Backdrop = backdrop });
+    var expected = SettingsBackdropSupport.IsSupported ? backdrop : SettingsBackdrop.Flat;
+    Check(window.Preferences.Backdrop == expected, $"backdrop coerces or round trips {backdrop}");
+}
+window.ApplyPreferences(new NotchPreferences());
 
 // Native regions use integral device pixels. Verify that two adjacent logical scanlines remain
 // adjacent after fractional-DPI quantization instead of creating a one-pixel hole between them.
