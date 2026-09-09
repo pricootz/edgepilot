@@ -153,7 +153,7 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
 }
 
 // Appearance state must survive the live EdgeWindow -> SettingsWindow round trip. Unsupported
-// platforms intentionally coerce Mica/Acrylic to Flat rather than persisting a dead choice.
+// backdrops intentionally coerce to Flat rather than persisting a dead choice.
 foreach (var theme in Enum.GetValues<SettingsThemePreference>())
 {
     window.ApplyPreferences(new NotchPreferences { SettingsTheme = theme });
@@ -162,7 +162,7 @@ foreach (var theme in Enum.GetValues<SettingsThemePreference>())
 foreach (var backdrop in Enum.GetValues<SettingsBackdrop>())
 {
     window.ApplyPreferences(new NotchPreferences { Backdrop = backdrop });
-    var expected = SettingsBackdropSupport.IsSupported ? backdrop : SettingsBackdrop.Flat;
+    var expected = SettingsBackdropSupport.IsSupported(backdrop) ? backdrop : SettingsBackdrop.Flat;
     Check(window.Preferences.Backdrop == expected, $"backdrop coerces or round trips {backdrop}");
 }
 window.ApplyPreferences(new NotchPreferences());
