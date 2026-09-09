@@ -15,7 +15,10 @@ public sealed record GlassPalette(
 // all read as one frosted surface over the Windows 11 desktop.
 internal static class Glass
 {
-    public static bool IsGlass(SettingsBackdrop backdrop) => backdrop != SettingsBackdrop.Flat;
+    private static SettingsBackdrop Effective(SettingsBackdrop backdrop) =>
+        SettingsBackdropSupport.Coerce(backdrop);
+
+    public static bool IsGlass(SettingsBackdrop backdrop) => Effective(backdrop) != SettingsBackdrop.Flat;
 
     // Resolve a theme choice to light/dark; System reads the OS.
     public static bool ResolveDark(SettingsThemePreference theme) => theme switch
@@ -27,7 +30,7 @@ internal static class Glass
     };
 
     // The OS backdrop hint for a full-window (rectangular) screen, with fallbacks.
-    public static IReadOnlyList<WindowTransparencyLevel> WindowHint(SettingsBackdrop backdrop) => backdrop switch
+    public static IReadOnlyList<WindowTransparencyLevel> WindowHint(SettingsBackdrop backdrop) => Effective(backdrop) switch
     {
         SettingsBackdrop.Mica =>
             [WindowTransparencyLevel.Mica, WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent],
@@ -38,7 +41,7 @@ internal static class Glass
 
     // The window background: Mica stays transparent so the OS paints the wallpaper base,
     // Acrylic lays the luminosity veil over the live blur, Flat is a plain solid.
-    public static IBrush WindowBackground(SettingsBackdrop backdrop, bool dark) => backdrop switch
+    public static IBrush WindowBackground(SettingsBackdrop backdrop, bool dark) => Effective(backdrop) switch
     {
         SettingsBackdrop.Mica => Brushes.Transparent,
         SettingsBackdrop.Acrylic => AcrylicBase(dark),
@@ -48,7 +51,8 @@ internal static class Glass
     // Everything a screen paints onto: panels, cards, separators and muted text.
     public static GlassPalette Palette(SettingsBackdrop backdrop, bool dark)
     {
-        var glass = IsGlass(backdrop);
+        backdrop = Effective(backdrop);
+        var glass = backdrop != SettingsBackdrop.Flat;
         var mica = backdrop == SettingsBackdrop.Mica;
         return new GlassPalette(glass, mica, dark,
             Panel: glass
@@ -100,9 +104,7 @@ internal static class Glass
     // The window-wide luminosity veil that keeps Acrylic text readable over ANY wallpaper.
     // Windows' own light acrylic clamps the blurred backdrop toward a fixed luminance so
     // text contrast never depends on what is behind; we can't sample that, so we lay a
-    // white sheet over the live blur. 0x99 (~60%) is the floor: even over a black desktop
-    // the ground stays light enough for dark text, while ~40% of the blur still shows so
-    // the acrylic actually reads as glass. Dark theme keeps light text over the raw blur.
+    // white sheet over the live blur. Dark theme keeps light text over the raw blur.
     public static IBrush AcrylicBase(bool dark = true) =>
         dark ? Brushes.Transparent : new SolidColorBrush(Color.FromArgb(0x8C, 255, 255, 255));
 
@@ -117,19 +119,13 @@ internal static class Glass
     public static IBrush GlassLine(bool dark = true) => new SolidColorBrush(
         dark ? Color.FromArgb(0x24, 255, 255, 255) : Color.FromArgb(0x1F, 0, 0, 0));
 
-    // Mica is the real Windows 11 OS backdrop: opaque, wallpaper-tinted, theme-aware — the
-    // window keeps a transparent background and the OS paints it (see EdgeWindow/SettingsWindow
-    // TransparencyLevelHint). Content then sits on translucent layers over that base, using
-    // the exact WinUI theme values so it matches Windows itself:
-    //   CardBackgroundFillColorDefault  Dark #0DFFFFFF  Light #B3FFFFFF
-    //   CardStrokeColorDefault          Dark #19000000  Light #0F000000
+    // Mica is the real Windows 11 OS backdrop: opaque, wallpaper-tinted, theme-aware.
     public static IBrush MicaCard(bool dark = true) => new SolidColorBrush(
         dark ? Color.FromArgb(0x0D, 255, 255, 255) : Color.FromArgb(0xB3, 255, 255, 255));
     public static IBrush MicaCardStroke(bool dark = true) => new SolidColorBrush(
         dark ? Color.FromArgb(0x19, 0, 0, 0) : Color.FromArgb(0x0F, 0, 0, 0));
 
-    // Nudge a colour toward white by `amount` (0..1), keeping its alpha. Used to keep
-    // muted text readable over the bright blur without flattening everything to pure white.
+    // Nudge a colour toward white by `amount` (0..1), keeping its alpha.
     public static Color Lighten(Color c, double amount)
     {
         amount = Math.Clamp(amount, 0, 1);
