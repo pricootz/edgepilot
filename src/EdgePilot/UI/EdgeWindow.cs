@@ -63,6 +63,8 @@ public sealed class EdgeWindow : Window
     private bool _screensSubscribed;
     private bool _started;
     private NotchDisplayMode _mode;
+    private SettingsBackdrop _backdrop = SettingsBackdrop.Flat;
+    private SettingsThemePreference _settingsTheme = SettingsThemePreference.System;
     private string? _selectedDrive;
     private bool _startAtLogin;
     private Language? _language;
@@ -372,6 +374,84 @@ public sealed class EdgeWindow : Window
         _motionTimer.Start();
     }
 
+    private void ApplyBackdrop()
+    {
+        _backdrop = SettingsBackdropSupport.Coerce(_backdrop);
+        var glass = Glass.IsGlass(_backdrop);
+        var dark = glass ? ThemeIsDark() : true;
+
+        TransparencyLevelHint = _backdrop switch
+        {
+            SettingsBackdrop.Mica =>
+                [WindowTransparencyLevel.Mica, WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent],
+            SettingsBackdrop.Acrylic =>
+                [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Blur, WindowTransparencyLevel.Transparent],
+            _ => [WindowTransparencyLevel.Transparent]
+        };
+
+        // Flat deliberately keeps EdgePilot's established dark visual identity regardless of
+        // the Settings-window theme. Light/Dark/System affect only the opt-in glass surfaces.
+        RequestedThemeVariant = glass
+            ? (dark ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light)
+            : Avalonia.Styling.ThemeVariant.Dark;
+
+        if (glass)
+        {
+            _notchShape.Stroke = null;
+            _notchShape.StrokeThickness = 0;
+            _tooltipCard.Background = _backdrop == SettingsBackdrop.Mica
+                ? new SolidColorBrush(dark ? Color.FromArgb(0x0D, 255, 255, 255) : Color.FromArgb(0x80, 255, 255, 255))
+                : Glass.AcrylicCard(dark);
+            _tooltipCard.BorderBrush = _backdrop == SettingsBackdrop.Mica
+                ? Glass.MicaCardStroke(dark)
+                : Glass.EdgeBrush(dark);
+            _tooltipCard.BorderThickness = _backdrop == SettingsBackdrop.Mica
+                ? new Thickness(1)
+                : Glass.EdgeThickness;
+            ApplyTooltipTextColors(dark, lighten: dark && _backdrop == SettingsBackdrop.Acrylic);
+        }
+        else
+        {
+            _notchShape.Fill = Brush("#050608");
+            _notchShape.Stroke = null;
+            _notchShape.StrokeThickness = 0;
+            _tooltipCard.Background = Brush("#101318");
+            _tooltipCard.BorderBrush = Brush("#2A3039");
+            _tooltipCard.BorderThickness = new Thickness(1);
+            ApplyTooltipTextColors(dark: true, lighten: false);
+        }
+
+        foreach (var ring in new[] { _cpuRing, _ramRing, _diskRing, _networkRing })
+            ring.SetTheme(dark);
+
+        UpdateNotchVisual();
+    }
+
+    private bool ThemeIsDark() => Glass.ResolveDark(_settingsTheme);
+
+    private void ApplyTooltipTextColors(bool dark, bool lighten)
+    {
+        if (dark)
+        {
+            _tooltipTitle.Foreground = TextBrush("#858E9B", lighten, 0.40);
+            _tooltipValue.Foreground = Brush("#F5F7FA");
+            _tooltipLine1.Foreground = TextBrush("#C9D0D8", lighten, 0.40);
+            _tooltipLine2.Foreground = TextBrush("#8B93A1", lighten, 0.45);
+            _tooltipLine3.Foreground = TextBrush("#68717E", lighten, 0.50);
+        }
+        else
+        {
+            _tooltipTitle.Foreground = Brush("#55585E");
+            _tooltipValue.Foreground = Brush("#1A1C21");
+            _tooltipLine1.Foreground = Brush("#3A3D42");
+            _tooltipLine2.Foreground = Brush("#55585E");
+            _tooltipLine3.Foreground = Brush("#6A6D73");
+        }
+    }
+
+    private static IBrush TextBrush(string hex, bool lighten, double amount) =>
+        new SolidColorBrush(lighten ? Glass.Lighten(Color.Parse(hex), amount) : Color.Parse(hex));
+
     private void UpdateNotchVisual()
     {
         var p = Math.Clamp(_expansion, 0, 1.025);
@@ -382,6 +462,18 @@ public sealed class EdgeWindow : Window
         geometry.Transform = new MatrixTransform(NotchLayout.Transform(_edge));
         _notchShape.Data = geometry;
         _notchContent.Clip = geometry;
+
+        if (Glass.IsGlass(_backdrop))
+        {
+            var dark = ThemeIsDark();
+            _notchShape.Fill = _backdrop == SettingsBackdrop.Mica
+                ? new SolidColorBrush(dark ? Color.FromArgb(0x0D, 255, 255, 255) : Color.FromArgb(0x40, 255, 255, 255))
+                : Glass.AcrylicCard(dark);
+        }
+        else
+        {
+            _notchShape.Fill = Brush("#050608");
+        }
 
         var contentProgress = Math.Clamp((p - 0.16) / 0.72, 0, 1);
         _notchContent.Opacity = contentProgress;
@@ -509,15 +601,20 @@ public sealed class EdgeWindow : Window
 
     public NotchPreferences Preferences => new(_edge, _mode)
     {
-        SelectedDrive = _selectedDrive, StartAtLogin = _startAtLogin,
-        Metrics = _metrics, Sensitivity = _sensitivity,
+        SelectedDrive = _selectedDrive,
+        StartAtLogin = _startAtLogin,
+        Metrics = _metrics,
+        Sensitivity = _sensitivity,
         RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds,
-        Language = _language
+        Language = _language,
+        SettingsTheme = _settingsTheme,
+        Backdrop = _backdrop
     };
 
     public void ApplyPreferences(NotchPreferences preferences)
     {
         PreferenceStore.Validate(preferences);
+        preferences = PreferenceStore.CoerceForPlatform(preferences);
         CancelFold();
         SetHoveredMetric(null);
         _pinned = false;
@@ -528,6 +625,8 @@ public sealed class EdgeWindow : Window
         _metrics = preferences.Metrics;
         _sensitivity = preferences.Sensitivity;
         _language = preferences.Language;
+        _settingsTheme = preferences.SettingsTheme;
+        _backdrop = preferences.Backdrop;
         Localization.SetLanguage(preferences.Language ?? Localization.DetectSystemLanguage());
         _diskRing.SetCaption(Localization.T("ring.disk"));
         _networkRing.SetCaption(Localization.T("ring.network"));
@@ -537,6 +636,7 @@ public sealed class EdgeWindow : Window
         MetricRing[] rings = [_cpuRing, _ramRing, _diskRing, _networkRing];
         foreach (var index in _visibleMetricIndices) _metricStack.Children.Add(rings[index]);
         ConfigureLayout();
+        ApplyBackdrop();
         _expanded = _mode == NotchDisplayMode.Always;
         StartMotion(_expanded ? 1 : 0);
         UpdateNotchVisual();
@@ -713,6 +813,57 @@ public sealed class EdgeWindow : Window
         return regions.ToArray();
     }
 
+    private Rect[] GlassVisibleRects()
+    {
+        if (_mode == NotchDisplayMode.Hidden)
+            return [];
+
+        var shape = ShapeInputRects();
+        var regions = new List<Rect>(shape.Length + 180);
+        regions.AddRange(shape);
+
+        var tooltip = TooltipLiveRect();
+        if (tooltip.Width > 0 && tooltip.Height > 0)
+            regions.AddRange(RoundedRectStrips(tooltip, 14));
+
+        return regions.ToArray();
+    }
+
+    private static Rect[] RoundedRectStrips(Rect rect, double radius)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+            return [];
+
+        radius = Math.Clamp(radius, 0, Math.Min(rect.Width, rect.Height) / 2);
+        if (radius < 0.5)
+            return [rect];
+
+        var strips = new List<Rect>((int)Math.Ceiling(rect.Height));
+        for (var y = rect.Top; y < rect.Bottom; y += 1)
+        {
+            var height = Math.Min(1, rect.Bottom - y);
+            var centerY = y + height / 2;
+            var inset = 0d;
+
+            if (centerY < rect.Top + radius)
+            {
+                var dy = rect.Top + radius - centerY;
+                inset = radius - Math.Sqrt(Math.Max(0, radius * radius - dy * dy));
+            }
+            else if (centerY > rect.Bottom - radius)
+            {
+                var dy = centerY - (rect.Bottom - radius);
+                inset = radius - Math.Sqrt(Math.Max(0, radius * radius - dy * dy));
+            }
+
+            var width = rect.Width - inset * 2;
+            if (width > 0)
+                strips.Add(new Rect(rect.Left + inset, y, width, height));
+        }
+
+        return strips.ToArray();
+    }
+
     private bool IsInteractive(Point point) => InteractiveRects().Any(rect => rect.Contains(point));
 
     private bool UpdatePlatformInputRegion()
@@ -720,7 +871,16 @@ public sealed class EdgeWindow : Window
         if ((!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) || !_started || !IsVisible)
             return true;
 
-        if (_inputRegion.TryApply(InteractiveRects(), RenderScaling, new Size(Width, Height)))
+        // On Windows SetWindowRgn is both the visual bounding region and the hit-test region.
+        // A glass backdrop would therefore become visible inside Hover's invisible hot-zone or
+        // tooltip bridge if we passed the normal interaction set. Windows already polls the
+        // global cursor, so glass can safely use only the visible pill + rounded popup while
+        // preserving Hover/bridge behavior. Linux remains Flat and keeps its ShapeInput hot-zone.
+        var nativeRects = OperatingSystem.IsWindows() && Glass.IsGlass(_backdrop)
+            ? GlassVisibleRects()
+            : InteractiveRects();
+
+        if (_inputRegion.TryApply(nativeRects, RenderScaling, new Size(Width, Height)))
             return true;
 
         // Failing closed is intentional: a hidden edge surface is preferable to leaving a
