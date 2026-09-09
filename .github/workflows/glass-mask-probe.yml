@@ -1,0 +1,21 @@
+name: glass-mask-probe
+
+on:
+  push:
+    branches:
+      - experiment/smooth-glass-notch
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build smooth glass notch probe
+        run: dotnet build tests/EdgePilot.GlassMaskProbe/EdgePilot.GlassMaskProbe.csproj -c Release
