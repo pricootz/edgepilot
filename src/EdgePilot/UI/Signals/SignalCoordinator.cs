@@ -22,6 +22,8 @@ internal sealed class SignalCoordinator : IDisposable
     private bool _restoreMainVisible;
     private volatile bool _enabled;
 
+    public bool HasSafePassiveInput => _signalWindow.HasSafePassiveInput;
+
     public SignalCoordinator(EdgeWindow mainWindow)
     {
         _mainWindow = mainWindow;
@@ -121,14 +123,16 @@ internal sealed class SignalCoordinator : IDisposable
             return;
         }
 
-        if (!_signalWindow.IsVisible)
+        var wasVisible = _signalWindow.IsVisible;
+        _signalWindow.ConfigureEdge(_mainWindow.Preferences.Edge);
+        if (!_signalWindow.ShowSignal(signal))
+            return;
+
+        if (!wasVisible)
         {
             _restoreMainVisible = _mainWindow.IsVisible;
             if (_restoreMainVisible) _mainWindow.Hide();
         }
-
-        _signalWindow.ConfigureEdge(_mainWindow.Preferences.Edge);
-        _signalWindow.ShowSignal(signal);
     }
 
     private void OnPreferencesChanged()

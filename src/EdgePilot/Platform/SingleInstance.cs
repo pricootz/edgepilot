@@ -19,7 +19,8 @@ internal sealed class SingleInstance : IDisposable
     {
         var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _name = "EdgePilot-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(user)))[..20];
-        _mutex = new Mutex(false, _name);
+        var options = new NamedWaitHandleOptions { CurrentUserOnly = true, CurrentSessionOnly = false };
+        _mutex = new Mutex(false, _name, options);
         try { _ownsMutex = _mutex.WaitOne(0); }
         catch (AbandonedMutexException) { _ownsMutex = true; }
         if (_ownsMutex) _ = ListenAsync(_stop.Token);

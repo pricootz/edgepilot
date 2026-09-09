@@ -12,13 +12,14 @@ The v0.3 direction introduces ambient Signals: short-lived, local events that ca
 - Live Signal coordination from system snapshots.
 - Transient edge Signal surface that restores the previous EdgePilot main-window state after expiry.
 - Four-edge placement/orientation support for the Signal surface.
-- Non-activating and click-through Signal presentation, including Windows native hit-test transparency.
+- Non-activating pointer-pass-through Signal presentation using native passive-window routing on Windows and X11/XWayland.
 - Deterministic `--signal-demo` sequence for visual review and GIF capture.
 - Dedicated Signal regression suite and Signal-surface smoke checks in Windows/Ubuntu CI.
 
 ### Validation in progress
 
-- Automated build, UX, localization, Signal engine and packaging checks pass on Windows and Ubuntu.
+- Signals are synchronized with the native input-safety architecture introduced for the main edge window after #16/#17.
+- Automated build, UX, input-region, localization, Signal engine and packaging checks run on Windows and Ubuntu.
 - Real Windows desktop visual review is still required.
 - Real network disconnect/reconnect testing is still required.
 - Linux X11/Wayland compositor behavior still needs hands-on validation.

@@ -41,7 +41,8 @@ No account, server or telemetry uploader is required. The interface ships in **I
 - Responsive Settings UI; Settings can follow the system theme or use an explicit light/dark choice.
 - Italian, English, French and Spanish locale discovery from embedded JSON catalogs.
 - Tray menu, optional start at login, per-user installation and single-instance activation.
-- Windows and Ubuntu CI builds, UX checks, localization checks, packaged launch and installation checks.
+- Native constrained input regions on Windows and X11/XWayland so transparent window areas do not block unrelated desktop controls.
+- Windows and Ubuntu CI builds, UX checks, input-region checks, localization checks, packaged launch and installation checks.
 - Local-first operation: no account, required cloud backend or telemetry uploader.
 
 ## v0.3 development: Signals
@@ -68,17 +69,20 @@ Use the [Releases page](https://github.com/pricootz/edgepilot/releases) for publ
 
 For development builds, open a successful [build workflow](https://github.com/pricootz/edgepilot/actions/workflows/build.yml), then download **EdgePilot-win-x64** or **EdgePilot-linux-x64** under *Artifacts*. Artifact downloads require a GitHub sign-in and expire after 30 days.
 
-Packages include the .NET runtime; no SDK is needed. See the [installation guide](packaging/README.md) for running, installing, upgrading and removing EdgePilot.
+Packages include the .NET runtime; no SDK is needed. Linux X11/XWayland builds also require the small XCB Shape runtime library used to constrain pointer input (`libxcb-shape0` on Debian/Ubuntu/Parrot). See the [installation guide](packaging/README.md) for running, installing, upgrading and removing EdgePilot.
 
 ## Quick start from source
 
-Install the .NET 10 SDK and use a graphical Windows or Linux desktop:
+Install the .NET 10 SDK and use a graphical Windows or Linux desktop. On Debian/Ubuntu/Parrot Linux, install the native XCB Shape dependency first:
 
 ```bash
+sudo apt install libxcb-shape0
 git clone https://github.com/pricootz/edgepilot.git
 cd edgepilot
 dotnet run --project src/EdgePilot/EdgePilot.csproj -c Release -- --settings
 ```
+
+On Windows, skip the `apt` command and run the remaining commands from your preferred Git shell/terminal.
 
 Right-click the notch or use the tray menu to open Settings. Changes remain pending until **Save changes** is pressed. Starting EdgePilot again activates the already-running instance instead of launching a duplicate.
 
@@ -87,6 +91,7 @@ To build and run the regression suites:
 ```bash
 dotnet build src/EdgePilot/EdgePilot.csproj -c Release
 dotnet run --project tests/EdgePilot.UxChecks -c Release
+dotnet run --project tests/EdgePilot.InputChecks -c Release
 dotnet run --project tests/EdgePilot.LocalizationChecks -c Release
 dotnet run --project tests/EdgePilot.SignalChecks -c Release
 python scripts/check_repository.py
@@ -102,6 +107,7 @@ dotnet run --project src/EdgePilot/EdgePilot.csproj -c Release -- --signal-demo
 
 - Current packages target **x64**. macOS, ARM packages and headless SSH sessions are not supported targets.
 - Linux transparency, positioning and tray visibility depend on the desktop/compositor. A GNOME AppIndicator extension may be needed.
+- The current Linux desktop path uses X11/XWayland input regions; Avalonia's native Wayland backend is not enabled by this project.
 - Display scaling, multiple monitors and login behavior still need broader real-desktop testing.
 - Signal presentation still needs broader physical Windows/Linux testing before v0.3 is promoted.
 - Disk selection follows a drive letter or mount path, not a hardware serial number.

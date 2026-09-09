@@ -24,10 +24,12 @@ internal sealed class SignalWindow : Window
     private readonly DispatcherTimer _motionTimer = new();
     private readonly NotchSpring _spring = new();
     private readonly Stopwatch _clock = new();
-    private readonly Win32Properties.CustomWndProcHookCallback? _wndProcHook;
+    private readonly PlatformPassiveSurface _passiveSurface;
     private EdgeSide _edge;
 
     public event Action? Collapsed;
+
+    public bool HasSafePassiveInput => _passiveSurface.IsReady;
 
     public SignalWindow(EdgeSide edge)
     {
@@ -43,6 +45,8 @@ internal sealed class SignalWindow : Window
         Background = Brushes.Transparent;
         TransparencyBackgroundFallback = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+
+        _passiveSurface = new PlatformPassiveSurface(this);
 
         _shape = new Path
         {
@@ -86,20 +90,25 @@ internal sealed class SignalWindow : Window
             Collapsed?.Invoke();
         };
 
-        ScalingChanged += (_, _) => Relocate();
-        Opened += (_, _) => Relocate();
+        ScalingChanged += (_, _) =>
+        {
+            Relocate();
+            if (IsVisible) EnsurePassiveInput();
+        };
+        Opened += (_, _) =>
+        {
+            Relocate();
+            if (!EnsurePassiveInput())
+            {
+                System.Diagnostics.Trace.WriteLine("EdgePilot Signal disabled because passive native input could not be established.");
+                Hide();
+            }
+        };
         Closed += (_, _) =>
         {
             _motionTimer.Stop();
-            if (_wndProcHook is not null)
-                Win32Properties.RemoveWndProcHookCallback(this, _wndProcHook);
+            _passiveSurface.Dispose();
         };
-
-        if (OperatingSystem.IsWindows())
-        {
-            _wndProcHook = WndProc;
-            Win32Properties.AddWndProcHookCallback(this, _wndProcHook);
-        }
     }
 
     public void ConfigureEdge(EdgeSide edge)
@@ -132,15 +141,23 @@ internal sealed class SignalWindow : Window
         Canvas.SetTop(_presenter, presenterBounds.Y);
         Relocate();
         UpdateVisual();
+        if (IsVisible) EnsurePassiveInput();
     }
 
-    public void ShowSignal(Signal signal)
+    public bool ShowSignal(Signal signal)
     {
         _presenter.Render(signal);
         if (!IsVisible) Show();
+        if (!EnsurePassiveInput())
+        {
+            _presenter.Clear();
+            Hide();
+            return false;
+        }
         Relocate();
         _spring.Target = 1;
         StartMotion();
+        return true;
     }
 
     public void HideSignal()
@@ -149,6 +166,9 @@ internal sealed class SignalWindow : Window
         _spring.Target = 0;
         StartMotion();
     }
+
+    private bool EnsurePassiveInput() =>
+        _passiveSurface.TryApply(RenderScaling, new Size(Width, Height));
 
     private void StartMotion()
     {
@@ -177,15 +197,6 @@ internal sealed class SignalWindow : Window
         var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
         if (screen is null) return;
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
-    }
-
-    private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        const uint WmNcHitTest = 0x0084;
-        const int HtTransparent = -1;
-        if (msg != WmNcHitTest) return IntPtr.Zero;
-        handled = true;
-        return new IntPtr(HtTransparent);
     }
 
     private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
