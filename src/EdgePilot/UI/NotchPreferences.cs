@@ -7,6 +7,17 @@ namespace EdgePilot.UI;
 public enum NotchDisplayMode { Hover, Always, Hidden }
 public enum HoverSensitivity { Precise, Normal, Wide }
 public enum SettingsThemePreference { System, Light, Dark }
+public enum SettingsBackdrop { Flat, Mica, Acrylic }
+
+public static class SettingsBackdropSupport
+{
+    // Mica and Acrylic are Windows 11 desktop backdrops. Keeping the capability check in one
+    // place prevents synced settings or programmatic callers from enabling glass elsewhere.
+    public static bool IsSupported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000);
+
+    public static SettingsBackdrop Coerce(SettingsBackdrop backdrop) =>
+        IsSupported ? backdrop : SettingsBackdrop.Flat;
+}
 
 [Flags]
 public enum VisibleMetrics { Cpu = 1, Memory = 2, Disk = 4, Network = 8, All = 15 }
@@ -22,6 +33,7 @@ public sealed record NotchPreferences(EdgeSide Edge = EdgeSide.Right,
     // Null means "follow the system language".
     public Language? Language { get; init; }
     public SettingsThemePreference SettingsTheme { get; init; } = SettingsThemePreference.System;
+    public SettingsBackdrop Backdrop { get; init; } = SettingsBackdrop.Flat;
 }
 
 public static class PreferenceStore
@@ -48,8 +60,16 @@ public static class PreferenceStore
             throw new InvalidDataException(Localization.T("prefs.invalidMetrics"));
         if (!Enum.IsDefined(value.SettingsTheme))
             throw new InvalidDataException(Localization.T("prefs.invalidTheme"));
+        if (!Enum.IsDefined(value.Backdrop))
+            throw new InvalidDataException(Localization.T("prefs.invalidBackdrop"));
         if (value.Language is { } language && string.IsNullOrWhiteSpace(language.Code))
             throw new InvalidDataException(Localization.T("prefs.invalidLanguage"));
+    }
+
+    public static NotchPreferences CoerceForPlatform(NotchPreferences value)
+    {
+        var backdrop = SettingsBackdropSupport.Coerce(value.Backdrop);
+        return backdrop == value.Backdrop ? value : value with { Backdrop = backdrop };
     }
 
     public static NotchPreferences Load(string path)
@@ -58,6 +78,7 @@ public static class PreferenceStore
         var value = JsonSerializer.Deserialize<NotchPreferences>(File.ReadAllText(path), Options)
             ?? throw new InvalidDataException(Localization.T("prefs.emptyFile"));
         Validate(value);
+        value = CoerceForPlatform(value);
 
         // Older v0.2 settings stored enum names such as "Italian". LanguageJsonConverter
         // accepts those names and turns them into locale codes. A locale no longer shipped
@@ -71,6 +92,7 @@ public static class PreferenceStore
     public static void Save(string path, NotchPreferences value)
     {
         Validate(value);
+        value = CoerceForPlatform(value);
         var fullPath = System.IO.Path.GetFullPath(path);
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath)!);
         var temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";

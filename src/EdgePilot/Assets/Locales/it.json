@@ -148,5 +148,11 @@
   "network.disconnected": "DISCONNESSA",
   "network.noInterface": "Nessuna interfaccia di rete attiva",
   "network.linkSpeed": "Velocità collegamento: {0} Mbps",
-  "network.uptime": "Tempo di attività: {0}"
+  "network.uptime": "Tempo di attività: {0}",
+  "prefs.invalidBackdrop": "Superficie della finestra non supportata.",
+  "general.surfaceTitle": "Superficie della finestra",
+  "general.surfaceDescription": "Piatta mantiene il pannello opaco di EdgePilot. Mica tinge la finestra con il tuo sfondo; Acrilico mostra una sfocatura dal vivo del desktop; entrambi si accordano con un desktop di vetro di Windows 11.",
+  "surface.flat": "Piatta",
+  "surface.mica": "Mica",
+  "surface.acrylic": "Acrilico"
 }

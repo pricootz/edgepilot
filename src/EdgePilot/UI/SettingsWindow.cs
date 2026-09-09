@@ -8,7 +8,7 @@ using EdgePilot.Core;
 
 namespace EdgePilot.UI;
 
-public sealed partial class SettingsWindow : Window
+public sealed partial class SettingsWindow : GlassWindow
 {
     private sealed record LanguageChoice(Language? Value, string Caption)
     {
@@ -20,7 +20,7 @@ public sealed partial class SettingsWindow : Window
     private static readonly IBrush AccentSoftBrush = new SolidColorBrush(Color.FromArgb(38, 255, 138, 61));
     private static readonly IBrush PreviewBackgroundBrush = new SolidColorBrush(Color.Parse("#101114"));
     private static readonly IBrush PreviewBorderBrush = new SolidColorBrush(Color.Parse("#404247"));
-    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#8D9096"));
+    private static readonly SolidColorBrush MutedBrush = new(Color.Parse("#8D9096"));
     private static readonly VisibleMetrics[] MetricOptions =
         { VisibleMetrics.Cpu, VisibleMetrics.Memory, VisibleMetrics.Disk, VisibleMetrics.Network };
 
@@ -42,6 +42,7 @@ public sealed partial class SettingsWindow : Window
     private readonly Button[] _modeButtons;
     private readonly Button[] _sensitivityButtons;
     private readonly Button[] _themeButtons;
+    private readonly Button[] _backdropButtons;
     private readonly Dictionary<SettingsPage, Button> _navButtons = new();
     private readonly Dictionary<SettingsPage, Control> _pages = new();
     private readonly List<Border> _cards = new();
@@ -50,6 +51,7 @@ public sealed partial class SettingsWindow : Window
     private readonly int[] _intervals = { 500, 1000, 2000, 5000 };
 
     private Border _diskCard = null!;
+    private Border _surfaceCard = null!;
     private Border[] _metricTiles = Array.Empty<Border>();
     private Grid _body = null!;
     private Grid _previewLayout = null!;
@@ -62,6 +64,7 @@ public sealed partial class SettingsWindow : Window
     private NotchDisplayMode _selectedMode;
     private HoverSensitivity _selectedSensitivity;
     private SettingsThemePreference _selectedTheme;
+    private SettingsBackdrop _selectedBackdrop;
     private SettingsPage _selectedPage;
     private bool _ready;
     private bool _darkTheme;
@@ -76,6 +79,7 @@ public sealed partial class SettingsWindow : Window
         _selectedMode = current.Mode;
         _selectedSensitivity = current.Sensitivity;
         _selectedTheme = current.SettingsTheme;
+        _selectedBackdrop = current.Backdrop;
         _initialDrive = current.SelectedDrive;
 
         Title = Localization.T("settings.title");
@@ -204,6 +208,13 @@ public sealed partial class SettingsWindow : Window
             SegmentButton("●", Localization.T("theme.dark"), () => SelectTheme(SettingsThemePreference.Dark))
         ];
 
+        _backdropButtons =
+        [
+            SegmentButton(null, Localization.T("surface.flat"), () => SelectBackdrop(SettingsBackdrop.Flat)),
+            SegmentButton(null, Localization.T("surface.mica"), () => SelectBackdrop(SettingsBackdrop.Mica)),
+            SegmentButton(null, Localization.T("surface.acrylic"), () => SelectBackdrop(SettingsBackdrop.Acrylic))
+        ];
+
         _status = new TextBlock
         {
             Text = warning ?? Localization.T("settings.status.saved"),
@@ -281,6 +292,7 @@ public sealed partial class SettingsWindow : Window
         SelectMode(current.Mode, markDirty: false);
         SelectSensitivity(current.Sensitivity, markDirty: false);
         SelectTheme(current.SettingsTheme, markDirty: false);
+        SelectBackdrop(current.Backdrop, markDirty: false);
         UpdateConditionalSettings();
         var pendingPage = initialPage >= 0 ? initialPage : Interlocked.Exchange(ref _pendingInitialPage, -1);
         var firstPage = Enum.IsDefined(typeof(SettingsPage), pendingPage) ? (SettingsPage)pendingPage : SettingsPage.General;
@@ -342,6 +354,14 @@ public sealed partial class SettingsWindow : Window
         _selectedTheme = theme;
         UpdateSegments(_themeButtons, (int)theme);
         RequestedThemeVariant = ThemeVariantFor(theme);
+        if (markDirty) MarkDirty();
+    }
+
+    private void SelectBackdrop(SettingsBackdrop backdrop, bool markDirty = true)
+    {
+        _selectedBackdrop = backdrop;
+        UpdateSegments(_backdropButtons, (int)backdrop);
+        ApplyTheme();
         if (markDirty) MarkDirty();
     }
 
@@ -428,7 +448,8 @@ public sealed partial class SettingsWindow : Window
             SelectedDrive = (_drive.SelectedItem as DriveChoice)?.Name,
             StartAtLogin = _autostart.IsChecked == true,
             Language = (_language.SelectedItem as LanguageChoice)?.Value,
-            SettingsTheme = _selectedTheme
+            SettingsTheme = _selectedTheme,
+            Backdrop = _selectedBackdrop
         };
     }
 
@@ -449,6 +470,7 @@ public sealed partial class SettingsWindow : Window
         _selectedMode = _savedPreferences.Mode;
         _selectedSensitivity = _savedPreferences.Sensitivity;
         _selectedTheme = _savedPreferences.SettingsTheme;
+        _selectedBackdrop = _savedPreferences.Backdrop;
         _refresh.SelectedIndex = Array.IndexOf(_intervals, _savedPreferences.RefreshIntervalMs);
         for (var i = 0; i < _metrics.Length; i++)
             _metrics[i].IsChecked = _savedPreferences.Metrics.HasFlag(MetricOptions[i]);
@@ -468,7 +490,9 @@ public sealed partial class SettingsWindow : Window
         UpdateSegments(_modeButtons, (int)_selectedMode);
         UpdateSegments(_sensitivityButtons, (int)_selectedSensitivity);
         UpdateSegments(_themeButtons, (int)_selectedTheme);
+        UpdateSegments(_backdropButtons, (int)_selectedBackdrop);
         RequestedThemeVariant = ThemeVariantFor(_selectedTheme);
+        ApplyTheme();
         UpdatePreview();
         UpdateConditionalSettings();
         UpdateMetricTileStates();
@@ -550,23 +574,29 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    private void ApplyTheme()
-    {
-        _darkTheme = ActualThemeVariant == ThemeVariant.Dark;
-        Background = Brush(_darkTheme ? "#121212" : "#F4F4F5");
-        _header.Background = Brush(_darkTheme ? "#151515" : "#FFFFFF");
-        _sidebar.Background = Brush(_darkTheme ? "#141414" : "#FAFAFA");
-        _footer.Background = Brush(_darkTheme ? "#151515" : "#FFFFFF");
+    // The surface and theme wiring lives in GlassWindow; this just repaints the shell from
+    // the resolved palette. That is all a new screen has to write, too.
+    private void ApplyTheme() => ApplySurface(_selectedBackdrop, _selectedTheme);
 
-        var line = Brush(_darkTheme ? "#2C2C2C" : "#DDDDDF");
-        _header.BorderBrush = line;
-        _sidebar.BorderBrush = line;
-        _footer.BorderBrush = line;
+    protected override void PaintChrome(GlassPalette p)
+    {
+        _darkTheme = p.Dark;
+        _header.Background = p.Panel;
+        _footer.Background = p.Panel;
+        // The sidebar keeps a slightly deeper flat shade; on glass it matches the panels.
+        _sidebar.Background = p.IsGlass ? p.Panel : Brush(p.Dark ? "#141414" : "#FAFAFA");
+
+        MutedBrush.Color = p.MutedForeground;
+
+        _header.BorderBrush = p.Line;
+        _sidebar.BorderBrush = p.Line;
+        _footer.BorderBrush = p.Line;
 
         foreach (var card in _cards)
         {
-            card.Background = Brush(_darkTheme ? "#191919" : "#FFFFFF");
-            card.BorderBrush = Brush(_darkTheme ? "#2D2D2D" : "#E2E2E4");
+            card.Background = p.Card;
+            card.BorderBrush = p.CardBorder;
+            card.BorderThickness = p.CardBorderThickness;
         }
         UpdateMetricTileStates();
         ShowPage(_selectedPage);

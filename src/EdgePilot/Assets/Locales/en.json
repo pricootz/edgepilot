@@ -148,5 +148,11 @@
   "network.disconnected": "DISCONNECTED",
   "network.noInterface": "No active network interface",
   "network.linkSpeed": "Link speed: {0} Mbps",
-  "network.uptime": "Uptime: {0}"
+  "network.uptime": "Uptime: {0}",
+  "prefs.invalidBackdrop": "Unsupported window surface.",
+  "general.surfaceTitle": "Window surface",
+  "general.surfaceDescription": "Flat keeps EdgePilot's own solid panel. Mica tints the window with your wallpaper; Acrylic shows a live desktop blur — both match a Windows 11 glass desktop.",
+  "surface.flat": "Flat",
+  "surface.mica": "Mica",
+  "surface.acrylic": "Acrylic"
 }
