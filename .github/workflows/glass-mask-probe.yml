@@ -17,5 +17,5 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Build smooth glass notch probe
-        run: dotnet build tests/EdgePilot.GlassMaskProbe/EdgePilot.GlassMaskProbe.csproj -c Release
+      - name: Build documented Win32 notch probe
+        run: dotnet build tests/EdgePilot.Win32NotchProbe/EdgePilot.Win32NotchProbe.csproj -c Release
