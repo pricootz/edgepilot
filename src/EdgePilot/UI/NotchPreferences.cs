@@ -11,12 +11,22 @@ public enum SettingsBackdrop { Flat, Mica, Acrylic }
 
 public static class SettingsBackdropSupport
 {
-    // Mica and Acrylic are Windows 11 desktop backdrops. Keeping the capability check in one
-    // place prevents synced settings or programmatic callers from enabling glass elsewhere.
-    public static bool IsSupported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000);
+    // Avalonia supports AcrylicBlur from Windows 10 1803 (build 17134+) and Mica from Windows 11.
+    // Keep the capability rules centralized so UI, persistence, and rendering cannot disagree.
+    public static bool IsAcrylicSupported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17134);
+    public static bool IsMicaSupported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000);
+    public static bool HasSurfaceChoices => IsAcrylicSupported || IsMicaSupported;
+
+    public static bool IsSupported(SettingsBackdrop backdrop) => backdrop switch
+    {
+        SettingsBackdrop.Flat => true,
+        SettingsBackdrop.Acrylic => IsAcrylicSupported,
+        SettingsBackdrop.Mica => IsMicaSupported,
+        _ => false
+    };
 
     public static SettingsBackdrop Coerce(SettingsBackdrop backdrop) =>
-        IsSupported ? backdrop : SettingsBackdrop.Flat;
+        IsSupported(backdrop) ? backdrop : SettingsBackdrop.Flat;
 }
 
 [Flags]
