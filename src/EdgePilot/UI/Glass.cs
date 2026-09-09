@@ -12,7 +12,7 @@ public sealed record GlassPalette(
     IBrush Line, Color MutedForeground);
 
 // Shared "glass" styling so the settings shell, its cards and the notch/tooltip
-// all read as one frosted surface over the Windows 11 desktop.
+// all read as one frosted surface over the Windows desktop.
 internal static class Glass
 {
     private static SettingsBackdrop Effective(SettingsBackdrop backdrop) =>
@@ -39,8 +39,8 @@ internal static class Glass
         _ => [WindowTransparencyLevel.None]
     };
 
-    // The window background: Mica stays transparent so the OS paints the wallpaper base,
-    // Acrylic lays the luminosity veil over the live blur, Flat is a plain solid.
+    // Acrylic deliberately keeps a dark graphite veil. The blur remains visible but EdgePilot
+    // still reads as the same black notch instead of inheriting the wallpaper colour.
     public static IBrush WindowBackground(SettingsBackdrop backdrop, bool dark) => Effective(backdrop) switch
     {
         SettingsBackdrop.Mica => Brushes.Transparent,
@@ -68,15 +68,13 @@ internal static class Glass
             Line: mica ? MicaCardStroke(dark)
                 : glass ? GlassLine(dark) : new SolidColorBrush(Color.Parse(dark ? "#2C2C2C" : "#DDDDDF")),
             MutedForeground: dark
-                ? (backdrop == SettingsBackdrop.Acrylic ? Lighten(Color.Parse("#8D9096"), 0.45) : Color.Parse("#8D9096"))
+                ? (backdrop == SettingsBackdrop.Acrylic ? Lighten(Color.Parse("#8D9096"), 0.20) : Color.Parse("#8D9096"))
                 : glass ? Color.Parse("#44474D") : Color.Parse("#8D9096"));
     }
 
-    // Bright thin top edge, a defined thicker bottom, no sides — the Windows 11 glass cue.
-    public static Thickness EdgeThickness => new(0, 0.8, 0, 2);
+    // Restrained glass edge: just enough contrast to separate the material from bright wallpaper.
+    public static Thickness EdgeThickness => new(0, 0.6, 0, 1.2);
 
-    // Dark theme lifts a card with a bright rim; light theme needs a dark hairline instead,
-    // since a white rim vanishes over a light surface.
     public static IBrush EdgeBrush(bool dark = true) => dark
         ? new LinearGradientBrush
         {
@@ -84,9 +82,9 @@ internal static class Glass
             EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
             GradientStops =
             {
-                new GradientStop(Color.FromArgb(0x6E, 255, 255, 255), 0.0),
-                new GradientStop(Color.FromArgb(0x0F, 255, 255, 255), 0.35),
-                new GradientStop(Color.FromArgb(0x4A, 255, 255, 255), 1.0)
+                new GradientStop(Color.FromArgb(0x28, 255, 255, 255), 0.0),
+                new GradientStop(Color.FromArgb(0x08, 255, 255, 255), 0.45),
+                new GradientStop(Color.FromArgb(0x20, 255, 255, 255), 1.0)
             }
         }
         : new LinearGradientBrush
@@ -95,29 +93,26 @@ internal static class Glass
             EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
             GradientStops =
             {
-                new GradientStop(Color.FromArgb(0x20, 0, 0, 0), 0.0),
-                new GradientStop(Color.FromArgb(0x0A, 0, 0, 0), 0.35),
-                new GradientStop(Color.FromArgb(0x24, 0, 0, 0), 1.0)
+                new GradientStop(Color.FromArgb(0x18, 0, 0, 0), 0.0),
+                new GradientStop(Color.FromArgb(0x08, 0, 0, 0), 0.45),
+                new GradientStop(Color.FromArgb(0x20, 0, 0, 0), 1.0)
             }
         };
 
-    // The window-wide luminosity veil that keeps Acrylic text readable over ANY wallpaper.
-    // Windows' own light acrylic clamps the blurred backdrop toward a fixed luminance so
-    // text contrast never depends on what is behind; we can't sample that, so we lay a
-    // white sheet over the live blur. Dark theme keeps light text over the raw blur.
-    public static IBrush AcrylicBase(bool dark = true) =>
-        dark ? Brushes.Transparent : new SolidColorBrush(Color.FromArgb(0x8C, 255, 255, 255));
+    // Dark graphite material stack. Values are intentionally dense: Acrylic should read as
+    // black glass, not as a wallpaper-coloured translucent slab.
+    public static IBrush AcrylicBase(bool dark = true) => new SolidColorBrush(
+        dark ? Color.FromArgb(0x50, 0x05, 0x06, 0x08) : Color.FromArgb(0x8C, 255, 255, 255));
 
-    // Acrylic keeps the live blur; a thin veil separates chrome from content. Dark veils
-    // with black, light with white, so text keeps its contrast either way.
     public static IBrush AcrylicPanel(bool dark = true) => new SolidColorBrush(
-        dark ? Color.FromArgb(0x26, 0, 0, 0) : Color.FromArgb(0x7A, 255, 255, 255));
+        dark ? Color.FromArgb(0x86, 0x05, 0x06, 0x08) : Color.FromArgb(0x7A, 255, 255, 255));
+
     public static IBrush AcrylicCard(bool dark = true) => new SolidColorBrush(
-        dark ? Color.FromArgb(0x30, 0, 0, 0) : Color.FromArgb(0x59, 255, 255, 255));
+        dark ? Color.FromArgb(0xB8, 0x05, 0x06, 0x08) : Color.FromArgb(0x59, 255, 255, 255));
 
     // Hairline between glass panels: bright over dark, dark over light.
     public static IBrush GlassLine(bool dark = true) => new SolidColorBrush(
-        dark ? Color.FromArgb(0x24, 255, 255, 255) : Color.FromArgb(0x1F, 0, 0, 0));
+        dark ? Color.FromArgb(0x20, 255, 255, 255) : Color.FromArgb(0x1F, 0, 0, 0));
 
     // Mica is the real Windows 11 OS backdrop: opaque, wallpaper-tinted, theme-aware.
     public static IBrush MicaCard(bool dark = true) => new SolidColorBrush(
