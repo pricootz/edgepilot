@@ -1,1 +1,0 @@
-The Flat / Mica / Acrylic work in this integration originates from ArnieGA's contribution in PR #15. This branch rebases the idea onto the post-#17 native input-region architecture and preserves attribution in the pull request and commit history notes.
