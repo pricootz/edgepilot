@@ -64,17 +64,20 @@ Use the [Releases page](https://github.com/pricootz/edgepilot/releases) for publ
 
 For development builds, open a successful [build workflow](https://github.com/pricootz/edgepilot/actions/workflows/build.yml), then download **EdgePilot-win-x64** or **EdgePilot-linux-x64** under *Artifacts*. Artifact downloads require a GitHub sign-in and expire after 30 days.
 
-Packages include the .NET runtime; no SDK is needed. See the [installation guide](packaging/README.md) for running, installing, upgrading and removing EdgePilot.
+Packages include the .NET runtime; no SDK is needed. Linux X11/XWayland builds also require the small XCB Shape runtime library used to constrain pointer input (`libxcb-shape0` on Debian/Ubuntu/Parrot). See the [installation guide](packaging/README.md) for running, installing, upgrading and removing EdgePilot.
 
 ## Quick start from source
 
-Install the .NET 10 SDK and use a graphical Windows or Linux desktop:
+Install the .NET 10 SDK and use a graphical Windows or Linux desktop. On Debian/Ubuntu/Parrot Linux, install the native XCB Shape dependency first:
 
 ```bash
+sudo apt install libxcb-shape0
 git clone https://github.com/pricootz/edgepilot.git
 cd edgepilot
 dotnet run --project src/EdgePilot/EdgePilot.csproj -c Release -- --settings
 ```
+
+On Windows, skip the `apt` command and run the remaining commands from your preferred Git shell/terminal.
 
 Right-click the notch or use the tray menu to open Settings. Changes remain pending until **Save changes** is pressed. Starting EdgePilot again activates the already-running instance instead of launching a duplicate.
 
@@ -83,6 +86,7 @@ To build and run the regression suites:
 ```bash
 dotnet build src/EdgePilot/EdgePilot.csproj -c Release
 dotnet run --project tests/EdgePilot.UxChecks -c Release
+dotnet run --project tests/EdgePilot.InputChecks -c Release
 dotnet run --project tests/EdgePilot.LocalizationChecks -c Release
 python scripts/check_repository.py
 ```
@@ -91,6 +95,7 @@ python scripts/check_repository.py
 
 - Current packages target **x64**. macOS, ARM packages and headless SSH sessions are not supported targets.
 - Linux transparency, positioning and tray visibility depend on the desktop/compositor. A GNOME AppIndicator extension may be needed.
+- The current Linux desktop path uses X11/XWayland input regions; Avalonia's native Wayland backend is not enabled by this project.
 - Display scaling, multiple monitors and login behavior still need broader real-desktop testing.
 - Disk selection follows a drive letter or mount path, not a hardware serial number.
 - Network interface selection is automatic. Temperatures, GPU and fan readings are not implemented.

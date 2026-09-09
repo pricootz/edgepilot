@@ -12,21 +12,27 @@ Run EdgePilot.exe from the extracted folder. To install for your user and create
 
 Or right-click Install.ps1 and choose Run with PowerShell. Administrator privileges are not required. Installation goes to %LOCALAPPDATA%\Programs\EdgePilot. Start EdgePilot from the Start menu.
 
+EdgePilot constrains its native HWND to the notch, configured Hover hot-zone and visible tooltip/bridge. Transparent parts of the larger layout surface are therefore outside the native window region and cannot block mouse input to applications underneath.
+
 ## Linux / Ubuntu
 
 A graphical desktop session and its native libraries are required; this is not a terminal-only server application.
 
+EdgePilot requires the XCB Shape runtime library so its X11/XWayland top-level can expose only the intended pointer-input region. On Debian, Ubuntu and Parrot install it with:
+
 ```bash
-./EdgePilot
+sudo apt install libxcb-shape0
 ```
 
-To install for your user and create an Applications launcher:
+Then install EdgePilot for your user:
 
 ```bash
 bash install.sh
 ```
 
-Installation goes to ~/.local/share/edgepilot. X11/XWayland, fontconfig and the desktop's native dependencies are still needed. Linux desktop/compositor support varies. GNOME may require an AppIndicator extension for tray visibility.
+`install.sh` checks for `libxcb-shape.so.0` and stops with an actionable message if it is missing. Installation goes to ~/.local/share/edgepilot. X11/XWayland, fontconfig and the desktop's native dependencies are still needed. Linux desktop/compositor support varies. GNOME may require an AppIndicator extension for tray visibility.
+
+On X11 and the default XWayland path, EdgePilot uses the X Shape `ShapeInput` region. If the running backend cannot provide a safe native input region, EdgePilot deliberately hides the edge surface rather than leave a large transparent topmost rectangle capable of blocking the desktop.
 
 ## Settings and recovery
 

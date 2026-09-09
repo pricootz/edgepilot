@@ -57,6 +57,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Linux input-region runtime dependency
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0
+          ldconfig -p | grep -F 'libxcb-shape.so.0'
+
       - name: Verify vector brand assets
         if: runner.os == 'Linux'
         shell: bash
@@ -70,6 +78,9 @@ jobs:
 
       - name: Notch UX regression checks
         run: dotnet run --project tests/EdgePilot.UxChecks --configuration Release
+
+      - name: Input-region regression checks
+        run: dotnet run --project tests/EdgePilot.InputChecks --configuration Release
 
       - name: Localization regression checks
         run: dotnet run --project tests/EdgePilot.LocalizationChecks --configuration Release
@@ -89,7 +100,7 @@ jobs:
           $exe = (Resolve-Path dist/EdgePilot/EdgePilot.exe).Path
           $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
           Start-Sleep -Milliseconds 1500
-          if ($smoke.HasExited) { throw 'Primary instance exited prematurely.' }
+          if ($smoke.HasExited) { throw 'Primary instance exited prematurely or native input-region initialization failed.' }
           $second = Start-Process -FilePath $exe -ArgumentList '--settings' -PassThru -WindowStyle Hidden
           if (-not $second.WaitForExit(10000)) {
             $second.Kill()
@@ -100,7 +111,7 @@ jobs:
             $smoke.Kill()
             throw 'Package smoke check timed out.'
           }
-          if ($smoke.ExitCode -ne 0) { throw "Launch failed: $($smoke.ExitCode)" }
+          if ($smoke.ExitCode -ne 0) { throw "Launch/native input-region check failed: $($smoke.ExitCode)" }
           $install = Start-Process -FilePath $exe -ArgumentList '--install' -Wait -PassThru -WindowStyle Hidden
           if ($install.ExitCode -ne 0) { throw 'Per-user installation failed.' }
           $installed = Join-Path $env:LOCALAPPDATA 'Programs/EdgePilot/EdgePilot.exe'
@@ -119,9 +130,10 @@ jobs:
           timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test &
           smoke_pid=$!
           sleep 2
-          timeout 6s dist/EdgePilot/EdgePilot --settings
+          # A new Unix session must still resolve to the same per-user EdgePilot instance.
+          timeout 6s setsid dist/EdgePilot/EdgePilot --settings
           wait "$smoke_pid"
-          dist/EdgePilot/EdgePilot --install
+          bash dist/EdgePilot/install.sh
           test -x "$HOME/.local/share/edgepilot/EdgePilot"
           test -f "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
           grep -F 'edgepilot.svg' "$HOME/.local/share/applications/io.github.pricootz.EdgePilot.desktop"
