@@ -21,8 +21,8 @@ internal sealed class MetricRing : StackPanel
     public MetricRing(string glyph, string caption)
     {
         Width = 62;
-        Height = 78;
-        Spacing = 4;
+        Height = 76;
+        Spacing = 3;
         HorizontalAlignment = HorizontalAlignment.Center;
 
         _glyph = new TextBlock
@@ -103,14 +103,24 @@ internal sealed class MetricRing : StackPanel
 
     public void SetGlyph(string glyph) => _glyph.Text = glyph;
 
-    // Recolour for a light or dark acrylic surface so the ring stays legible under both.
-    public void SetTheme(bool dark)
+    public void SetTheme(bool dark, bool translucent = false)
     {
-        _glyph.Foreground = Brush(dark ? "#F4F6F8" : "#1A1C21");
-        _value.Foreground = Brush(dark ? "#F4F6F8" : "#1A1C21");
-        _label.Foreground = Brush(dark ? "#777F8C" : "#55585E");
-        _progress.Stroke = Brush(dark ? "#F1F4F7" : "#3A3D42");
-        _track.Stroke = Brush(dark ? "#323741" : "#C9CDD4");
+        if (dark)
+        {
+            _glyph.Foreground = Brush("#F7F8FA");
+            _value.Foreground = Brush("#F7F8FA");
+            _label.Foreground = Brush(translucent ? "#D4DAE3" : "#777F8C");
+            _progress.Stroke = Brush("#F2F4F7");
+            _track.Stroke = Brush(translucent ? "#444B56" : "#323741");
+        }
+        else
+        {
+            _glyph.Foreground = Brush("#15171B");
+            _value.Foreground = Brush("#15171B");
+            _label.Foreground = Brush(translucent ? "#3F434A" : "#55585E");
+            _progress.Stroke = Brush("#2A2D32");
+            _track.Stroke = Brush(translucent ? "#B9BEC7" : "#C9CDD4");
+        }
     }
 
     public void SetCaption(string caption) => _label.Text = caption;
