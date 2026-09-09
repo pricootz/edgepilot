@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Styling;
 
 namespace EdgePilot.UI;
@@ -23,9 +24,28 @@ public abstract class GlassWindow : Window
             SettingsThemePreference.Dark => ThemeVariant.Dark,
             _ => ThemeVariant.Default
         };
-        TransparencyLevelHint = Glass.WindowHint(backdrop);
-        Background = Glass.WindowBackground(backdrop, Glass.ResolveDark(theme));
-        PaintChrome(Glass.Palette(backdrop, Glass.ResolveDark(theme)));
+
+        var effectiveBackdrop = SettingsBackdropSupport.Coerce(backdrop);
+        var dark = Glass.ResolveDark(theme);
+        TransparencyLevelHint = Glass.WindowHint(effectiveBackdrop);
+        Background = Glass.WindowBackground(effectiveBackdrop, dark);
+
+        // ClearType/subpixel AA assumes an opaque RGB background. On Acrylic the pixels behind
+        // the glyphs are continuously changing, which can produce the coloured/doubled fringe
+        // visible in dark Settings. Use grayscale AA + strong hinting only for Acrylic, and
+        // restore platform defaults for Flat/Mica.
+        if (Content is Control root)
+        {
+            var acrylic = effectiveBackdrop == SettingsBackdrop.Acrylic;
+            TextOptions.SetTextRenderingMode(root,
+                acrylic ? TextRenderingMode.Antialias : TextRenderingMode.Unspecified);
+            TextOptions.SetTextHintingMode(root,
+                acrylic ? TextHintingMode.Strong : TextHintingMode.Unspecified);
+            TextOptions.SetBaselinePixelAlignment(root,
+                acrylic ? BaselinePixelAlignment.Aligned : BaselinePixelAlignment.Unspecified);
+        }
+
+        PaintChrome(Glass.Palette(effectiveBackdrop, dark));
     }
 
     // Paint this screen's own elements from the resolved palette.
