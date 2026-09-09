@@ -39,6 +39,19 @@ internal static class NotchShape
 {
     public const double W = 180, H = 620, Depth = 92, Length = 430, Corner = 20, Flare = 24;
 
+    // Content lives inside a deliberate safe area instead of being positioned from the HWND.
+    // The visible vertical body is 382 DIP high; 4 x 76 DIP metric cells + 3 x 10 DIP gaps
+    // consume 334 DIP, leaving an exact 24 DIP optical margin above and below.
+    public const double ContentSidePadding = 12;
+    public const double MetricCellHeight = 76;
+    public const double MetricGap = 10;
+    public const double MetricStackHeight = MetricCellHeight * 4 + MetricGap * 3;
+    public static double BodyTop => (H - Length) / 2 + Flare;
+    public static double BodyBottom => (H + Length) / 2 - Flare;
+    public static double ContentWidth => Depth - ContentSidePadding * 2;
+    public static double ContentLeft => W - Depth + ContentSidePadding;
+    public static double ContentTop => BodyTop + (BodyBottom - BodyTop - MetricStackHeight) / 2;
+
     public static Geometry Build()
     {
         var top = (H - Length) / 2;
@@ -171,13 +184,19 @@ internal sealed class VisualNotchWindow : Window
         TextOptions.SetTextHintingMode(canvas, TextHintingMode.Strong);
         TextOptions.SetBaselinePixelAlignment(canvas, BaselinePixelAlignment.Aligned);
 
-        var stack = new StackPanel { Width = 92, Spacing = 16, HorizontalAlignment = HorizontalAlignment.Center };
+        var stack = new StackPanel
+        {
+            Width = NotchShape.ContentWidth,
+            Height = NotchShape.MetricStackHeight,
+            Spacing = NotchShape.MetricGap,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
         stack.Children.Add(Metric("C", "4%", "CPU"));
         stack.Children.Add(Metric("M", "47%", "RAM"));
         stack.Children.Add(Metric("D", "81%", "DISCO"));
         stack.Children.Add(Metric("↕", "SÌ", "RETE"));
-        Canvas.SetLeft(stack, NotchShape.W - NotchShape.Depth - 2);
-        Canvas.SetTop(stack, (NotchShape.H - 4 * 84 - 3 * 16) / 2);
+        Canvas.SetLeft(stack, NotchShape.ContentLeft);
+        Canvas.SetTop(stack, NotchShape.ContentTop);
         canvas.Children.Add(stack);
 
         status = new TextBlock { Text = mode, FontSize = 7, FontWeight = FontWeight.SemiBold,
@@ -198,9 +217,13 @@ internal sealed class VisualNotchWindow : Window
             Child = new TextBlock { Text = glyph, FontSize = 16, FontWeight = FontWeight.SemiBold,
                 Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         };
-        return new StackPanel
+
+        var content = new StackPanel
         {
-            Width = 92, Spacing = 3, HorizontalAlignment = HorizontalAlignment.Center,
+            Width = NotchShape.ContentWidth,
+            Spacing = 2,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Children =
             {
                 ring,
@@ -208,6 +231,16 @@ internal sealed class VisualNotchWindow : Window
                 new TextBlock { Text = caption, FontSize = 8, FontWeight = FontWeight.SemiBold,
                     Foreground = new SolidColorBrush(Color.Parse("#D4DAE3")), HorizontalAlignment = HorizontalAlignment.Center }
             }
+        };
+
+        return new Border
+        {
+            Width = NotchShape.ContentWidth,
+            Height = NotchShape.MetricCellHeight,
+            Background = Brushes.Transparent,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = content
         };
     }
 }
