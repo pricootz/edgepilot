@@ -39,28 +39,30 @@ internal static class Glass
         _ => [WindowTransparencyLevel.None]
     };
 
-    // Keep Arnie's live Acrylic character, but give dark Settings a restrained base veil so
-    // wallpaper detail cannot fight the text. The notch does not use this full-window base,
-    // so its Acrylic remains noticeably lighter and more transparent.
+    // Full-window Acrylic needs a stronger dark scrim than the notch. The native backdrop still
+    // remains visible, but wallpaper detail must not compete with small settings text.
     public static IBrush WindowBackground(SettingsBackdrop backdrop, bool dark) => Effective(backdrop) switch
     {
         SettingsBackdrop.Mica => Brushes.Transparent,
-        SettingsBackdrop.Acrylic => AcrylicBase(dark),
+        SettingsBackdrop.Acrylic => SettingsAcrylicBase(dark),
         _ => new SolidColorBrush(Color.Parse(dark ? "#121212" : "#F4F4F5"))
     };
 
-    // Everything a screen paints onto: panels, cards, separators and muted text.
+    // Everything a full-window screen paints onto: panels, cards, separators and muted text.
+    // Acrylic uses settings-specific dark layers here. The notch has its own NotchMaterials and
+    // the tooltip can continue using AcrylicCard, so changing Settings cannot regress the notch.
     public static GlassPalette Palette(SettingsBackdrop backdrop, bool dark)
     {
         backdrop = Effective(backdrop);
         var glass = backdrop != SettingsBackdrop.Flat;
         var mica = backdrop == SettingsBackdrop.Mica;
+        var acrylic = backdrop == SettingsBackdrop.Acrylic;
         return new GlassPalette(glass, mica, dark,
             Panel: glass
-                ? (mica ? Brushes.Transparent : AcrylicPanel(dark))
+                ? (mica ? Brushes.Transparent : SettingsAcrylicPanel(dark))
                 : new SolidColorBrush(Color.Parse(dark ? "#151515" : "#FFFFFF")),
             Card: glass
-                ? (mica ? MicaCard(dark) : AcrylicCard(dark))
+                ? (mica ? MicaCard(dark) : SettingsAcrylicCard(dark))
                 : new SolidColorBrush(Color.Parse(dark ? "#191919" : "#FFFFFF")),
             CardBorder: glass
                 ? (mica ? MicaCardStroke(dark) : EdgeBrush(dark))
@@ -69,7 +71,7 @@ internal static class Glass
             Line: mica ? MicaCardStroke(dark)
                 : glass ? GlassLine(dark) : new SolidColorBrush(Color.Parse(dark ? "#2C2C2C" : "#DDDDDF")),
             MutedForeground: dark
-                ? (backdrop == SettingsBackdrop.Acrylic ? Lighten(Color.Parse("#8D9096"), 0.38) : Color.Parse("#8D9096"))
+                ? (acrylic ? Color.Parse("#C8CDD5") : Color.Parse("#8D9096"))
                 : glass ? Color.Parse("#44474D") : Color.Parse("#8D9096"));
     }
 
@@ -101,11 +103,20 @@ internal static class Glass
             }
         };
 
-    // Acrylic Dark deliberately uses a split material stack:
-    // - the full Settings window receives a mild black base veil;
-    // - panels add only a little more stability;
-    // - cards stay close to Arnie's original transparency.
-    // The notch uses AcrylicCard directly, so it remains live/frosted instead of becoming opaque.
+    // Full-window Settings Acrylic. Dark mode intentionally uses a layered graphite scrim:
+    // base 44%, panels 53%, cards 66%. Because each value is a brush alpha (not Control.Opacity),
+    // text remains fully opaque and is never blurred together with its parent surface.
+    private static IBrush SettingsAcrylicBase(bool dark) => new SolidColorBrush(
+        dark ? Color.FromArgb(0x70, 8, 11, 15) : Color.FromArgb(0x8C, 255, 255, 255));
+
+    private static IBrush SettingsAcrylicPanel(bool dark) => new SolidColorBrush(
+        dark ? Color.FromArgb(0x86, 11, 14, 18) : Color.FromArgb(0x7A, 255, 255, 255));
+
+    private static IBrush SettingsAcrylicCard(bool dark) => new SolidColorBrush(
+        dark ? Color.FromArgb(0xA8, 15, 18, 23) : Color.FromArgb(0x59, 255, 255, 255));
+
+    // Legacy/local Acrylic brushes remain intentionally lighter. They are used outside the
+    // rectangular Settings shell (for example tooltip styling), where a heavy scrim is unwanted.
     public static IBrush AcrylicBase(bool dark = true) =>
         dark ? new SolidColorBrush(Color.FromArgb(0x24, 0, 0, 0))
              : new SolidColorBrush(Color.FromArgb(0x8C, 255, 255, 255));
