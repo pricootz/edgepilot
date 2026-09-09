@@ -18,12 +18,8 @@ internal static class Program
     public static void Main(string[] args)
     {
         Mode = args.FirstOrDefault()?.Trim().ToLowerInvariant() ?? "flat";
-        if (Mode is not ("flat" or "mica" or "acrylic"))
-            Mode = "flat";
-
-        AppBuilder.Configure<ProbeApp>()
-            .UsePlatformDetect()
-            .LogToTrace()
+        if (Mode is not ("flat" or "mica" or "acrylic")) Mode = "flat";
+        AppBuilder.Configure<ProbeApp>().UsePlatformDetect().LogToTrace()
             .StartWithClassicDesktopLifetime(args);
     }
 }
@@ -31,7 +27,6 @@ internal static class Program
 internal sealed class ProbeApp : Application
 {
     public override void Initialize() => Styles.Add(new FluentTheme());
-
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -42,13 +37,7 @@ internal sealed class ProbeApp : Application
 
 internal static class NotchShape
 {
-    // Intentionally identical to the approved flat probe geometry.
-    public const double W = 180;
-    public const double H = 620;
-    public const double Depth = 92;
-    public const double Length = 430;
-    public const double Corner = 20;
-    public const double Flare = 24;
+    public const double W = 180, H = 620, Depth = 92, Length = 430, Corner = 20, Flare = 24;
 
     public static Geometry Build()
     {
@@ -58,24 +47,19 @@ internal static class NotchShape
         var left = right - Depth;
         var bodyTop = top + Flare;
         var bodyBottom = bottom - Flare;
-
-        var geometry = new StreamGeometry();
-        using var ctx = geometry.Open();
-        ctx.BeginFigure(new Point(right, top), true);
-        ctx.ArcTo(new Point(right - Flare, bodyTop), new Size(Flare, Flare),
-            0, false, SweepDirection.Clockwise, true);
-        ctx.LineTo(new Point(left + Corner, bodyTop), true);
-        ctx.ArcTo(new Point(left, bodyTop + Corner), new Size(Corner, Corner),
-            0, false, SweepDirection.CounterClockwise, true);
-        ctx.LineTo(new Point(left, bodyBottom - Corner), true);
-        ctx.ArcTo(new Point(left + Corner, bodyBottom), new Size(Corner, Corner),
-            0, false, SweepDirection.CounterClockwise, true);
-        ctx.LineTo(new Point(right - Flare, bodyBottom), true);
-        ctx.ArcTo(new Point(right, bottom), new Size(Flare, Flare),
-            0, false, SweepDirection.Clockwise, true);
-        ctx.LineTo(new Point(right, top), true);
-        ctx.EndFigure(true);
-        return geometry;
+        var g = new StreamGeometry();
+        using var c = g.Open();
+        c.BeginFigure(new Point(right, top), true);
+        c.ArcTo(new Point(right - Flare, bodyTop), new Size(Flare, Flare), 0, false, SweepDirection.Clockwise, true);
+        c.LineTo(new Point(left + Corner, bodyTop), true);
+        c.ArcTo(new Point(left, bodyTop + Corner), new Size(Corner, Corner), 0, false, SweepDirection.CounterClockwise, true);
+        c.LineTo(new Point(left, bodyBottom - Corner), true);
+        c.ArcTo(new Point(left + Corner, bodyBottom), new Size(Corner, Corner), 0, false, SweepDirection.CounterClockwise, true);
+        c.LineTo(new Point(right - Flare, bodyBottom), true);
+        c.ArcTo(new Point(right, bottom), new Size(Flare, Flare), 0, false, SweepDirection.Clockwise, true);
+        c.LineTo(new Point(right, top), true);
+        c.EndFigure(true);
+        return g;
     }
 
     public static double LeftAt(double y)
@@ -86,35 +70,27 @@ internal static class NotchShape
         var left = right - Depth;
         var bodyTop = top + Flare;
         var bodyBottom = bottom - Flare;
-
         y = Math.Clamp(y, top, bottom);
-
         if (y < bodyTop)
         {
             var dy = y - top;
             return right - Flare + Math.Sqrt(Math.Max(0, Flare * Flare - dy * dy));
         }
-
         if (y < bodyTop + Corner)
         {
-            var centerY = bodyTop + Corner;
-            var dy = y - centerY;
+            var dy = y - (bodyTop + Corner);
             return left + Corner - Math.Sqrt(Math.Max(0, Corner * Corner - dy * dy));
         }
-
         if (y > bodyBottom - Corner && y <= bodyBottom)
         {
-            var centerY = bodyBottom - Corner;
-            var dy = y - centerY;
+            var dy = y - (bodyBottom - Corner);
             return left + Corner - Math.Sqrt(Math.Max(0, Corner * Corner - dy * dy));
         }
-
         if (y > bodyBottom)
         {
             var dy = y - bottom;
             return right - Flare + Math.Sqrt(Math.Max(0, Flare * Flare - dy * dy));
         }
-
         return left;
     }
 }
@@ -126,15 +102,10 @@ internal sealed class VisualNotchWindow : Window
 
     public VisualNotchWindow(string mode)
     {
-        Width = NotchShape.W;
-        Height = NotchShape.H;
-        CanResize = false;
-        WindowDecorations = WindowDecorations.None;
-        ShowInTaskbar = false;
-        Topmost = true;
-        ShowActivated = false;
-        Background = Brushes.Transparent;
-        TransparencyBackgroundFallback = Brushes.Transparent;
+        Width = NotchShape.W; Height = NotchShape.H;
+        CanResize = false; WindowDecorations = WindowDecorations.None;
+        ShowInTaskbar = false; Topmost = true; ShowActivated = false;
+        Background = Brushes.Transparent; TransparencyBackgroundFallback = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         RequestedThemeVariant = ThemeVariant.Dark;
 
@@ -146,32 +117,15 @@ internal sealed class VisualNotchWindow : Window
         Opened += (_, _) =>
         {
             PlaceAtRightEdge();
-
-            if (!OperatingSystem.IsWindows())
-            {
-                _status.Text = "Windows-only probe";
-                return;
-            }
-
+            if (!OperatingSystem.IsWindows()) { _status.Text = "Windows-only"; return; }
             var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
             if (hwnd == IntPtr.Zero || !Win32.MakeLayeredClickThrough(hwnd))
-            {
-                _status.Text = "visual click-through FAILED";
-                return;
-            }
-
-            _input = new InputOverlayWindow(this, () =>
-                _status.Text = $"notch input OK  {DateTime.Now:HH:mm:ss}");
+            { _status.Text = "visual click-through FAILED"; return; }
+            _input = new InputOverlayWindow(this, () => _status.Text = $"notch input OK {DateTime.Now:HH:mm:ss}");
             _input.Show();
-            _status.Text = "visual pass-through + shaped input active";
+            _status.Text = "pass-through + shaped input active";
         };
-
-        PositionChanged += (_, _) =>
-        {
-            if (_input is not null)
-                _input.Position = Position;
-        };
-
+        PositionChanged += (_, _) => { if (_input is not null) _input.Position = Position; };
         Closed += (_, _) => _input?.Close();
     }
 
@@ -179,105 +133,58 @@ internal sealed class VisualNotchWindow : Window
     {
         var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
         if (screen is null) return;
-        var area = screen.WorkingArea;
-        Position = new PixelPoint(
-            area.Right - (int)Math.Round(NotchShape.W * RenderScaling),
-            area.Y + (area.Height - (int)Math.Round(NotchShape.H * RenderScaling)) / 2);
+        var a = screen.WorkingArea;
+        Position = new PixelPoint(a.Right - (int)Math.Round(NotchShape.W * RenderScaling),
+            a.Y + (a.Height - (int)Math.Round(NotchShape.H * RenderScaling)) / 2);
     }
 
     private static void InsertMaterial(Canvas canvas, Geometry geometry, string mode)
     {
-        switch (mode)
+        if (mode == "acrylic")
         {
-            case "acrylic":
-                canvas.Children.Insert(0, new ExperimentalAcrylicBorder
+            canvas.Children.Insert(0, new ExperimentalAcrylicBorder
+            {
+                Width = NotchShape.W, Height = NotchShape.H, Clip = geometry,
+                IsHitTestVisible = false,
+                Material = new ExperimentalAcrylicMaterial
                 {
-                    Width = NotchShape.W,
-                    Height = NotchShape.H,
-                    Clip = geometry,
-                    IsHitTestVisible = false,
-                    Material = new ExperimentalAcrylicMaterial
-                    {
-                        BackgroundSource = AcrylicBackgroundSource.Digger,
-                        TintColor = Color.Parse("#090B0F"),
-                        TintOpacity = 0.50,
-                        MaterialOpacity = 0.30,
-                        FallbackColor = Color.Parse("#24272D")
-                    }
-                });
-                canvas.Children.Insert(1, ShapePath(geometry,
-                    Color.FromArgb(0x18, 0, 0, 0),
-                    Color.FromArgb(0x90, 255, 255, 255)));
-                break;
-
-            case "mica":
-                // Local Mica-like treatment: same geometry as Flat, no native HWND backdrop.
-                canvas.Children.Insert(0, ShapePath(geometry,
-                    Color.Parse("#CC2B2D31"),
-                    Color.FromArgb(0x72, 255, 255, 255)));
-                break;
-
-            default:
-                canvas.Children.Insert(0, ShapePath(geometry,
-                    Color.Parse("#050608"),
-                    Color.FromArgb(0x30, 255, 255, 255)));
-                break;
+                    BackgroundSource = AcrylicBackgroundSource.Digger,
+                    TintColor = Color.Parse("#090B0F"), TintOpacity = 0.50,
+                    MaterialOpacity = 0.30, FallbackColor = Color.Parse("#24272D")
+                }
+            });
+            canvas.Children.Insert(1, Shape(geometry, Color.FromArgb(0x18, 0, 0, 0), Color.FromArgb(0x90, 255, 255, 255)));
         }
+        else if (mode == "mica")
+            canvas.Children.Insert(0, Shape(geometry, Color.Parse("#CC2B2D31"), Color.FromArgb(0x72, 255, 255, 255)));
+        else
+            canvas.Children.Insert(0, Shape(geometry, Color.Parse("#050608"), Color.FromArgb(0x30, 255, 255, 255)));
     }
 
-    private static Path ShapePath(Geometry geometry, Color fill, Color stroke) => new()
-    {
-        Data = geometry,
-        Fill = new SolidColorBrush(fill),
-        Stroke = new SolidColorBrush(stroke),
-        StrokeThickness = 1,
-        IsHitTestVisible = false
-    };
+    private static Path Shape(Geometry g, Color fill, Color stroke) => new()
+    { Data = g, Fill = new SolidColorBrush(fill), Stroke = new SolidColorBrush(stroke), StrokeThickness = 1, IsHitTestVisible = false };
 
     private static Canvas BuildContent(Geometry geometry, string mode, out TextBlock status)
     {
-        var canvas = new Canvas
-        {
-            Width = NotchShape.W,
-            Height = NotchShape.H,
-            Background = Brushes.Transparent,
-            Clip = geometry
-        };
-
-        // Transparent/composited surfaces should not use RGB subpixel AA: grayscale avoids
-        // colored fringes and the "moving/blurred" text appearance over Acrylic.
+        var canvas = new Canvas { Width = NotchShape.W, Height = NotchShape.H, Background = Brushes.Transparent, Clip = geometry };
         TextOptions.SetTextRenderingMode(canvas, TextRenderingMode.Antialias);
-        TextOptions.SetTextHintingMode(canvas, TextHintingMode.Full);
+        TextOptions.SetTextHintingMode(canvas, TextHintingMode.Strong);
         TextOptions.SetBaselinePixelAlignment(canvas, BaselinePixelAlignment.Aligned);
 
-        var stack = new StackPanel
-        {
-            Width = 92,
-            Spacing = 16,
-            HorizontalAlignment = HorizontalAlignment.Center
-        };
-
+        var stack = new StackPanel { Width = 92, Spacing = 16, HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(Metric("C", "4%", "CPU"));
         stack.Children.Add(Metric("M", "47%", "RAM"));
         stack.Children.Add(Metric("D", "81%", "DISCO"));
         stack.Children.Add(Metric("↕", "SÌ", "RETE"));
-
         Canvas.SetLeft(stack, NotchShape.W - NotchShape.Depth - 2);
         Canvas.SetTop(stack, (NotchShape.H - 4 * 84 - 3 * 16) / 2);
         canvas.Children.Add(stack);
 
-        status = new TextBlock
-        {
-            Text = mode,
-            FontSize = 7,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.Parse("#FFB071")),
-            IsHitTestVisible = false
-        };
+        status = new TextBlock { Text = mode, FontSize = 7, FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.Parse("#FFB071")), IsHitTestVisible = false };
         Canvas.SetLeft(status, NotchShape.W - NotchShape.Depth + 8);
         Canvas.SetTop(status, (NotchShape.H + NotchShape.Length) / 2 - 20);
         canvas.Children.Add(status);
-
         return canvas;
     }
 
@@ -285,48 +192,21 @@ internal sealed class VisualNotchWindow : Window
     {
         var ring = new Border
         {
-            Width = 46,
-            Height = 46,
-            CornerRadius = new CornerRadius(23),
-            BorderThickness = new Thickness(3),
-            BorderBrush = new SolidColorBrush(Color.Parse("#F2F4F7")),
-            Background = new SolidColorBrush(Color.FromArgb(0x28, 0, 0, 0)),
+            Width = 46, Height = 46, CornerRadius = new CornerRadius(23), BorderThickness = new Thickness(3),
+            BorderBrush = new SolidColorBrush(Color.Parse("#F2F4F7")), Background = new SolidColorBrush(Color.FromArgb(0x28, 0, 0, 0)),
             HorizontalAlignment = HorizontalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = glyph,
-                FontSize = 16,
-                FontWeight = FontWeight.SemiBold,
-                Foreground = Brushes.White,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            }
+            Child = new TextBlock { Text = glyph, FontSize = 16, FontWeight = FontWeight.SemiBold,
+                Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         };
-
         return new StackPanel
         {
-            Width = 92,
-            Spacing = 3,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            Width = 92, Spacing = 3, HorizontalAlignment = HorizontalAlignment.Center,
             Children =
             {
                 ring,
-                new TextBlock
-                {
-                    Text = value,
-                    FontSize = 12,
-                    FontWeight = FontWeight.Bold,
-                    Foreground = Brushes.White,
-                    HorizontalAlignment = HorizontalAlignment.Center
-                },
-                new TextBlock
-                {
-                    Text = caption,
-                    FontSize = 8,
-                    FontWeight = FontWeight.SemiBold,
-                    Foreground = new SolidColorBrush(Color.Parse("#D4DAE3")),
-                    HorizontalAlignment = HorizontalAlignment.Center
-                }
+                new TextBlock { Text = value, FontSize = 12, FontWeight = FontWeight.Bold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center },
+                new TextBlock { Text = caption, FontSize = 8, FontWeight = FontWeight.SemiBold,
+                    Foreground = new SolidColorBrush(Color.Parse("#D4DAE3")), HorizontalAlignment = HorizontalAlignment.Center }
             }
         };
     }
@@ -336,39 +216,20 @@ internal sealed class InputOverlayWindow : Window
 {
     private readonly VisualNotchWindow _visual;
     private readonly Action _clicked;
-
     public InputOverlayWindow(VisualNotchWindow visual, Action clicked)
     {
-        _visual = visual;
-        _clicked = clicked;
-
-        Width = NotchShape.W;
-        Height = NotchShape.H;
-        CanResize = false;
-        WindowDecorations = WindowDecorations.None;
-        ShowInTaskbar = false;
-        Topmost = true;
-        ShowActivated = false;
-        Background = Brushes.Transparent;
-        TransparencyBackgroundFallback = Brushes.Transparent;
-        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
-        Opacity = 0.001;
-        Content = new Canvas { Background = Brushes.Transparent };
-
-        Opened += (_, _) =>
-        {
-            Position = _visual.Position;
-            ApplyInputRegion();
-        };
-
+        _visual = visual; _clicked = clicked;
+        Width = NotchShape.W; Height = NotchShape.H;
+        CanResize = false; WindowDecorations = WindowDecorations.None; ShowInTaskbar = false;
+        Topmost = true; ShowActivated = false; Background = Brushes.Transparent;
+        TransparencyBackgroundFallback = Brushes.Transparent; TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+        Opacity = 0.001; Content = new Canvas { Background = Brushes.Transparent };
+        Opened += (_, _) => { Position = _visual.Position; ApplyInputRegion(); };
         PointerPressed += (_, e) =>
         {
             var p = e.GetCurrentPoint(this);
             if (p.Properties.IsLeftButtonPressed || p.Properties.IsRightButtonPressed)
-            {
-                _clicked();
-                e.Handled = true;
-            }
+            { _clicked(); e.Handled = true; }
         };
     }
 
@@ -377,86 +238,52 @@ internal sealed class InputOverlayWindow : Window
         if (!OperatingSystem.IsWindows()) return;
         var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (hwnd == IntPtr.Zero) return;
-
-        var scaling = RenderScaling <= 0 ? 1 : RenderScaling;
-        var topPx = (int)Math.Ceiling(((NotchShape.H - NotchShape.Length) / 2) * scaling);
-        var bottomPx = (int)Math.Floor(((NotchShape.H + NotchShape.Length) / 2) * scaling);
-        var rightPx = (int)Math.Ceiling(NotchShape.W * scaling);
-
+        var s = RenderScaling <= 0 ? 1 : RenderScaling;
+        var top = (int)Math.Ceiling(((NotchShape.H - NotchShape.Length) / 2) * s);
+        var bottom = (int)Math.Floor(((NotchShape.H + NotchShape.Length) / 2) * s);
+        var right = (int)Math.Ceiling(NotchShape.W * s);
         var region = Win32.CreateRectRgn(0, 0, 0, 0);
         if (region == IntPtr.Zero) return;
         var success = false;
-
         try
         {
-            for (var yPx = topPx; yPx < bottomPx; yPx++)
+            for (var y = top; y < bottom; y++)
             {
-                var yDip = (yPx + 0.5) / scaling;
-                var leftPx = (int)Math.Ceiling(NotchShape.LeftAt(yDip) * scaling);
-                if (leftPx >= rightPx) continue;
-
-                var strip = Win32.CreateRectRgn(leftPx, yPx, rightPx, yPx + 1);
+                var yDip = (y + 0.5) / s;
+                var left = (int)Math.Ceiling(NotchShape.LeftAt(yDip) * s);
+                if (left >= right) continue;
+                var strip = Win32.CreateRectRgn(left, y, right, y + 1);
                 if (strip == IntPtr.Zero) continue;
                 try { _ = Win32.CombineRgn(region, region, strip, 2); }
                 finally { _ = Win32.DeleteObject(strip); }
             }
-
             success = Win32.SetWindowRgn(hwnd, region, true) != 0;
         }
-        finally
-        {
-            if (!success)
-                _ = Win32.DeleteObject(region);
-        }
+        finally { if (!success) _ = Win32.DeleteObject(region); }
     }
 }
 
 internal static class Win32
 {
     private const int GwlExStyle = -20;
-    private const long WsExTransparent = 0x00000020L;
-    private const long WsExLayered = 0x00080000L;
-    private const long WsExNoActivate = 0x08000000L;
-    private const uint SwpNoSize = 0x0001;
-    private const uint SwpNoMove = 0x0002;
-    private const uint SwpNoZOrder = 0x0004;
-    private const uint SwpFrameChanged = 0x0020;
+    private const long WsExTransparent = 0x20L, WsExLayered = 0x80000L, WsExNoActivate = 0x08000000L;
+    private const uint SwpNoSize = 0x1, SwpNoMove = 0x2, SwpNoZOrder = 0x4, SwpFrameChanged = 0x20;
 
     public static bool MakeLayeredClickThrough(IntPtr hwnd)
     {
         var current = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
         var desired = current | WsExLayered | WsExTransparent | WsExNoActivate;
         _ = SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(desired));
-        _ = SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
-            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
-
+        _ = SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
         var verify = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
-        return (verify & WsExLayered) != 0 &&
-               (verify & WsExTransparent) != 0 &&
-               (verify & WsExNoActivate) != 0;
+        return (verify & WsExLayered) != 0 && (verify & WsExTransparent) != 0 && (verify & WsExNoActivate) != 0;
     }
 
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
-
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-        int x, int y, int cx, int cy, uint flags);
-
-    [DllImport("gdi32.dll")]
-    internal static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
-
-    [DllImport("gdi32.dll")]
-    internal static extern int CombineRgn(IntPtr dest, IntPtr src1, IntPtr src2, int mode);
-
-    [DllImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool DeleteObject(IntPtr obj);
-
-    [DllImport("user32.dll")]
-    internal static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool redraw);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("gdi32.dll")] internal static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] internal static extern int CombineRgn(IntPtr dest, IntPtr src1, IntPtr src2, int mode);
+    [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool DeleteObject(IntPtr obj);
+    [DllImport("user32.dll")] internal static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool redraw);
 }
