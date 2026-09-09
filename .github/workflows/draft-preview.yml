@@ -46,7 +46,10 @@ jobs:
           cd ..
           tag=v0.1.0-preview.1
           if state=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
-            test "$state" = true || { echo 'Refusing to modify a published release.'; exit 1; }
+            if [ "$state" != true ]; then
+              echo "Release $tag is already published; artifacts verified, skipping draft refresh."
+              exit 0
+            fi
             gh release edit "$tag" --draft --prerelease --target "$RELEASE_SHA" --notes-file docs/releases/v0.1.0-preview.1.md
           else
             gh release create "$tag" --draft --prerelease --target "$RELEASE_SHA" --title "EdgePilot $tag" --notes-file docs/releases/v0.1.0-preview.1.md
