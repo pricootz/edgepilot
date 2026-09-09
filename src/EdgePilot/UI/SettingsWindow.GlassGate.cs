@@ -5,8 +5,12 @@ public sealed partial class SettingsWindow
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
-        // The PR originally exposed the selector on every Windows version. The adapted
-        // integration keeps the option strictly Windows 11+, matching the feature contract.
-        _surfaceCard.IsVisible = SettingsBackdropSupport.IsSupported;
+
+        // Surface availability is per-backdrop:
+        // Windows 10 1803+ gets Flat + Acrylic; Windows 11 also gets Mica.
+        _surfaceCard.IsVisible = SettingsBackdropSupport.HasSurfaceChoices;
+        _backdropButtons[(int)SettingsBackdrop.Flat].IsVisible = true;
+        _backdropButtons[(int)SettingsBackdrop.Mica].IsVisible = SettingsBackdropSupport.IsMicaSupported;
+        _backdropButtons[(int)SettingsBackdrop.Acrylic].IsVisible = SettingsBackdropSupport.IsAcrylicSupported;
     }
 }
