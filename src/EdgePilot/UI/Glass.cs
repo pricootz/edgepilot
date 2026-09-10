@@ -39,8 +39,9 @@ internal static class Glass
         _ => [WindowTransparencyLevel.None]
     };
 
-    // Full-window Acrylic needs a stronger dark scrim than the notch. The native backdrop still
-    // remains visible, but wallpaper detail must not compete with small settings text.
+    // Rectangular Settings windows can use the real OS backdrop. Acrylic therefore keeps only a
+    // restrained tint here; the native blur remains the dominant material instead of being buried
+    // under a nearly opaque graphite layer.
     public static IBrush WindowBackground(SettingsBackdrop backdrop, bool dark) => Effective(backdrop) switch
     {
         SettingsBackdrop.Mica => Brushes.Transparent,
@@ -49,8 +50,8 @@ internal static class Glass
     };
 
     // Everything a full-window screen paints onto: panels, cards, separators and muted text.
-    // Acrylic uses settings-specific dark layers here. The notch has its own NotchMaterials and
-    // the tooltip can continue using AcrylicCard, so changing Settings cannot regress the notch.
+    // Acrylic uses Settings-only layers here. The notch owns an independent NotchMaterials stack,
+    // so tuning this palette cannot alter its approved geometry or material.
     public static GlassPalette Palette(SettingsBackdrop backdrop, bool dark)
     {
         backdrop = Effective(backdrop);
@@ -71,7 +72,7 @@ internal static class Glass
             Line: mica ? MicaCardStroke(dark)
                 : glass ? GlassLine(dark) : new SolidColorBrush(Color.Parse(dark ? "#2C2C2C" : "#DDDDDF")),
             MutedForeground: dark
-                ? (acrylic ? Color.Parse("#C8CDD5") : Color.Parse("#8D9096"))
+                ? (acrylic ? Color.Parse("#D4D8DF") : Color.Parse("#8D9096"))
                 : glass ? Color.Parse("#44474D") : Color.Parse("#8D9096"));
     }
 
@@ -103,17 +104,18 @@ internal static class Glass
             }
         };
 
-    // Full-window Settings Acrylic. Dark mode intentionally uses a layered graphite scrim:
-    // base 44%, panels 53%, cards 66%. Because each value is a brush alpha (not Control.Opacity),
-    // text remains fully opaque and is never blurred together with its parent surface.
+    // Full-window Settings Acrylic: native Acrylic first, dark chrome second.
+    // Dark mode uses roughly 6% base tint, 17% panel tint and 33% card tint. These are brush
+    // alpha values, never Control.Opacity, so the real backdrop remains visible while glyphs stay
+    // fully opaque and benefit from the Acrylic-specific grayscale text rendering in GlassWindow.
     private static IBrush SettingsAcrylicBase(bool dark) => new SolidColorBrush(
-        dark ? Color.FromArgb(0x70, 8, 11, 15) : Color.FromArgb(0x8C, 255, 255, 255));
+        dark ? Color.FromArgb(0x10, 7, 10, 15) : Color.FromArgb(0x8C, 255, 255, 255));
 
     private static IBrush SettingsAcrylicPanel(bool dark) => new SolidColorBrush(
-        dark ? Color.FromArgb(0x86, 11, 14, 18) : Color.FromArgb(0x7A, 255, 255, 255));
+        dark ? Color.FromArgb(0x2C, 9, 13, 19) : Color.FromArgb(0x7A, 255, 255, 255));
 
     private static IBrush SettingsAcrylicCard(bool dark) => new SolidColorBrush(
-        dark ? Color.FromArgb(0xA8, 15, 18, 23) : Color.FromArgb(0x59, 255, 255, 255));
+        dark ? Color.FromArgb(0x54, 13, 17, 24) : Color.FromArgb(0x59, 255, 255, 255));
 
     // Legacy/local Acrylic brushes remain intentionally lighter. They are used outside the
     // rectangular Settings shell (for example tooltip styling), where a heavy scrim is unwanted.
