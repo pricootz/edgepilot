@@ -22,11 +22,11 @@ jobs:
       group: preview-draft
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -44,14 +44,30 @@ jobs:
           sha256sum -c EdgePilot-win-x64.sha256
           sha256sum -c EdgePilot-linux-x64.sha256
           cd ..
-          tag=v0.1.0-preview.1
+
+          version=$(python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('src/EdgePilot/EdgePilot.csproj').getroot()
+          node = root.find('.//Version')
+          if node is None or not (node.text or '').strip():
+              raise SystemExit('EdgePilot.csproj does not contain a Version value')
+          print(node.text.strip())
+          PY
+          )
+          tag="v${version}"
+          notes="docs/releases/${tag}.md"
+          if [ ! -f "$notes" ]; then
+            echo "Missing release notes for $tag: $notes" >&2
+            exit 1
+          fi
+
           if state=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
             if [ "$state" != true ]; then
               echo "Release $tag is already published; artifacts verified, skipping draft refresh."
               exit 0
             fi
-            gh release edit "$tag" --draft --prerelease --target "$RELEASE_SHA" --notes-file docs/releases/v0.1.0-preview.1.md
+            gh release edit "$tag" --draft --prerelease --target "$RELEASE_SHA" --notes-file "$notes"
           else
-            gh release create "$tag" --draft --prerelease --target "$RELEASE_SHA" --title "EdgePilot $tag" --notes-file docs/releases/v0.1.0-preview.1.md
+            gh release create "$tag" --draft --prerelease --target "$RELEASE_SHA" --title "EdgePilot $tag" --notes-file "$notes"
           fi
           gh release upload "$tag" release-assets/EdgePilot-win-x64.zip release-assets/EdgePilot-win-x64.sha256 release-assets/EdgePilot-linux-x64.tar.gz release-assets/EdgePilot-linux-x64.sha256 --clobber
