@@ -5,6 +5,7 @@ using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using EdgePilot.Core;
 using EdgePilot.UI;
+using EdgePilot.UI.Signals;
 using EdgePilot.Platform;
 using Avalonia.Threading;
 
@@ -16,6 +17,7 @@ public sealed class App : Application
     private NativeMenuItem? _settingsMenuItem;
     private NativeMenuItem? _toggleMenuItem;
     private NativeMenuItem? _exitMenuItem;
+    private SignalCoordinator? _signals;
 
     public override void Initialize()
     {
@@ -89,9 +91,42 @@ public sealed class App : Application
             };
             SingleInstance.Bind(() => Dispatcher.UIThread.Post(() => window.ShowSettings()));
             window.ApplyPreferences(preferences);
+
+            _signals = new SignalCoordinator(window);
+            _signals.Start();
+            window.Closed += (_, _) =>
+            {
+                _signals?.Dispose();
+                _signals = null;
+            };
+
             desktop.MainWindow = window;
             window.Opened += (_, _) =>
             {
+                var signalDemo = desktop.Args?.Contains("--signal-demo") == true ||
+                    desktop.Args?.Contains("--signal-smoke-test") == true;
+                if (signalDemo) _signals?.RunDemo();
+
+                if (desktop.Args?.Contains("--signal-smoke-test") == true)
+                {
+                    DispatcherTimer.RunOnce(() =>
+                    {
+                        if (_signals is not null && _signals.HasSafePassiveInput)
+                        {
+                            Console.WriteLine("PASS Signal passive native input routing established.");
+                            return;
+                        }
+
+                        Console.Error.WriteLine("EdgePilot Signal could not establish passive native input routing.");
+                        Environment.Exit(3);
+                    }, TimeSpan.FromSeconds(2));
+
+                    // This is a disposable CI-only process. A transient secondary Avalonia window
+                    // can keep the desktop lifetime alive after MainWindow is hidden, so end the
+                    // smoke process explicitly after the full lost -> restored demo sequence.
+                    DispatcherTimer.RunOnce(() => Environment.Exit(0), TimeSpan.FromSeconds(9));
+                }
+
                 if (desktop.Args?.Contains("--smoke-test") == true)
                 {
                     if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) && !window.HasSafePlatformInput)
@@ -105,6 +140,7 @@ public sealed class App : Application
                     // desktop-lifetime races where native/tray windows keep Xvfb alive after Shutdown().
                     DispatcherTimer.RunOnce(() => Environment.Exit(0), TimeSpan.FromSeconds(8));
                 }
+
                 if ((preferences.Mode == NotchDisplayMode.Hidden &&
                     (!window.HasTray || desktop.Args?.Contains("--autostart") != true)) || warning is not null ||
                     desktop.Args?.Contains("--settings") == true || desktop.Args?.Contains("--smoke-test") == true)

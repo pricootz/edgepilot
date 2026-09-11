@@ -1,37 +1,73 @@
 # Product scope
 
-EdgePilot is an edge-native desktop surface for Windows and Linux. The current `main` preview starts with local system monitoring, but the product direction is broader: surface useful state and actions from the screen edge only when they matter.
+EdgePilot is an **edge-native desktop surface for Windows and Linux**. It uses the screen edge as a quiet place for local information, contextual Signals and, later, focused actions.
 
-## Included today
+The System monitor is the first module, not the final product definition.
 
-Windows and Linux desktop support; CPU, physical memory, disk capacity, network throughput and interface details; uptime and machine identity; four-edge placement; hover expansion, delayed fold, pinning and tooltips; persistent settings; disk selection; tray integration; optional start at login; per-user installation.
+## Product principles
 
-The v0.2 product surface also includes a responsive Settings experience with General, Edge, Monitor, Behavior, Startup and About sections, automatic/manual language selection, and System/Light/Dark Settings appearance.
+- **Edge-native:** information should emerge from the selected screen edge rather than requiring a dashboard window.
+- **Local-first:** no account, required cloud backend or telemetry uploader.
+- **Quiet by default:** EdgePilot should remain unobtrusive until the user asks for detail or something meaningful changes.
+- **Context over volume:** Signals should represent transitions or sustained conditions, not repeat every polling cycle.
+- **Return to state:** temporary presentation must restore the user's previous EdgePilot state when it is finished.
+- **Cross-platform where practical:** Windows and Linux are first-class desktop targets; platform-specific implementation details should not leak into product behavior unnecessarily.
 
-Current `main` ships **English, Italian, French and Spanish** through embedded JSON locale catalogs. New languages are designed to be added as one locale file without changing Settings architecture or a closed C# language enum.
+## v0.1 foundation
 
-Refresh intervals are 0.5, 1, 2 or 5 seconds. Repository documentation uses English.
+The first preview established:
+
+- CPU, physical memory, disk capacity, network throughput/interface details, uptime and machine identity;
+- four-edge placement;
+- hover expansion, delayed fold, pinning and tooltips;
+- persistent display preferences and disk selection;
+- tray integration, optional start at login and single-instance activation;
+- self-contained x64 packaging and per-user installation on Windows and Linux.
+
+## v0.2 product surface
+
+v0.2 expands EdgePilot from a compact monitor into a coherent configurable product surface:
+
+- responsive Settings with General, Edge, Monitor, Behavior, Startup and About sections;
+- configurable Settings theme while the edge keeps its dedicated dark visual language;
+- interactive metric selection and contextual disk configuration;
+- Italian, English, French and Spanish interface localization;
+- automatic system-language selection and persisted manual override;
+- translator-friendly JSON locale files with safe fallback and CI key-parity validation;
+- clearer product identity and community attribution.
+
+Refresh intervals remain 0.5, 1, 2 or 5 seconds. Repository documentation and contribution discussion use English.
 
 ## Interaction contract
 
 1. The collapsed pill occupies a narrow strip at the selected edge of the usable working area.
-2. Pointer entry expands it; pointer exit folds after a 450 ms grace period.
-3. Pinning retains the expanded view; moving into the tooltip must not fold the notch.
-4. Always-open and hidden modes are available independently of pointer interaction.
-5. Reopening the executable recovers settings through the running instance.
+2. Pointer entry expands it; pointer exit folds after a grace period unless pinned or configured otherwise.
+3. Moving into related interactive UI must not accidentally fold the active surface.
+4. Always-visible and hidden modes remain available independently of hover behavior.
+5. Reopening the executable activates the already-running instance rather than creating a duplicate.
 6. Missing readings and missing selected volumes degrade visibly without inventing replacement data.
-7. Language and Settings appearance are persisted independently from the notch's dedicated visual style.
+7. A temporary Signal may surface proactively, but must restore the previous EdgePilot state after expiry.
 
-## Product direction
+## v0.3 Signals direction
 
-The next major direction is **Signals / ambient awareness** following the model:
+Signals implement **Observe → Decide → Surface → Act**.
 
-**Observe → Decide → Surface → Act**
+The initial network flow is intentionally narrow:
 
-Signals are intended to be temporary, deduplicated and context-aware rather than another notification center. The first planned cases are Internet lost/restored, low disk space and sustained unusual CPU activity.
+- establish connectivity baseline silently;
+- surface only when connectivity changes;
+- distinguish lost and restored states;
+- deduplicate equivalent events;
+- apply severity/priority rules;
+- expire automatically;
+- restore the previous edge state.
 
-Signals are being developed separately and are not part of the current `main` product behavior yet.
+The first implementation is under real-desktop review. It must prove that proactive edge presentation feels seamless before additional Signal types are promoted.
 
-## Not current scope
+After network behavior is proven, the next planned Signals are low disk space and sustained unusual CPU activity. These should use threshold crossing, hysteresis or duration rules rather than naïve instant-value alerts.
 
-Remote servers, Docker, clipboard tools, VPN/Tailscale, removable-device workflows and quick actions are future ideas, not shipped features. GPU, temperature and fan sensors are not part of this preview. macOS and ARM packages are not current supported targets.
+## Not currently in scope
+
+GPU, temperature and fan sensors are not implemented. Remote-server dashboards, Docker, Git, VPN/Tailscale, removable-device workflows, clipboard tools, Edge Shelf / Smart Drop and richer quick actions remain exploratory future modules rather than current shipped features.
+
+macOS, ARM packages and headless sessions are also not current supported targets.

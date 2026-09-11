@@ -2,7 +2,7 @@
 
 EdgePilot interface text lives in `src/EdgePilot/Assets/Locales`. Each shipped language is one JSON file, embedded at build time.
 
-Current `main` ships:
+Current shipped locales:
 
 - `en.json` — English
 - `it.json` — Italiano
@@ -11,7 +11,7 @@ Current `main` ships:
 
 ## Add a language
 
-1. Copy `src/EdgePilot/Assets/Locales/en.json` to a new file named with the language tag, for example `de.json` or `pt-BR.json`.
+1. Copy `src/EdgePilot/Assets/Locales/en.json` to a new file named with the language tag, for example `de.json`, `pt.json` or `pt-BR.json`.
 2. Set `_language` to the name of the language written in that language, for example `Deutsch` or `Português (Brasil)`.
 3. Translate the values on the right-hand side. Do not change the keys.
 4. Keep placeholders such as `{0}` and format specifiers such as `{0:0.##}` intact.
@@ -24,6 +24,8 @@ dotnet run --project tests/EdgePilot.UxChecks -c Release
 ```
 
 The project embeds `Assets/Locales/*.json` with a wildcard, so adding a language does not require editing C# or the project file. A new application build is still required because the locale files are embedded in the application assembly.
+
+Spanish was added in [PR #12](https://github.com/pricootz/edgepilot/pull/12) as a single `es.json` contribution, which is the intended file-per-language workflow.
 
 ## Fallback behavior
 
@@ -40,7 +42,7 @@ Automatic mode follows the operating-system UI culture. If a saved language is n
 
 The v0.2 preview originally stored the enum names `Italian`, `English` and `French`. The current preference loader accepts those legacy values and maps them to `it`, `en` and `fr`, so upgrading does not discard existing settings.
 
-Spanish was added after the file-based locale architecture was introduced and therefore needs no special migration value.
+Spanish was introduced after the extensible locale system and therefore uses the `es` language code directly.
 
 ## Rules enforced by CI
 
@@ -49,6 +51,8 @@ Spanish was added after the file-based locale architecture was introduced and th
 - Extra or missing keys fail the repository checks.
 - Code must not request localization keys that do not exist.
 - Locale files must be valid JSON.
+
+When a feature introduces new user-facing text, add the new key to **every shipped locale in the same branch** so CI remains key-compatible. A translation-only PR adding an entirely new language should normally touch just the new locale file.
 
 ## Placeholders and formatting
 
@@ -68,9 +72,11 @@ Format specifiers control numeric formatting:
 
 Keep the format specifier intact. Decimal separators follow the selected locale, so a value can appear as `16.5 TB` in English and `16,5 TB` in Italian, French or Spanish.
 
-## Short labels
+## Short labels and Signals
 
-The collapsed notch has limited space. Keep values such as ring captions (`ring.disk`, `ring.network`) short enough to remain readable.
+The edge has limited space. Keep values such as ring captions (`ring.disk`, `ring.network`) and future Signal titles/messages concise enough to remain readable on all four edges.
+
+Signal detectors should emit localization keys rather than hardcoded translated strings. This keeps Signal logic language-independent and lets the presenter resolve text through the same locale catalogs as the rest of EdgePilot.
 
 ## Credits
 
@@ -78,4 +84,4 @@ The first IT / EN / FR localization foundation was contributed by [@IamArayel](h
 
 The file-based locale architecture, translation workflow, fallback strategy and repository validation ideas were proposed by [@ArnieGA](https://github.com/ArnieGA) in [PR #8](https://github.com/pricootz/edgepilot/pull/8) and reconciled with the current v0.2 Settings architecture.
 
-The Spanish locale was then contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #12](https://github.com/pricootz/edgepilot/pull/12), demonstrating that a new shipped language can be added as a single locale JSON file without changing the Settings or localization C# architecture.
+Spanish localization was contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #12](https://github.com/pricootz/edgepilot/pull/12), demonstrating that a new language can be added as a standalone locale file without changing C#.
