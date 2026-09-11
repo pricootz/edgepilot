@@ -1,6 +1,4 @@
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Layout;
+using Avalonia.Media;
 using FluentIcons.Avalonia;
 using FluentIcons.Common;
 using FluentIconName = FluentIcons.Common.Icon;
@@ -9,59 +7,38 @@ namespace EdgePilot.UI;
 
 public sealed partial class SettingsWindow
 {
-    private bool _sidebarIconsInstalled;
-    private readonly Dictionary<SettingsPage, FluentIcon> _sidebarIcons = new();
+    private readonly Dictionary<SettingsPage, FluentIcon> _navIcons = new();
+    private bool _supplementalIconsInstalled;
 
-    private void InstallSidebarIcons()
+    private void InstallSettingsIcons()
     {
-        if (_sidebarIconsInstalled) return;
-
-        foreach (var (page, button) in _navButtons)
+        if (!_supplementalIconsInstalled)
         {
-            if (button.Content is not StackPanel row || row.Children.Count == 0) continue;
+            _sensitivityButtons[(int)HoverSensitivity.Precise].Content =
+                ButtonContent(FluentIconName.Target, Localization.T("sensitivity.precise"));
+            _sensitivityButtons[(int)HoverSensitivity.Normal].Content =
+                ButtonContent(FluentIconName.Gesture, Localization.T("sensitivity.normal"));
+            _sensitivityButtons[(int)HoverSensitivity.Wide].Content =
+                ButtonContent(FluentIconName.ArrowsBidirectional, Localization.T("sensitivity.wide"));
 
-            var iconName = page switch
-            {
-                SettingsPage.General => FluentIconName.Settings,
-                SettingsPage.Edge => FluentIconName.Target,
-                SettingsPage.Monitor => FluentIconName.DesktopPulse,
-                SettingsPage.Behavior => FluentIconName.ArrowSync,
-                SettingsPage.Startup => FluentIconName.Power,
-                SettingsPage.About => FluentIconName.Info,
-                _ => FluentIconName.AppGeneric
-            };
+            _backdropButtons[(int)SettingsBackdrop.Flat].Content =
+                ButtonContent(FluentIconName.Desktop, Localization.T("surface.flat"));
+            _backdropButtons[(int)SettingsBackdrop.Mica].Content =
+                ButtonContent(FluentIconName.Layer, Localization.T("surface.mica"));
+            _backdropButtons[(int)SettingsBackdrop.Acrylic].Content =
+                ButtonContent(FluentIconName.Glance, Localization.T("surface.acrylic"));
 
-            var icon = new FluentIcon
-            {
-                Icon = iconName,
-                IconVariant = IconVariant.Regular,
-                IconSize = IconSize.Size20,
-                FontSize = 18,
-                Width = 20,
-                Height = 20,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            row.Children.RemoveAt(0);
-            row.Children.Insert(0, icon);
-            row.Spacing = 10;
-            _sidebarIcons[page] = icon;
-
-            // ShowPage is registered before this handler, so the selected page has already changed
-            // when we repaint the navigation icon state.
-            button.Click += (_, _) => RefreshSidebarIconStates();
+            _supplementalIconsInstalled = true;
         }
 
-        _sidebarIconsInstalled = true;
-        RefreshSidebarIconStates();
+        UpdateNavigationIconStates(_selectedPage);
     }
 
-    private void RefreshSidebarIconStates()
+    private void UpdateNavigationIconStates(SettingsPage selectedPage)
     {
-        foreach (var (page, icon) in _sidebarIcons)
+        foreach (var (page, icon) in _navIcons)
         {
-            var selected = page == _selectedPage;
+            var selected = page == selectedPage;
             icon.Foreground = selected ? AccentBrush : MutedBrush;
             icon.IconVariant = selected ? IconVariant.Filled : IconVariant.Regular;
         }
