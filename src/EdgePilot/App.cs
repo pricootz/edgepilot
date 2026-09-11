@@ -97,13 +97,13 @@ public sealed class App : Application
                     if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) && !window.HasSafePlatformInput)
                     {
                         Console.Error.WriteLine("EdgePilot could not establish a safe native input region.");
-                        Environment.ExitCode = 2;
-                        // Shutting down synchronously from Opened can tear down Avalonia while its
-                        // desktop lifetime is still entering StartCore. Defer by one dispatcher turn.
-                        DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromMilliseconds(1));
+                        Environment.Exit(2);
                         return;
                     }
-                    DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(8));
+
+                    // The smoke process is disposable CI infrastructure. Exiting explicitly avoids
+                    // desktop-lifetime races where native/tray windows keep Xvfb alive after Shutdown().
+                    DispatcherTimer.RunOnce(() => Environment.Exit(0), TimeSpan.FromSeconds(8));
                 }
                 if ((preferences.Mode == NotchDisplayMode.Hidden &&
                     (!window.HasTray || desktop.Args?.Contains("--autostart") != true)) || warning is not null ||

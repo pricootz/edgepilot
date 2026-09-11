@@ -8,6 +8,5 @@
   <ItemGroup>
     <ProjectReference Include="../../src/EdgePilot/EdgePilot.csproj" />
     <PackageReference Include="Avalonia.Headless" Version="12.1.2" />
-    <Compile Include="../../src/EdgePilot/UI/NotchSpring.cs" Link="NotchSpring.cs" />
   </ItemGroup>
 </Project>
