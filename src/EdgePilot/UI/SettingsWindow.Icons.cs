@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using FluentIcons.Avalonia;
 using FluentIcons.Common;
+using FluentIconName = FluentIcons.Common.Icon;
 
 namespace EdgePilot.UI;
 
@@ -20,13 +21,13 @@ public sealed partial class SettingsWindow
 
             var icon = page switch
             {
-                SettingsPage.General => Icon.Settings,
-                SettingsPage.Edge => Icon.Target,
-                SettingsPage.Monitor => Icon.DesktopPulse,
-                SettingsPage.Behavior => Icon.ArrowSync,
-                SettingsPage.Startup => Icon.Power,
-                SettingsPage.About => Icon.Info,
-                _ => Icon.AppGeneric
+                SettingsPage.General => FluentIconName.Settings,
+                SettingsPage.Edge => FluentIconName.Target,
+                SettingsPage.Monitor => FluentIconName.DesktopPulse,
+                SettingsPage.Behavior => FluentIconName.ArrowSync,
+                SettingsPage.Startup => FluentIconName.Power,
+                SettingsPage.About => FluentIconName.Info,
+                _ => FluentIconName.AppGeneric
             };
 
             row.Children.RemoveAt(0);
