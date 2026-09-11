@@ -190,7 +190,7 @@ public sealed partial class SettingsWindow
 
     private static Button SegmentButton(string? icon, string text, Action select)
     {
-        var resolved = string.IsNullOrWhiteSpace(icon) ? null : ResolveIcon(icon, text);
+        FluentIconName? resolved = string.IsNullOrWhiteSpace(icon) ? null : ResolveIcon(icon, text);
         var button = new Button
         {
             Content = resolved is { } fluent ? ButtonContent(fluent, text) : text,
@@ -298,6 +298,8 @@ public sealed partial class SettingsWindow
             return context == Localization.T("general.surfaceTitle") ? FluentIconName.Layer : FluentIconName.DesktopPulse;
         if (glyph == "◉")
             return context == Localization.T("about.localTitle") ? FluentIconName.LockShield : FluentIconName.DataUsage;
+        if (glyph == "◐" && context == Localization.T("general.themeTitle"))
+            return FluentIconName.DarkTheme;
 
         return glyph switch
         {
