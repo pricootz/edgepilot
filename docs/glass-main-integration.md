@@ -42,12 +42,9 @@ Settings is rectangular, so it can use the real OS backdrop directly:
 
 The Settings palette is intentionally isolated from `NotchMaterials`; tuning Settings must not change the approved notch geometry or material.
 
-## Validation target
+## Validation completed
 
-Before merge:
-
-- Windows 10: Flat + Acrylic Settings, Light/Dark/System theme persistence and click-through;
-- Windows 11: Flat + Mica + Acrylic Settings plus the already-approved notch visuals;
-- Windows 11: all four notch edges and display modes remain regression-free;
-- Ubuntu/XWayland: input-region and Flat behavior remain unchanged;
-- normal Windows/Linux CI, package smoke and repository checks must all pass.
+- Windows 10: Flat + Acrylic Settings, theme persistence and click-through confirmed on real hardware;
+- Windows 11: Flat + Mica + Acrylic Settings, all four notch edges and display modes confirmed on real hardware;
+- Ubuntu GNOME/XWayland: input-region and Flat behavior confirmed on a real desktop;
+- Windows and Ubuntu CI: build, UX, localization, native input-region, package launch, single-instance and per-user installation checks passed.

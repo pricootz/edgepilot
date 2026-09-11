@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0-preview.1 — Unreleased
+## 0.2.0-preview.1 — 2026-09-11
 
 The v0.2 preview turns the initial system-monitor settings panel into a more coherent EdgePilot product surface and establishes localization as a first-class capability.
 
@@ -38,6 +38,7 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 
 - Transparent portions of the large edge window no longer intercept clicks intended for browser or desktop controls. Native input is constrained to live EdgePilot regions on Windows and X11/XWayland (#16/#17).
 - Windows Glass no longer uses a pixel-quantized native region as the visible notch boundary: Avalonia/Skia keeps the approved antialiased silhouette while a separate invisible shaped overlay owns pointer input.
+- The Exit EdgePilot action now consistently displays its Fluent sign-out icon.
 - Single-instance activation is hardened so a second launch resolves to the existing per-user EdgePilot instance instead of leaving duplicate desktop surfaces.
 - CI package smoke processes now terminate deterministically instead of depending on desktop-lifetime teardown timing.
 
