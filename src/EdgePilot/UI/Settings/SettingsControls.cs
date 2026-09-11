@@ -4,6 +4,9 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using EdgePilot.Core;
+using FluentIcons.Avalonia;
+using FluentIcons.Common;
+using FluentIconName = FluentIcons.Common.Icon;
 
 namespace EdgePilot.UI;
 
@@ -34,13 +37,7 @@ public sealed partial class SettingsWindow
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             ColumnSpacing = 9
         };
-        heading.Children.Add(new TextBlock
-        {
-            Text = icon,
-            FontSize = 18,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = AccentBrush
-        });
+        heading.Children.Add(UiIcon(ResolveIcon(icon, checkbox.Content?.ToString()), 18));
         var title = new TextBlock
         {
             Text = checkbox.Content?.ToString(),
@@ -83,12 +80,25 @@ public sealed partial class SettingsWindow
         return stack;
     }
 
-    private static TextBlock SectionTitle(string icon, string text) => new()
+    private static StackPanel SectionTitle(string icon, string text)
     {
-        Text = $"{icon}  {text}",
-        FontSize = 16,
-        FontWeight = FontWeight.SemiBold
-    };
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 9,
+            Children =
+            {
+                UiIcon(ResolveIcon(icon, text), 18),
+                new TextBlock
+                {
+                    Text = text,
+                    FontSize = 16,
+                    FontWeight = FontWeight.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            }
+        };
+    }
 
     private static TextBlock Label(string text) => new()
     {
@@ -147,14 +157,7 @@ public sealed partial class SettingsWindow
             Spacing = 12,
             Children =
             {
-                new TextBlock
-                {
-                    Text = icon,
-                    FontSize = 18,
-                    Foreground = AccentBrush,
-                    Width = 24,
-                    VerticalAlignment = VerticalAlignment.Top
-                },
+                UiIcon(ResolveIcon(icon, title), 18),
                 new StackPanel
                 {
                     Spacing = 3,
@@ -168,7 +171,10 @@ public sealed partial class SettingsWindow
         };
     }
 
-    private static StackPanel ButtonContent(string icon, string text)
+    private static StackPanel ButtonContent(string icon, string text) =>
+        ButtonContent(ResolveIcon(icon, text), text);
+
+    private static StackPanel ButtonContent(FluentIconName icon, string text)
     {
         return new StackPanel
         {
@@ -176,7 +182,7 @@ public sealed partial class SettingsWindow
             Spacing = 7,
             Children =
             {
-                new TextBlock { Text = icon, VerticalAlignment = VerticalAlignment.Center },
+                UiIcon(icon, 16),
                 new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center }
             }
         };
@@ -184,9 +190,10 @@ public sealed partial class SettingsWindow
 
     private static Button SegmentButton(string? icon, string text, Action select)
     {
+        var resolved = string.IsNullOrWhiteSpace(icon) ? null : ResolveIcon(icon, text);
         var button = new Button
         {
-            Content = string.IsNullOrWhiteSpace(icon) ? text : ButtonContent(icon, text),
+            Content = resolved is { } fluent ? ButtonContent(fluent, text) : text,
             Padding = new Thickness(13, 8),
             MinWidth = 72
         };
@@ -196,14 +203,22 @@ public sealed partial class SettingsWindow
 
     private Button NavButton(string icon, string text, SettingsPage page)
     {
+        var fluent = UiIcon(ResolveIcon(icon, text), 18, MutedBrush);
+        _navIcons[page] = fluent;
+
         var content = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 9,
+            Spacing = 10,
             Children =
             {
-                new TextBlock { Text = icon, Width = 20, TextAlignment = TextAlignment.Center },
-                new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap }
+                fluent,
+                new TextBlock
+                {
+                    Text = text,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
             }
         };
         var button = new Button
@@ -214,7 +229,11 @@ public sealed partial class SettingsWindow
             Padding = new Thickness(11, 10),
             BorderThickness = new Thickness(0)
         };
-        button.Click += (_, _) => ShowPage(page);
+        button.Click += (_, _) =>
+        {
+            ShowPage(page);
+            UpdateNavigationIconStates(page);
+        };
         _navButtons[page] = button;
         return button;
     }
@@ -250,5 +269,64 @@ public sealed partial class SettingsWindow
             System.Diagnostics.Trace.WriteLine(ex);
             _status.Text = Localization.T("settings.browserFailed");
         }
+    }
+
+    private static FluentIcon UiIcon(FluentIconName icon, double size = 18, IBrush? foreground = null,
+        IconVariant variant = IconVariant.Regular)
+    {
+        return new FluentIcon
+        {
+            Icon = icon,
+            IconVariant = variant,
+            IconSize = size <= 16 ? IconSize.Size16 : size <= 20 ? IconSize.Size20 : IconSize.Size24,
+            FontSize = size,
+            Width = Math.Max(18, size),
+            Height = Math.Max(18, size),
+            Foreground = foreground ?? AccentBrush,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+    }
+
+    private static FluentIconName ResolveIcon(string glyph, string? context = null)
+    {
+        if (glyph == "●")
+            return context == Localization.T("theme.dark") ? FluentIconName.DarkTheme : FluentIconName.RadioButton;
+        if (glyph == "↻")
+            return context == Localization.T("startup.autostartTitle") ? FluentIconName.Power : FluentIconName.ArrowSync;
+        if (glyph == "▦")
+            return context == Localization.T("general.surfaceTitle") ? FluentIconName.Layer : FluentIconName.DesktopPulse;
+        if (glyph == "◉")
+            return context == Localization.T("about.localTitle") ? FluentIconName.LockShield : FluentIconName.DataUsage;
+
+        return glyph switch
+        {
+            "⚙" => FluentIconName.Settings,
+            "◨" => FluentIconName.Target,
+            "▦" => FluentIconName.DesktopPulse,
+            "◎" => FluentIconName.Gesture,
+            "↻" => FluentIconName.ArrowSync,
+            "ⓘ" => FluentIconName.Info,
+            "文" => FluentIconName.LocalLanguage,
+            "◐" => FluentIconName.System,
+            "▱" => FluentIconName.Storage,
+            "◌" => FluentIconName.Gesture,
+            "○" => FluentIconName.DismissCircle,
+            "⏻" => FluentIconName.Power,
+            "✦" => FluentIconName.Person,
+            "⌁" => FluentIconName.Lightbulb,
+            "◉" => FluentIconName.DataUsage,
+            "◇" => FluentIconName.Branch,
+            "↕" => FluentIconName.ArrowsBidirectional,
+            "▤" => FluentIconName.Storage,
+            "✓" => FluentIconName.Checkmark,
+            "↶" => FluentIconName.ArrowUndo,
+            "▸" => FluentIconName.ArrowRight,
+            "◂" => FluentIconName.ArrowLeft,
+            "▴" => FluentIconName.ArrowUp,
+            "▾" => FluentIconName.ArrowDown,
+            "☀" => FluentIconName.WeatherSunny,
+            _ => FluentIconName.AppGeneric
+        };
     }
 }
