@@ -10,7 +10,7 @@ public sealed partial class SettingsWindow
     {
         base.OnOpened(e);
 
-        InstallSidebarIcons();
+        InstallSettingsIcons();
 
         // Surface availability is per-backdrop:
         // Windows 10 1803+ gets Flat + Acrylic; Windows 11 also gets Mica.
