@@ -94,6 +94,7 @@ public sealed partial class SettingsWindow : GlassWindow
 
         _drive = new ComboBox
         {
+            Foreground = PrimaryBrush,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             MaxDropDownHeight = 280,
             MaxWidth = 460
@@ -108,6 +109,7 @@ public sealed partial class SettingsWindow : GlassWindow
                 Localization.T("refresh.2s"), Localization.T("refresh.5s")
             },
             SelectedIndex = Array.IndexOf(_intervals, current.RefreshIntervalMs),
+            Foreground = PrimaryBrush,
             HorizontalAlignment = HorizontalAlignment.Left,
             MaxWidth = 320,
             MinWidth = 210
@@ -126,6 +128,7 @@ public sealed partial class SettingsWindow : GlassWindow
         {
             ItemsSource = languageChoices,
             SelectedIndex = languageIndex >= 0 ? languageIndex : 0,
+            Foreground = PrimaryBrush,
             HorizontalAlignment = HorizontalAlignment.Left,
             MinWidth = 210,
             MaxWidth = 320
@@ -140,6 +143,7 @@ public sealed partial class SettingsWindow : GlassWindow
         {
             Content = metricNames[index],
             IsChecked = current.Metrics.HasFlag(flag),
+            Foreground = PrimaryBrush,
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         }).ToArray();
@@ -148,6 +152,7 @@ public sealed partial class SettingsWindow : GlassWindow
         {
             Content = Localization.T("startup.autostartLabel"),
             IsChecked = current.StartAtLogin,
+            Foreground = PrimaryBrush,
             FontWeight = FontWeight.SemiBold
         };
 
@@ -218,6 +223,7 @@ public sealed partial class SettingsWindow : GlassWindow
         _status = new TextBlock
         {
             Text = warning ?? Localization.T("settings.status.saved"),
+            Foreground = PrimaryBrush,
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             MaxLines = 2
@@ -226,7 +232,10 @@ public sealed partial class SettingsWindow : GlassWindow
         _applyButton = new Button
         {
             Content = ButtonContent("✓", Localization.T("settings.saveChanges")),
+            Foreground = Brushes.White,
             Background = AccentBrush,
+            BorderBrush = AccentBrush,
+            BorderThickness = new Thickness(1),
             Padding = new Thickness(17, 9),
             MinWidth = 146,
             IsEnabled = false
@@ -234,10 +243,16 @@ public sealed partial class SettingsWindow : GlassWindow
         _resetButton = new Button
         {
             Content = ButtonContent("↶", Localization.T("settings.resetChanges")),
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
+            BorderBrush = ControlBorderBrush,
+            BorderThickness = new Thickness(1),
             Padding = new Thickness(14, 9),
             MinWidth = 100,
             IsEnabled = false
         };
+        RegisterActionButton(_applyButton, ActionButtonRole.Primary);
+        RegisterActionButton(_resetButton, ActionButtonRole.Secondary);
 
         _drive.SelectionChanged += (_, _) => MarkDirty();
         _refresh.SelectionChanged += (_, _) => MarkDirty();
@@ -318,13 +333,7 @@ public sealed partial class SettingsWindow : GlassWindow
     {
         _selectedPage = page;
         _pageHost.Content = _pages[page];
-        foreach (var item in _navButtons)
-        {
-            var selected = item.Key == page;
-            item.Value.Background = selected ? AccentSoftBrush : Brushes.Transparent;
-            item.Value.BorderBrush = selected ? AccentBrush : Brushes.Transparent;
-            item.Value.BorderThickness = selected ? new Thickness(3, 0, 0, 0) : new Thickness(0);
-        }
+        UpdateNavigationIconStates(page);
     }
 
     private void SelectEdge(EdgeSide edge, bool markDirty = true)
@@ -354,6 +363,7 @@ public sealed partial class SettingsWindow : GlassWindow
         _selectedTheme = theme;
         UpdateSegments(_themeButtons, (int)theme);
         RequestedThemeVariant = ThemeVariantFor(theme);
+        ApplyTheme();
         if (markDirty) MarkDirty();
     }
 
@@ -372,16 +382,8 @@ public sealed partial class SettingsWindow : GlassWindow
         _ => ThemeVariant.Default
     };
 
-    private static void UpdateSegments(IReadOnlyList<Button> buttons, int selectedIndex)
-    {
-        for (var i = 0; i < buttons.Count; i++)
-        {
-            var selected = i == selectedIndex;
-            buttons[i].Background = selected ? AccentBrush : Brushes.Transparent;
-            buttons[i].BorderBrush = selected ? AccentBrush : new SolidColorBrush(Color.FromArgb(70, 128, 128, 128));
-            buttons[i].BorderThickness = new Thickness(1);
-        }
-    }
+    private void UpdateSegments(IReadOnlyList<Button> buttons, int selectedIndex) =>
+        SetSegmentSelection(buttons, selectedIndex);
 
     private void UpdatePreview()
     {
@@ -415,20 +417,7 @@ public sealed partial class SettingsWindow : GlassWindow
         if (_diskCard is not null) _diskCard.IsVisible = _metrics[2].IsChecked == true;
     }
 
-    private void UpdateMetricTileStates()
-    {
-        if (_metricTiles.Length == 0) return;
-        for (var i = 0; i < _metricTiles.Length; i++)
-        {
-            var selected = _metrics[i].IsChecked == true;
-            _metricTiles[i].Background = selected
-                ? AccentSoftBrush
-                : Brush(_darkTheme ? "#1F1F1F" : "#F8F8F9");
-            _metricTiles[i].BorderBrush = selected
-                ? AccentBrush
-                : Brush(_darkTheme ? "#343434" : "#E6E6E8");
-        }
-    }
+    private void UpdateMetricTileStates() => PaintMetricTiles();
 
     private VisibleMetrics SelectedMetrics()
     {
@@ -461,6 +450,7 @@ public sealed partial class SettingsWindow : GlassWindow
         _applyButton.IsEnabled = dirty;
         _resetButton.IsEnabled = dirty;
         _status.Text = dirty ? Localization.T("settings.status.unsaved") : Localization.T("settings.status.saved");
+        RefreshActionButtonVisuals();
     }
 
     private void ResetToSaved()
@@ -500,6 +490,7 @@ public sealed partial class SettingsWindow : GlassWindow
         _applyButton.IsEnabled = false;
         _resetButton.IsEnabled = false;
         _status.Text = Localization.T("settings.status.reset");
+        RefreshActionButtonVisuals();
     }
 
     private void SaveChanges(Action<NotchPreferences> apply, Action<NotchPreferences>? savePreferences,
@@ -523,6 +514,7 @@ public sealed partial class SettingsWindow : GlassWindow
             _savedPreferences = value;
             _applyButton.IsEnabled = false;
             _resetButton.IsEnabled = false;
+            RefreshActionButtonVisuals();
 
             if (languageChanged && reopen is not null)
             {
@@ -541,6 +533,7 @@ public sealed partial class SettingsWindow : GlassWindow
             System.Diagnostics.Trace.WriteLine(ex);
             _status.Text = Localization.T("settings.saveFailed");
             _applyButton.IsEnabled = true;
+            RefreshActionButtonVisuals();
         }
     }
 
@@ -598,8 +591,8 @@ public sealed partial class SettingsWindow : GlassWindow
             card.BorderBrush = p.CardBorder;
             card.BorderThickness = p.CardBorderThickness;
         }
-        UpdateMetricTileStates();
-        ShowPage(_selectedPage);
+
+        ApplyInteractivePalette(p);
     }
 
     private static string VersionLabel()
