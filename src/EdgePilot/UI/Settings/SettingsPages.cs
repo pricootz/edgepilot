@@ -140,7 +140,7 @@ public sealed partial class SettingsWindow
 
     private Control BuildGeneralPage()
     {
-        // Mica/Acrylic are Windows 11 only; the selector is hidden elsewhere.
+        // Windows 10 1803+ supports Acrylic; Windows 11 also exposes Mica.
         _surfaceCard = Card(
             SectionTitle("▦", Localization.T("general.surfaceTitle")),
             Description(Localization.T("general.surfaceDescription")),
@@ -324,6 +324,8 @@ public sealed partial class SettingsWindow
 
         var repoButton = LinkButton(Localization.T("about.repoButton"), "https://github.com/pricootz/edgepilot");
         var profileButton = LinkButton(Localization.T("about.profileButton"), "https://github.com/pricootz");
+        var arnieButton = LinkButton(Localization.T("about.arnieButton"), "https://github.com/ArnieGA");
+        var iamarayelButton = LinkButton(Localization.T("about.iamarayelButton"), "https://github.com/IamArayel");
 
         return Page(
             Localization.T("about.pageTitle"),
@@ -341,12 +343,12 @@ public sealed partial class SettingsWindow
                 Description(Localization.T("about.authorDescription")),
                 SegmentRow(new[] { repoButton, profileButton })),
             Card(
-                SectionTitle("⌁", Localization.T("about.philosophyTitle")),
-                FeatureRow("◉", Localization.T("about.localTitle"), Localization.T("about.localDescription")),
+                SectionTitle(FluentIcons.Common.Icon.PeopleTeam, Localization.T("about.contributorsTitle")),
+                Description(Localization.T("about.contributorsDescription")),
+                FeatureRow(FluentIcons.Common.Icon.Person, "@ArnieGA", Localization.T("about.arnieRole")),
                 Divider(),
-                FeatureRow("◨", Localization.T("about.edgeNativeTitle"), Localization.T("about.edgeNativeDescription")),
-                Divider(),
-                FeatureRow("◇", Localization.T("about.evolvingTitle"), Localization.T("about.evolvingDescription"))),
+                FeatureRow(FluentIcons.Common.Icon.Person, "@IamArayel", Localization.T("about.iamarayelRole")),
+                SegmentRow(new[] { arnieButton, iamarayelButton })),
             Card(
                 SectionTitle("ⓘ", Localization.T("about.versionTitle")),
                 new TextBlock { Text = FullVersionLabel(), FontWeight = FontWeight.SemiBold },
