@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using EdgePilot.Core;
+using FluentIconName = FluentIcons.Common.Icon;
 
 namespace EdgePilot.UI;
 
@@ -265,9 +266,9 @@ public sealed partial class SettingsWindow
 
     private Control BuildStartupPage(Action? exit)
     {
-        var exitButton = new Button
+        _exitButton = new Button
         {
-            Content = ButtonContent("⏻", Localization.T("startup.exitButton")),
+            Content = ButtonContent(FluentIconName.SignOut, Localization.T("startup.exitButton")),
             Foreground = PrimaryBrush,
             Background = Brushes.Transparent,
             BorderBrush = ControlBorderBrush,
@@ -275,8 +276,8 @@ public sealed partial class SettingsWindow
             HorizontalAlignment = HorizontalAlignment.Left,
             Padding = new Thickness(14, 8)
         };
-        RegisterActionButton(exitButton, ActionButtonRole.Secondary);
-        exitButton.Click += (_, _) =>
+        RegisterActionButton(_exitButton, ActionButtonRole.Secondary);
+        _exitButton.Click += (_, _) =>
         {
             if (exit is not null) exit();
             else Close();
@@ -292,7 +293,7 @@ public sealed partial class SettingsWindow
             Card(
                 SectionTitle("⏻", Localization.T("startup.sessionTitle")),
                 Description(Localization.T("startup.sessionDescription")),
-                exitButton));
+                _exitButton));
     }
 
     private Control BuildAboutPage()

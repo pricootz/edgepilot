@@ -333,7 +333,9 @@ public sealed partial class SettingsWindow
         {
             Icon = icon,
             IconVariant = variant,
-            IconSize = size <= 16 ? IconSize.Size16 : size <= 20 ? IconSize.Size20 : IconSize.Size24,
+            // The compact 16px source font omits some Fluent glyphs (including SignOut).
+            // Use the complete 20px set and keep FontSize responsible for visual scaling.
+            IconSize = size <= 20 ? IconSize.Size20 : IconSize.Size24,
             FontSize = size,
             Width = Math.Max(18, size),
             Height = Math.Max(18, size),

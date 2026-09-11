@@ -58,6 +58,7 @@ public sealed partial class SettingsWindow : GlassWindow
     private StackPanel _positionOptions = null!;
     private Grid _metricGrid = null!;
     private Border _versionBadge = null!;
+    private Button _exitButton = null!;
 
     private NotchPreferences _savedPreferences;
     private EdgeSide _selectedEdge;

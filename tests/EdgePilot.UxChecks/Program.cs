@@ -264,6 +264,12 @@ try
     var refreshSelector = (ComboBox)SettingsField(settings, "_refresh")!;
     var metricChecks = (CheckBox[])SettingsField(settings, "_metrics")!;
     var previewNotch = (Border)SettingsField(settings, "_previewNotch")!;
+    var exitButton = (Button)SettingsField(settings, "_exitButton")!;
+    var exitContent = (StackPanel)exitButton.Content!;
+    var exitIcon = exitContent.Children.OfType<FluentIcons.Avalonia.FluentIcon>().Single();
+    Check(exitIcon.Icon == FluentIcons.Common.Icon.SignOut, "exit action uses SignOut icon");
+    Check(exitIcon.IconSize == FluentIcons.Common.IconSize.Size20 && Math.Abs(exitIcon.FontSize - 16) < 0.001,
+        "compact exit icon uses available glyph set at 16px");
 
     SettingsCall(settings, "SelectEdge", EdgeSide.Bottom, true);
     SettingsCall(settings, "SelectMode", NotchDisplayMode.Always, true);
