@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Media;
 using EdgePilot.Core;
 using FluentIcons.Avalonia;
