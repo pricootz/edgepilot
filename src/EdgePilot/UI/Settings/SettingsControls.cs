@@ -30,6 +30,9 @@ public sealed partial class SettingsWindow
         return card;
     }
 
+    private Border MetricTile(CheckBox checkbox, string icon, string description) =>
+        MetricTile(checkbox, ResolveIcon(icon, checkbox.Content?.ToString()), description);
+
     private Border MetricTile(CheckBox checkbox, FluentIconName icon, string description)
     {
         var heading = new Grid
@@ -79,6 +82,9 @@ public sealed partial class SettingsWindow
         stack.Children.Add(control);
         return stack;
     }
+
+    private static StackPanel SectionTitle(string icon, string text) =>
+        SectionTitle(ResolveIcon(icon, text), text);
 
     private static StackPanel SectionTitle(FluentIconName icon, string text)
     {
@@ -149,6 +155,9 @@ public sealed partial class SettingsWindow
         return row;
     }
 
+    private static StackPanel FeatureRow(string icon, string title, string description) =>
+        FeatureRow(ResolveIcon(icon, title), title, description);
+
     private static StackPanel FeatureRow(FluentIconName icon, string title, string description)
     {
         return new StackPanel
@@ -171,6 +180,9 @@ public sealed partial class SettingsWindow
         };
     }
 
+    private static StackPanel ButtonContent(string icon, string text) =>
+        ButtonContent(ResolveIcon(icon, text), text);
+
     private static StackPanel ButtonContent(FluentIconName icon, string text, IBrush? foreground = null)
     {
         return new StackPanel
@@ -185,17 +197,25 @@ public sealed partial class SettingsWindow
         };
     }
 
-    private static Button SegmentButton(FluentIconName icon, string text, Action select)
+    private static Button SegmentButton(string? icon, string text, Action select)
     {
+        FluentIconName? resolved = string.IsNullOrWhiteSpace(icon) ? null : ResolveIcon(icon, text);
         var button = new Button
         {
-            Content = ButtonContent(icon, text),
+            Content = resolved is { } fluent ? ButtonContent(fluent, text) : text,
             Padding = new Thickness(13, 8),
             MinWidth = 72
         };
-        button.Click += (_, _) => select();
+        button.Click += (_, _) =>
+        {
+            select();
+            RefreshSegmentRow(button);
+        };
         return button;
     }
+
+    private Button NavButton(string icon, string text, SettingsPage page) =>
+        NavButton(ResolveIcon(icon, text), text, page);
 
     private Button NavButton(FluentIconName icon, string text, SettingsPage page)
     {
@@ -284,6 +304,13 @@ public sealed partial class SettingsWindow
         };
     }
 
+    private static void RefreshSegmentRow(Button source)
+    {
+        if (source.Parent is not WrapPanel row) return;
+        foreach (var child in row.Children.OfType<Button>())
+            UpdateSegmentContentVisual(child, ReferenceEquals(child.Background, AccentBrush));
+    }
+
     private static void UpdateSegmentContentVisual(Button button, bool selected)
     {
         if (button.Content is not StackPanel content) return;
@@ -301,5 +328,46 @@ public sealed partial class SettingsWindow
                     break;
             }
         }
+    }
+
+    private static FluentIconName ResolveIcon(string glyph, string? context = null)
+    {
+        if (glyph == "●")
+            return context == Localization.T("theme.dark") ? FluentIconName.WeatherMoon : FluentIconName.Eye;
+        if (glyph == "↻")
+            return context == Localization.T("startup.autostartTitle") ? FluentIconName.Power : FluentIconName.ArrowSync;
+        if (glyph == "▦")
+            return context == Localization.T("general.surfaceTitle") ? FluentIconName.Layer : FluentIconName.DesktopPulse;
+        if (glyph == "◉")
+            return FluentIconName.DataUsage;
+
+        return glyph switch
+        {
+            "⚙" => FluentIconName.Settings,
+            "◨" => FluentIconName.Target,
+            "▦" => FluentIconName.DesktopPulse,
+            "◎" => FluentIconName.CursorHover,
+            "↻" => FluentIconName.ArrowSync,
+            "ⓘ" => FluentIconName.Info,
+            "文" => FluentIconName.LocalLanguage,
+            "◐" => FluentIconName.Desktop,
+            "▱" => FluentIconName.Storage,
+            "◌" => FluentIconName.CursorHover,
+            "○" => FluentIconName.EyeOff,
+            "⏻" => FluentIconName.SignOut,
+            "✦" => FluentIconName.Person,
+            "⌁" => FluentIconName.Lightbulb,
+            "◇" => FluentIconName.Branch,
+            "↕" => FluentIconName.ArrowsBidirectional,
+            "▤" => FluentIconName.Memory,
+            "✓" => FluentIconName.Checkmark,
+            "↶" => FluentIconName.ArrowUndo,
+            "▸" => FluentIconName.ArrowRight,
+            "◂" => FluentIconName.ArrowLeft,
+            "▴" => FluentIconName.ArrowUp,
+            "▾" => FluentIconName.ArrowDown,
+            "☀" => FluentIconName.WeatherSunny,
+            _ => FluentIconName.AppGeneric
+        };
     }
 }
