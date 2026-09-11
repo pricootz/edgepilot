@@ -79,14 +79,7 @@ public static class PreferenceStore
     public static NotchPreferences CoerceForPlatform(NotchPreferences value)
     {
         var backdrop = SettingsBackdropSupport.Coerce(value.Backdrop);
-        var result = backdrop == value.Backdrop ? value : value with { Backdrop = backdrop };
-
-        // EdgePilot Acrylic is intentionally a dark graphite material. Keeping it dark preserves
-        // the established notch identity and guarantees ring/text contrast over arbitrary wallpaper.
-        if (result.Backdrop == SettingsBackdrop.Acrylic && result.SettingsTheme != SettingsThemePreference.Dark)
-            result = result with { SettingsTheme = SettingsThemePreference.Dark };
-
-        return result;
+        return backdrop == value.Backdrop ? value : value with { Backdrop = backdrop };
     }
 
     public static NotchPreferences Load(string path)
