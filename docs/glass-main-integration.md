@@ -1,6 +1,6 @@
 # Glass surface integration
 
-This branch adapts ArnieGA's PR #15 (`feat/glass-backdrop`) onto the current EdgePilot `main` after the native input-safety work from #17.
+This branch adapts ArnieGA's PR #15 (`feat/glass-backdrop`) onto the current EdgePilot `main` after the native input-safety work from #17 and the repository/release hardening from #20.
 
 ## Reused from #15
 
@@ -9,14 +9,45 @@ This branch adapts ArnieGA's PR #15 (`feat/glass-backdrop`) onto the current Edg
 - Theme-aware metric-ring and tooltip styling.
 - EN / ES / FR / IT surface strings.
 
-## Deliberate integration changes
+## Current platform availability
 
-- `NotchRegion` is not imported. `PlatformInputRegion` remains the single owner of the native edge-window region.
-- Mica/Acrylic are gated to Windows 11 build 22000+; unsupported stored choices are coerced to Flat.
-- Flat preserves the existing dark EdgePilot notch regardless of the Settings-window theme.
-- On Windows glass surfaces, the native window region contains only the visible notch silhouette plus the rounded tooltip. The invisible Hover hot-zone and bridge are omitted from `SetWindowRgn`; Windows' existing global cursor polling keeps those behaviors working without exposing or blocking an invisible rectangle.
-- Linux remains on the #17 X11/XWayland `ShapeInput` path and Flat surface.
+- Windows 10 build 17134 (1803)+: Flat + Acrylic.
+- Windows 11 build 22000+: Flat + Acrylic + Mica.
+- Other platforms: Flat only.
+
+Unsupported stored choices are coerced safely to Flat. Surface selection does not override the user's independent `System` / `Light` / `Dark` Settings theme choice.
+
+## Current Windows notch architecture
+
+The visible notch no longer uses `SetWindowRgn` as its visual boundary. Native regions quantize curves to device pixels and produced visibly stepped Mica/Acrylic edges.
+
+Instead:
+
+- the visible `EdgeWindow` is an Avalonia/Skia GPU surface and is made fully click-through with the documented Win32 layered-window style;
+- the notch keeps the same approved antialiased geometry in Flat, Mica and Acrylic;
+- a separate invisible `EdgeInputOverlayWindow` owns native pointer input only over the live notch / tooltip regions;
+- global cursor polling keeps Hover activation working without stealing clicks from the surrounding desktop;
+- `SetWindowRgn` is used only on the invisible input overlay, where pixel quantization cannot affect visible shape quality.
+
+Linux remains on the #17 X11/XWayland `ShapeInput` path and Flat surface.
+
+## Settings window
+
+Settings is rectangular, so it can use the real OS backdrop directly:
+
+- Mica uses the native Windows Mica hint where available;
+- Acrylic uses the native Acrylic/Blur hint with restrained translucent chrome so the desktop blur remains visible;
+- cards, panels and metric tiles all resolve from the same Glass palette;
+- Acrylic uses grayscale antialiasing, strong text hinting and aligned baselines to avoid coloured subpixel fringes over a changing backdrop.
+
+The Settings palette is intentionally isolated from `NotchMaterials`; tuning Settings must not change the approved notch geometry or material.
 
 ## Validation target
 
-Before merge, verify Windows 11 Mica/Acrylic on all four edges and all display modes, including hover sensitivity, popup transitions, DPI scaling, and click-through over browser controls. Re-run the normal Windows/Linux CI and ensure Linux behavior remains unchanged.
+Before merge:
+
+- Windows 10: Flat + Acrylic Settings, Light/Dark/System theme persistence and click-through;
+- Windows 11: Flat + Mica + Acrylic Settings plus the already-approved notch visuals;
+- Windows 11: all four notch edges and display modes remain regression-free;
+- Ubuntu/XWayland: input-region and Flat behavior remain unchanged;
+- normal Windows/Linux CI, package smoke and repository checks must all pass.
