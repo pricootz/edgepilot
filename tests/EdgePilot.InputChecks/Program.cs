@@ -28,7 +28,19 @@ void Set(EdgeWindow window, string name, object value) =>
 
 Rect[] Regions(EdgeWindow window) => (Rect[])Call(window, "InteractiveRects")!;
 Rect[] ShapeRegions(EdgeWindow window) => (Rect[])Call(window, "ShapeInputRects")!;
+Rect[] VisibleInputRegions(EdgeWindow window) => (Rect[])Call(window, "VisibleInputRects")!;
 bool Interactive(EdgeWindow window, Point point) => (bool)Call(window, "IsInteractive", point)!;
+
+Point? FindPoint(Rect area, Func<Point, bool> predicate)
+{
+    for (var y = area.Top + 0.5; y < area.Bottom; y += 2)
+    for (var x = area.Left + 0.5; x < area.Right; x += 2)
+    {
+        var point = new Point(x, y);
+        if (predicate(point)) return point;
+    }
+    return null;
+}
 
 var window = new EdgeWindow();
 
@@ -55,9 +67,20 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     Check(collapsed.All(windowRect.Contains), $"collapsed regions stay inside window on {edge}");
     Check(collapsed.All(r => r.Width * r.Height < size.Width * size.Height),
         $"collapsed regions never become the full transparent window on {edge}");
-    Check(Interactive(window, hot.Center), $"hover hot-zone remains interactive on {edge}");
+    Check(Interactive(window, hot.Center), $"hover hot-zone remains logically interactive on {edge}");
     Check(Interactive(window, shapeBounds.Center), $"collapsed notch remains interactive on {edge}");
     Check(!Interactive(window, windowRect.Center), $"transparent window center passes through on {edge}");
+
+    // Windows uses a render-only click-through visual HWND plus a second invisible shaped input
+    // overlay. The overlay must never include Hover's invisible hot-zone; global cursor polling
+    // keeps Hover working without stealing clicks from applications behind EdgePilot.
+    var visibleCollapsed = VisibleInputRegions(window);
+    var hotOnly = FindPoint(hot, point => !collapsedShape.Any(rect => rect.Contains(point)));
+    Check(visibleCollapsed.Length == collapsedShape.Length,
+        $"Windows collapsed input overlay contains only visible notch strips on {edge}");
+    Check(hotOnly is not null, $"collapsed hover has an invisible hot-zone sample on {edge}");
+    Check(hotOnly is { } hotPoint && !visibleCollapsed.Any(rect => rect.Contains(hotPoint)),
+        $"Windows input overlay excludes invisible hover hot-zone on {edge}");
 
     Set(window, "_expanded", true);
     Set(window, "_expansion", 1d);
@@ -75,15 +98,28 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     var tooltip = (Rect)Call(window, "TooltipLiveRect")!;
     var bridge = (Rect)Call(window, "BridgeRect")!;
     Check(withTooltip.Length == expandedShape.Length + 3,
-        $"tooltip adds only card and bridge to live regions on {edge}");
+        $"tooltip adds only card and bridge to logical live regions on {edge}");
     Check(tooltip.Width > 0 && tooltip.Height > 0 && Interactive(window, tooltip.Center),
-        $"tooltip stays interactive on {edge}");
+        $"tooltip stays logically interactive on {edge}");
     Check(bridge.Width > 0 && bridge.Height > 0 && Interactive(window, bridge.Center),
-        $"tooltip bridge stays interactive on {edge}");
+        $"tooltip bridge stays logically interactive on {edge}");
     Check(withTooltip.All(windowRect.Contains), $"tooltip regions stay inside window on {edge}");
 
+    // The invisible Windows input overlay includes the visible popup, but not the invisible
+    // bridge. Rounded scanline clipping prevents square tooltip-corner pixels from taking input.
+    var visibleWithTooltip = VisibleInputRegions(window);
+    Check(visibleWithTooltip.Any(rect => rect.Contains(tooltip.Center)),
+        $"Windows input overlay includes tooltip center on {edge}");
+    Check(!visibleWithTooltip.Any(rect => rect.Contains(bridge.Center)),
+        $"Windows input overlay excludes tooltip bridge on {edge}");
+    var tooltipCorner = new Point(tooltip.Left + 0.1, tooltip.Top + 0.1);
+    Check(!visibleWithTooltip.Any(rect => rect.Contains(tooltipCorner)),
+        $"Windows input overlay clips rounded tooltip corner on {edge}");
+    Check(visibleWithTooltip.All(windowRect.Contains), $"Windows input overlay stays inside window on {edge}");
+
     window.ApplyPreferences(new NotchPreferences(edge, NotchDisplayMode.Hidden));
-    Check(Regions(window).Length == 0, $"hidden mode has an empty native input region on {edge}");
+    Check(Regions(window).Length == 0, $"hidden mode has an empty logical input region on {edge}");
+    Check(VisibleInputRegions(window).Length == 0, $"hidden mode has an empty Windows input overlay on {edge}");
     Check(!Interactive(window, hot.Center), $"hidden mode accepts no pointer input on {edge}");
 
     window.ApplyPreferences(new NotchPreferences(edge, NotchDisplayMode.Always));
@@ -96,24 +132,39 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
         $"always mode exposes only the exact current notch without tooltip on {edge}");
     Check(always.All(windowRect.Contains), $"always region stays inside window on {edge}");
     Check(!Interactive(window, windowRect.Center), $"always mode transparent area passes through on {edge}");
+    Check(VisibleInputRegions(window).Length == alwaysShape.Length,
+        $"Windows always-mode overlay matches the exact visible notch on {edge}");
 
-    // This point is inside the rectangular bounds used by the old hit testing, but outside the
-    // visible expanded notch shoulder. It must never become an invisible input blocker.
-    const double expandedDepth = 88;
-    const double expandedLength = 408; // 4*78 + 3*10 + 66 with all metrics visible.
+    // This point is inside the expanded notch's old rectangular bounds, but outside its curved
+    // shoulder. It must never become an invisible input blocker.
+    const double expandedDepth = 92;
+    const double expandedLength = 430; // 4*76 + 3*10 + 2*24 flare + 2*24 safe padding.
     var transparentShoulderDesign = new Point(
         NotchLayout.DesignWidth - expandedDepth + 1,
         (NotchLayout.DesignHeight - expandedLength) / 2 + 1);
     var transparentShoulder = NotchLayout.ToScreen(transparentShoulderDesign, edge);
     var currentBounds = (Rect)Call(window, "ShapeRect")!;
     Check(currentBounds.Contains(transparentShoulder),
-        $"regression point remains inside old rectangular notch bounds on {edge}");
+        $"regression point remains inside rectangular notch bounds on {edge}");
     Check(!Interactive(window, transparentShoulder),
         $"transparent notch shoulder passes through on {edge}");
+    Check(!VisibleInputRegions(window).Any(rect => rect.Contains(transparentShoulder)),
+        $"Windows input overlay excludes transparent notch shoulder on {edge}");
 }
 
-// Native regions use integral device pixels. Verify that two adjacent logical scanlines remain
-// adjacent after fractional-DPI quantization instead of creating a one-pixel hole between them.
+foreach (var theme in Enum.GetValues<SettingsThemePreference>())
+{
+    window.ApplyPreferences(new NotchPreferences { SettingsTheme = theme });
+    Check(window.Preferences.SettingsTheme == theme, $"settings theme round trips {theme}");
+}
+foreach (var backdrop in Enum.GetValues<SettingsBackdrop>())
+{
+    window.ApplyPreferences(new NotchPreferences { Backdrop = backdrop });
+    var expected = SettingsBackdropSupport.IsSupported(backdrop) ? backdrop : SettingsBackdrop.Flat;
+    Check(window.Preferences.Backdrop == expected, $"backdrop coerces or round trips {backdrop}");
+}
+window.ApplyPreferences(new NotchPreferences());
+
 var platformType = typeof(EdgeWindow).Assembly.GetType("EdgePilot.Platform.PlatformInputRegion")!;
 var toNative = platformType.GetMethod("ToNativeRectangles", BindingFlags.Static | BindingFlags.NonPublic)!;
 var nativeArray = (Array)toNative.Invoke(null, new object[]

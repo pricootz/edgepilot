@@ -13,6 +13,7 @@ internal sealed class MetricRing : StackPanel
     private const double TrackInset = 4;
 
     private readonly Path _progress;
+    private readonly Ellipse _track;
     private readonly TextBlock _glyph;
     private readonly TextBlock _value;
     private readonly TextBlock _label;
@@ -20,8 +21,8 @@ internal sealed class MetricRing : StackPanel
     public MetricRing(string glyph, string caption)
     {
         Width = 62;
-        Height = 78;
-        Spacing = 4;
+        Height = 76;
+        Spacing = 3;
         HorizontalAlignment = HorizontalAlignment.Center;
 
         _glyph = new TextBlock
@@ -44,7 +45,7 @@ internal sealed class MetricRing : StackPanel
             Stretch = Stretch.None
         };
 
-        var track = new Ellipse
+        _track = new Ellipse
         {
             Width = Diameter - TrackInset * 2 + 3,
             Height = Diameter - TrackInset * 2 + 3,
@@ -60,7 +61,7 @@ internal sealed class MetricRing : StackPanel
             Height = Diameter,
             HorizontalAlignment = HorizontalAlignment.Center
         };
-        ring.Children.Add(track);
+        ring.Children.Add(_track);
         ring.Children.Add(_progress);
         ring.Children.Add(_glyph);
 
@@ -101,6 +102,26 @@ internal sealed class MetricRing : StackPanel
     }
 
     public void SetGlyph(string glyph) => _glyph.Text = glyph;
+
+    public void SetTheme(bool dark, bool translucent = false)
+    {
+        if (dark)
+        {
+            _glyph.Foreground = Brush("#F7F8FA");
+            _value.Foreground = Brush("#F7F8FA");
+            _label.Foreground = Brush(translucent ? "#D4DAE3" : "#777F8C");
+            _progress.Stroke = Brush("#F2F4F7");
+            _track.Stroke = Brush(translucent ? "#444B56" : "#323741");
+        }
+        else
+        {
+            _glyph.Foreground = Brush("#15171B");
+            _value.Foreground = Brush("#15171B");
+            _label.Foreground = Brush(translucent ? "#3F434A" : "#55585E");
+            _progress.Stroke = Brush("#2A2D32");
+            _track.Stroke = Brush(translucent ? "#B9BEC7" : "#C9CDD4");
+        }
+    }
 
     public void SetCaption(string caption) => _label.Text = caption;
 

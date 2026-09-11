@@ -1,6 +1,6 @@
 # EdgePilot for Windows and Linux (x64)
 
-These preview packages include .NET. You do not need the SDK or VS Code. Extract all files together, not just the executable. Close any previous instance before upgrading. The application interface is Italian.
+These preview packages include .NET. You do not need the SDK or VS Code. Extract all files together, not just the executable. Close any previous instance before upgrading. The interface follows the system language when supported and can be changed between Italian, English, French and Spanish in Settings.
 
 ## Windows
 
@@ -12,7 +12,7 @@ Run EdgePilot.exe from the extracted folder. To install for your user and create
 
 Or right-click Install.ps1 and choose Run with PowerShell. Administrator privileges are not required. Installation goes to %LOCALAPPDATA%\Programs\EdgePilot. Start EdgePilot from the Start menu.
 
-EdgePilot constrains its native HWND to the notch, configured Hover hot-zone and visible tooltip/bridge. Transparent parts of the larger layout surface are therefore outside the native window region and cannot block mouse input to applications underneath.
+On Windows, EdgePilot's visible window is a fully click-through render surface. A separate invisible native overlay accepts pointer input only over the visible notch and tooltip, while global cursor polling activates Hover mode without stealing clicks. Transparent parts of the larger layout surface therefore cannot block mouse input to applications underneath.
 
 ## Linux / Ubuntu
 

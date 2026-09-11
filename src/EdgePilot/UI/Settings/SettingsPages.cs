@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using EdgePilot.Core;
+using FluentIconName = FluentIcons.Common.Icon;
 
 namespace EdgePilot.UI;
 
@@ -23,7 +24,13 @@ public sealed partial class SettingsWindow
                     Spacing = 1,
                     Children =
                     {
-                        new TextBlock { Text = "EdgePilot", FontSize = 20, FontWeight = FontWeight.SemiBold },
+                        new TextBlock
+                        {
+                            Text = "EdgePilot",
+                            Foreground = PrimaryBrush,
+                            FontSize = 20,
+                            FontWeight = FontWeight.SemiBold
+                        },
                         new TextBlock
                         {
                             Text = Localization.T("settings.headerSubtitle"),
@@ -46,6 +53,7 @@ public sealed partial class SettingsWindow
             Child = new TextBlock
             {
                 Text = VersionLabel(),
+                Foreground = PrimaryBrush,
                 FontSize = 10,
                 FontWeight = FontWeight.SemiBold
             }
@@ -140,6 +148,13 @@ public sealed partial class SettingsWindow
 
     private Control BuildGeneralPage()
     {
+        // Windows 10 1803+ supports Acrylic; Windows 11 also exposes Mica.
+        _surfaceCard = Card(
+            SectionTitle("▦", Localization.T("general.surfaceTitle")),
+            Description(Localization.T("general.surfaceDescription")),
+            SegmentRow(_backdropButtons));
+        _surfaceCard.IsVisible = OperatingSystem.IsWindows();
+
         return Page(
             Localization.T("general.pageTitle"),
             Localization.T("general.pageSubtitle"),
@@ -150,7 +165,8 @@ public sealed partial class SettingsWindow
             Card(
                 SectionTitle("◐", Localization.T("general.themeTitle")),
                 Description(Localization.T("general.themeDescription")),
-                SegmentRow(_themeButtons)));
+                SegmentRow(_themeButtons)),
+            _surfaceCard);
     }
 
     private Control BuildEdgePage()
@@ -250,13 +266,18 @@ public sealed partial class SettingsWindow
 
     private Control BuildStartupPage(Action? exit)
     {
-        var exitButton = new Button
+        _exitButton = new Button
         {
-            Content = ButtonContent("⏻", Localization.T("startup.exitButton")),
+            Content = ButtonContent(FluentIconName.SignOut, Localization.T("startup.exitButton")),
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
+            BorderBrush = ControlBorderBrush,
+            BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Left,
             Padding = new Thickness(14, 8)
         };
-        exitButton.Click += (_, _) =>
+        RegisterActionButton(_exitButton, ActionButtonRole.Secondary);
+        _exitButton.Click += (_, _) =>
         {
             if (exit is not null) exit();
             else Close();
@@ -272,7 +293,7 @@ public sealed partial class SettingsWindow
             Card(
                 SectionTitle("⏻", Localization.T("startup.sessionTitle")),
                 Description(Localization.T("startup.sessionDescription")),
-                exitButton));
+                _exitButton));
     }
 
     private Control BuildAboutPage()
@@ -298,12 +319,14 @@ public sealed partial class SettingsWindow
                 new TextBlock
                 {
                     Text = "EdgePilot",
+                    Foreground = PrimaryBrush,
                     FontSize = 28,
                     FontWeight = FontWeight.SemiBold
                 },
                 new TextBlock
                 {
                     Text = "Your desktop has edges. EdgePilot makes them useful.",
+                    Foreground = PrimaryBrush,
                     FontSize = 16,
                     TextWrapping = TextWrapping.Wrap
                 },
@@ -316,6 +339,8 @@ public sealed partial class SettingsWindow
 
         var repoButton = LinkButton(Localization.T("about.repoButton"), "https://github.com/pricootz/edgepilot");
         var profileButton = LinkButton(Localization.T("about.profileButton"), "https://github.com/pricootz");
+        var arnieButton = LinkButton(Localization.T("about.arnieButton"), "https://github.com/ArnieGA");
+        var iamarayelButton = LinkButton(Localization.T("about.iamarayelButton"), "https://github.com/IamArayel");
 
         return Page(
             Localization.T("about.pageTitle"),
@@ -326,6 +351,7 @@ public sealed partial class SettingsWindow
                 new TextBlock
                 {
                     Text = Localization.T("about.authorLine"),
+                    Foreground = PrimaryBrush,
                     FontSize = 18,
                     FontWeight = FontWeight.SemiBold,
                     TextWrapping = TextWrapping.Wrap
@@ -333,15 +359,20 @@ public sealed partial class SettingsWindow
                 Description(Localization.T("about.authorDescription")),
                 SegmentRow(new[] { repoButton, profileButton })),
             Card(
-                SectionTitle("⌁", Localization.T("about.philosophyTitle")),
-                FeatureRow("◉", Localization.T("about.localTitle"), Localization.T("about.localDescription")),
+                SectionTitle(FluentIcons.Common.Icon.PeopleTeam, Localization.T("about.contributorsTitle")),
+                Description(Localization.T("about.contributorsDescription")),
+                FeatureRow(FluentIcons.Common.Icon.Person, "@ArnieGA", Localization.T("about.arnieRole")),
                 Divider(),
-                FeatureRow("◨", Localization.T("about.edgeNativeTitle"), Localization.T("about.edgeNativeDescription")),
-                Divider(),
-                FeatureRow("◇", Localization.T("about.evolvingTitle"), Localization.T("about.evolvingDescription"))),
+                FeatureRow(FluentIcons.Common.Icon.Person, "@IamArayel", Localization.T("about.iamarayelRole")),
+                SegmentRow(new[] { arnieButton, iamarayelButton })),
             Card(
                 SectionTitle("ⓘ", Localization.T("about.versionTitle")),
-                new TextBlock { Text = FullVersionLabel(), FontWeight = FontWeight.SemiBold },
+                new TextBlock
+                {
+                    Text = FullVersionLabel(),
+                    Foreground = PrimaryBrush,
+                    FontWeight = FontWeight.SemiBold
+                },
                 Description(Localization.T("about.versionDescription"))));
     }
 
@@ -356,6 +387,7 @@ public sealed partial class SettingsWindow
         stack.Children.Add(new TextBlock
         {
             Text = title,
+            Foreground = PrimaryBrush,
             FontSize = 28,
             FontWeight = FontWeight.SemiBold
         });

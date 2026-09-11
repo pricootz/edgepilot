@@ -8,7 +8,7 @@ using EdgePilot.Core;
 
 namespace EdgePilot.UI;
 
-public sealed partial class SettingsWindow : Window
+public sealed partial class SettingsWindow : GlassWindow
 {
     private sealed record LanguageChoice(Language? Value, string Caption)
     {
@@ -20,7 +20,7 @@ public sealed partial class SettingsWindow : Window
     private static readonly IBrush AccentSoftBrush = new SolidColorBrush(Color.FromArgb(38, 255, 138, 61));
     private static readonly IBrush PreviewBackgroundBrush = new SolidColorBrush(Color.Parse("#101114"));
     private static readonly IBrush PreviewBorderBrush = new SolidColorBrush(Color.Parse("#404247"));
-    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#8D9096"));
+    private static readonly SolidColorBrush MutedBrush = new(Color.Parse("#8D9096"));
     private static readonly VisibleMetrics[] MetricOptions =
         { VisibleMetrics.Cpu, VisibleMetrics.Memory, VisibleMetrics.Disk, VisibleMetrics.Network };
 
@@ -42,6 +42,7 @@ public sealed partial class SettingsWindow : Window
     private readonly Button[] _modeButtons;
     private readonly Button[] _sensitivityButtons;
     private readonly Button[] _themeButtons;
+    private readonly Button[] _backdropButtons;
     private readonly Dictionary<SettingsPage, Button> _navButtons = new();
     private readonly Dictionary<SettingsPage, Control> _pages = new();
     private readonly List<Border> _cards = new();
@@ -50,18 +51,21 @@ public sealed partial class SettingsWindow : Window
     private readonly int[] _intervals = { 500, 1000, 2000, 5000 };
 
     private Border _diskCard = null!;
+    private Border _surfaceCard = null!;
     private Border[] _metricTiles = Array.Empty<Border>();
     private Grid _body = null!;
     private Grid _previewLayout = null!;
     private StackPanel _positionOptions = null!;
     private Grid _metricGrid = null!;
     private Border _versionBadge = null!;
+    private Button _exitButton = null!;
 
     private NotchPreferences _savedPreferences;
     private EdgeSide _selectedEdge;
     private NotchDisplayMode _selectedMode;
     private HoverSensitivity _selectedSensitivity;
     private SettingsThemePreference _selectedTheme;
+    private SettingsBackdrop _selectedBackdrop;
     private SettingsPage _selectedPage;
     private bool _ready;
     private bool _darkTheme;
@@ -76,6 +80,7 @@ public sealed partial class SettingsWindow : Window
         _selectedMode = current.Mode;
         _selectedSensitivity = current.Sensitivity;
         _selectedTheme = current.SettingsTheme;
+        _selectedBackdrop = current.Backdrop;
         _initialDrive = current.SelectedDrive;
 
         Title = Localization.T("settings.title");
@@ -90,6 +95,7 @@ public sealed partial class SettingsWindow : Window
 
         _drive = new ComboBox
         {
+            Foreground = PrimaryBrush,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             MaxDropDownHeight = 280,
             MaxWidth = 460
@@ -104,6 +110,7 @@ public sealed partial class SettingsWindow : Window
                 Localization.T("refresh.2s"), Localization.T("refresh.5s")
             },
             SelectedIndex = Array.IndexOf(_intervals, current.RefreshIntervalMs),
+            Foreground = PrimaryBrush,
             HorizontalAlignment = HorizontalAlignment.Left,
             MaxWidth = 320,
             MinWidth = 210
@@ -122,6 +129,7 @@ public sealed partial class SettingsWindow : Window
         {
             ItemsSource = languageChoices,
             SelectedIndex = languageIndex >= 0 ? languageIndex : 0,
+            Foreground = PrimaryBrush,
             HorizontalAlignment = HorizontalAlignment.Left,
             MinWidth = 210,
             MaxWidth = 320
@@ -136,6 +144,7 @@ public sealed partial class SettingsWindow : Window
         {
             Content = metricNames[index],
             IsChecked = current.Metrics.HasFlag(flag),
+            Foreground = PrimaryBrush,
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         }).ToArray();
@@ -144,6 +153,7 @@ public sealed partial class SettingsWindow : Window
         {
             Content = Localization.T("startup.autostartLabel"),
             IsChecked = current.StartAtLogin,
+            Foreground = PrimaryBrush,
             FontWeight = FontWeight.SemiBold
         };
 
@@ -204,9 +214,17 @@ public sealed partial class SettingsWindow : Window
             SegmentButton("●", Localization.T("theme.dark"), () => SelectTheme(SettingsThemePreference.Dark))
         ];
 
+        _backdropButtons =
+        [
+            SegmentButton(null, Localization.T("surface.flat"), () => SelectBackdrop(SettingsBackdrop.Flat)),
+            SegmentButton(null, Localization.T("surface.mica"), () => SelectBackdrop(SettingsBackdrop.Mica)),
+            SegmentButton(null, Localization.T("surface.acrylic"), () => SelectBackdrop(SettingsBackdrop.Acrylic))
+        ];
+
         _status = new TextBlock
         {
             Text = warning ?? Localization.T("settings.status.saved"),
+            Foreground = PrimaryBrush,
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             MaxLines = 2
@@ -215,7 +233,10 @@ public sealed partial class SettingsWindow : Window
         _applyButton = new Button
         {
             Content = ButtonContent("✓", Localization.T("settings.saveChanges")),
+            Foreground = Brushes.White,
             Background = AccentBrush,
+            BorderBrush = AccentBrush,
+            BorderThickness = new Thickness(1),
             Padding = new Thickness(17, 9),
             MinWidth = 146,
             IsEnabled = false
@@ -223,10 +244,16 @@ public sealed partial class SettingsWindow : Window
         _resetButton = new Button
         {
             Content = ButtonContent("↶", Localization.T("settings.resetChanges")),
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
+            BorderBrush = ControlBorderBrush,
+            BorderThickness = new Thickness(1),
             Padding = new Thickness(14, 9),
             MinWidth = 100,
             IsEnabled = false
         };
+        RegisterActionButton(_applyButton, ActionButtonRole.Primary);
+        RegisterActionButton(_resetButton, ActionButtonRole.Secondary);
 
         _drive.SelectionChanged += (_, _) => MarkDirty();
         _refresh.SelectionChanged += (_, _) => MarkDirty();
@@ -281,6 +308,7 @@ public sealed partial class SettingsWindow : Window
         SelectMode(current.Mode, markDirty: false);
         SelectSensitivity(current.Sensitivity, markDirty: false);
         SelectTheme(current.SettingsTheme, markDirty: false);
+        SelectBackdrop(current.Backdrop, markDirty: false);
         UpdateConditionalSettings();
         var pendingPage = initialPage >= 0 ? initialPage : Interlocked.Exchange(ref _pendingInitialPage, -1);
         var firstPage = Enum.IsDefined(typeof(SettingsPage), pendingPage) ? (SettingsPage)pendingPage : SettingsPage.General;
@@ -306,13 +334,7 @@ public sealed partial class SettingsWindow : Window
     {
         _selectedPage = page;
         _pageHost.Content = _pages[page];
-        foreach (var item in _navButtons)
-        {
-            var selected = item.Key == page;
-            item.Value.Background = selected ? AccentSoftBrush : Brushes.Transparent;
-            item.Value.BorderBrush = selected ? AccentBrush : Brushes.Transparent;
-            item.Value.BorderThickness = selected ? new Thickness(3, 0, 0, 0) : new Thickness(0);
-        }
+        UpdateNavigationIconStates(page);
     }
 
     private void SelectEdge(EdgeSide edge, bool markDirty = true)
@@ -342,6 +364,15 @@ public sealed partial class SettingsWindow : Window
         _selectedTheme = theme;
         UpdateSegments(_themeButtons, (int)theme);
         RequestedThemeVariant = ThemeVariantFor(theme);
+        ApplyTheme();
+        if (markDirty) MarkDirty();
+    }
+
+    private void SelectBackdrop(SettingsBackdrop backdrop, bool markDirty = true)
+    {
+        _selectedBackdrop = backdrop;
+        UpdateSegments(_backdropButtons, (int)backdrop);
+        ApplyTheme();
         if (markDirty) MarkDirty();
     }
 
@@ -352,16 +383,8 @@ public sealed partial class SettingsWindow : Window
         _ => ThemeVariant.Default
     };
 
-    private static void UpdateSegments(IReadOnlyList<Button> buttons, int selectedIndex)
-    {
-        for (var i = 0; i < buttons.Count; i++)
-        {
-            var selected = i == selectedIndex;
-            buttons[i].Background = selected ? AccentBrush : Brushes.Transparent;
-            buttons[i].BorderBrush = selected ? AccentBrush : new SolidColorBrush(Color.FromArgb(70, 128, 128, 128));
-            buttons[i].BorderThickness = new Thickness(1);
-        }
-    }
+    private void UpdateSegments(IReadOnlyList<Button> buttons, int selectedIndex) =>
+        SetSegmentSelection(buttons, selectedIndex);
 
     private void UpdatePreview()
     {
@@ -395,20 +418,7 @@ public sealed partial class SettingsWindow : Window
         if (_diskCard is not null) _diskCard.IsVisible = _metrics[2].IsChecked == true;
     }
 
-    private void UpdateMetricTileStates()
-    {
-        if (_metricTiles.Length == 0) return;
-        for (var i = 0; i < _metricTiles.Length; i++)
-        {
-            var selected = _metrics[i].IsChecked == true;
-            _metricTiles[i].Background = selected
-                ? AccentSoftBrush
-                : Brush(_darkTheme ? "#1F1F1F" : "#F8F8F9");
-            _metricTiles[i].BorderBrush = selected
-                ? AccentBrush
-                : Brush(_darkTheme ? "#343434" : "#E6E6E8");
-        }
-    }
+    private void UpdateMetricTileStates() => PaintMetricTiles();
 
     private VisibleMetrics SelectedMetrics()
     {
@@ -428,7 +438,8 @@ public sealed partial class SettingsWindow : Window
             SelectedDrive = (_drive.SelectedItem as DriveChoice)?.Name,
             StartAtLogin = _autostart.IsChecked == true,
             Language = (_language.SelectedItem as LanguageChoice)?.Value,
-            SettingsTheme = _selectedTheme
+            SettingsTheme = _selectedTheme,
+            Backdrop = _selectedBackdrop
         };
     }
 
@@ -440,6 +451,7 @@ public sealed partial class SettingsWindow : Window
         _applyButton.IsEnabled = dirty;
         _resetButton.IsEnabled = dirty;
         _status.Text = dirty ? Localization.T("settings.status.unsaved") : Localization.T("settings.status.saved");
+        RefreshActionButtonVisuals();
     }
 
     private void ResetToSaved()
@@ -449,6 +461,7 @@ public sealed partial class SettingsWindow : Window
         _selectedMode = _savedPreferences.Mode;
         _selectedSensitivity = _savedPreferences.Sensitivity;
         _selectedTheme = _savedPreferences.SettingsTheme;
+        _selectedBackdrop = _savedPreferences.Backdrop;
         _refresh.SelectedIndex = Array.IndexOf(_intervals, _savedPreferences.RefreshIntervalMs);
         for (var i = 0; i < _metrics.Length; i++)
             _metrics[i].IsChecked = _savedPreferences.Metrics.HasFlag(MetricOptions[i]);
@@ -468,7 +481,9 @@ public sealed partial class SettingsWindow : Window
         UpdateSegments(_modeButtons, (int)_selectedMode);
         UpdateSegments(_sensitivityButtons, (int)_selectedSensitivity);
         UpdateSegments(_themeButtons, (int)_selectedTheme);
+        UpdateSegments(_backdropButtons, (int)_selectedBackdrop);
         RequestedThemeVariant = ThemeVariantFor(_selectedTheme);
+        ApplyTheme();
         UpdatePreview();
         UpdateConditionalSettings();
         UpdateMetricTileStates();
@@ -476,6 +491,7 @@ public sealed partial class SettingsWindow : Window
         _applyButton.IsEnabled = false;
         _resetButton.IsEnabled = false;
         _status.Text = Localization.T("settings.status.reset");
+        RefreshActionButtonVisuals();
     }
 
     private void SaveChanges(Action<NotchPreferences> apply, Action<NotchPreferences>? savePreferences,
@@ -499,6 +515,7 @@ public sealed partial class SettingsWindow : Window
             _savedPreferences = value;
             _applyButton.IsEnabled = false;
             _resetButton.IsEnabled = false;
+            RefreshActionButtonVisuals();
 
             if (languageChanged && reopen is not null)
             {
@@ -517,6 +534,7 @@ public sealed partial class SettingsWindow : Window
             System.Diagnostics.Trace.WriteLine(ex);
             _status.Text = Localization.T("settings.saveFailed");
             _applyButton.IsEnabled = true;
+            RefreshActionButtonVisuals();
         }
     }
 
@@ -550,26 +568,32 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    private void ApplyTheme()
-    {
-        _darkTheme = ActualThemeVariant == ThemeVariant.Dark;
-        Background = Brush(_darkTheme ? "#121212" : "#F4F4F5");
-        _header.Background = Brush(_darkTheme ? "#151515" : "#FFFFFF");
-        _sidebar.Background = Brush(_darkTheme ? "#141414" : "#FAFAFA");
-        _footer.Background = Brush(_darkTheme ? "#151515" : "#FFFFFF");
+    // The surface and theme wiring lives in GlassWindow; this just repaints the shell from
+    // the resolved palette. That is all a new screen has to write, too.
+    private void ApplyTheme() => ApplySurface(_selectedBackdrop, _selectedTheme);
 
-        var line = Brush(_darkTheme ? "#2C2C2C" : "#DDDDDF");
-        _header.BorderBrush = line;
-        _sidebar.BorderBrush = line;
-        _footer.BorderBrush = line;
+    protected override void PaintChrome(GlassPalette p)
+    {
+        _darkTheme = p.Dark;
+        _header.Background = p.Panel;
+        _footer.Background = p.Panel;
+        // The sidebar keeps a slightly deeper flat shade; on glass it matches the panels.
+        _sidebar.Background = p.IsGlass ? p.Panel : Brush(p.Dark ? "#141414" : "#FAFAFA");
+
+        MutedBrush.Color = p.MutedForeground;
+
+        _header.BorderBrush = p.Line;
+        _sidebar.BorderBrush = p.Line;
+        _footer.BorderBrush = p.Line;
 
         foreach (var card in _cards)
         {
-            card.Background = Brush(_darkTheme ? "#191919" : "#FFFFFF");
-            card.BorderBrush = Brush(_darkTheme ? "#2D2D2D" : "#E2E2E4");
+            card.Background = p.Card;
+            card.BorderBrush = p.CardBorder;
+            card.BorderThickness = p.CardBorderThickness;
         }
-        UpdateMetricTileStates();
-        ShowPage(_selectedPage);
+
+        ApplyInteractivePalette(p);
     }
 
     private static string VersionLabel()

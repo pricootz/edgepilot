@@ -74,27 +74,29 @@ Set(window, "_pinned", false);
 Set(window, "_expansion", 1d);
 Call(window, "UpdateNotchVisual");
 var stack = (StackPanel)Field(window, "_metricStack")!;
-Check(Canvas.GetTop(stack) == (620 - stack.Height) / 2, "metric stack centered");
+Check(Canvas.GetTop(stack) == (620 - stack.Height) / 2, "metric stack centered in approved safe area");
 for (var i = 0; i < 4; i++)
 {
-    var point = new Point(366, Canvas.GetTop(stack) + i * 88 + 39);
+    var point = new Point(364, Canvas.GetTop(stack) + i * 86 + 38);
     Check((int)Call(window, "MetricIndexAt", point)! == i, "metric hit target " + i);
 }
-Call(window, "UpdatePointer", new Point(366, 181));
+Call(window, "UpdatePointer", new Point(364, 181));
 var bridge = (Rect)Call(window, "BridgeRect")!;
 Check(bridge.Width > 0, "tooltip bridge exists");
 Call(window, "UpdatePointer", bridge.Center);
 Check((int?)Field(window, "_hoveredMetric") == 0, "tooltip survives crossing bridge");
 Check(!((DispatcherTimer)Field(window, "_foldTimer")!).IsEnabled, "bridge keeps notch open");
 Set(window, "_expansion", 0.4d);
-Check(Call(window, "MetricIndexAt", new Point(366, 181)) is null, "clipped metrics are inactive");
+Check(Call(window, "MetricIndexAt", new Point(364, 181)) is null, "clipped metrics are inactive");
 var shape = (Avalonia.Controls.Shapes.Path)Field(window, "_notchShape")!;
 var content = (Canvas)Field(window, "_notchContent")!;
+var acrylicSurface = (ExperimentalAcrylicBorder)Field(window, "_notchAcrylicSurface")!;
 foreach (var p in new[] { 0d, 0.25, 0.5, 0.75, 1, 1.025 })
 {
     Set(window, "_expansion", p);
     Call(window, "UpdateNotchVisual");
-    Check(ReferenceEquals(shape.Data, content.Clip), "shape and clip share geometry " + p);
+    Check(ReferenceEquals(shape.Data, content.Clip), "shape and content clip share geometry " + p);
+    Check(ReferenceEquals(shape.Data, acrylicSurface.Clip), "shape and acrylic clip share geometry " + p);
     Check(Math.Abs(shape.Data!.Bounds.Center.Y - 310) < 0.001, "geometry remains centered " + p);
 }
 foreach (var edge in Enum.GetValues<EdgeSide>())
@@ -105,11 +107,11 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     Call(window, "UpdateNotchVisual");
     var size = NotchLayout.WindowSize(edge);
     Check(window.Width == size.Width && window.Height == size.Height, "window orientation " + edge);
-    foreach (var point in new[] { new Point(410, 310), new Point(366, 181), new Point(0, 0) })
+    foreach (var point in new[] { new Point(410, 310), new Point(364, 181), new Point(0, 0) })
         Check(NotchLayout.ToDesign(NotchLayout.ToScreen(point, edge), edge) == point, "coordinate round trip " + edge);
     for (var i = 0; i < 4; i++)
     {
-        var point = NotchLayout.ToScreen(new Point(366, (620 - 342) / 2d + i * 88 + 39), edge);
+        var point = NotchLayout.ToScreen(new Point(364, (620 - 334) / 2d + i * 86 + 38), edge);
         Check((int)Call(window, "MetricIndexAt", point)! == i, "oriented metric " + edge + i);
         Call(window, "UpdatePointer", point);
         var tip = (Rect)Call(window, "TooltipLiveRect")!;
@@ -175,16 +177,16 @@ foreach (var mask in Enumerable.Range(1, 15))
     Call(window, "UpdateNotchVisual");
     Check(window.Preferences == preferences, "live preferences round trip");
     var indices = Enumerable.Range(0, 4).Where(i => (mask & (1 << i)) != 0).ToArray();
-    var span = indices.Length * 78 + (indices.Length - 1) * 10;
+    var span = indices.Length * 76 + (indices.Length - 1) * 10;
     Check(stack.Children.Count == indices.Length, "selected rings only");
     for (var slot = 0; slot < indices.Length; slot++)
     {
-        var point = NotchLayout.ToScreen(new Point(366, (620 - span) / 2d + slot * 88 + 39), edge);
+        var point = NotchLayout.ToScreen(new Point(364, (620 - span) / 2d + slot * 86 + 38), edge);
         Check((int)Call(window, "MetricIndexAt", point)! == indices[slot], "filtered metric identity");
     }
     var bounds = shape.Data!.Bounds;
-    Check(Math.Abs((NotchLayout.Horizontal(edge) ? bounds.Width : bounds.Height) - (span + 66)) < 0.001,
-        "notch shrinks to selected metrics");
+    Check(Math.Abs((NotchLayout.Horizontal(edge) ? bounds.Width : bounds.Height) - (span + 96)) < 0.001,
+        "notch preserves 24-DIP safe margins around selected metrics");
 }
 foreach (var edge in Enum.GetValues<EdgeSide>())
 {
@@ -262,6 +264,12 @@ try
     var refreshSelector = (ComboBox)SettingsField(settings, "_refresh")!;
     var metricChecks = (CheckBox[])SettingsField(settings, "_metrics")!;
     var previewNotch = (Border)SettingsField(settings, "_previewNotch")!;
+    var exitButton = (Button)SettingsField(settings, "_exitButton")!;
+    var exitContent = (StackPanel)exitButton.Content!;
+    var exitIcon = exitContent.Children.OfType<FluentIcons.Avalonia.FluentIcon>().Single();
+    Check(exitIcon.Icon == FluentIcons.Common.Icon.SignOut, "exit action uses SignOut icon");
+    Check(exitIcon.IconSize == FluentIcons.Common.IconSize.Size20 && Math.Abs(exitIcon.FontSize - 16) < 0.001,
+        "compact exit icon uses available glyph set at 16px");
 
     SettingsCall(settings, "SelectEdge", EdgeSide.Bottom, true);
     SettingsCall(settings, "SelectMode", NotchDisplayMode.Always, true);
@@ -341,7 +349,6 @@ try
     Check(command.WindowsCommand().StartsWith("\"/opt/Edge Pilot/EdgePilot\""), "startup command quotes spaces");
     Check(new LaunchCommand("/opt/100%/EdgePilot", Array.Empty<string>()).DesktopEntry().Contains("100%%"),
         "desktop entry escapes percent field codes");
-    // Replacing an invalid file via Apply restores usable settings.
     PreferenceStore.Save(settingsPath, new NotchPreferences());
     Check(PreferenceStore.Load(settingsPath) == new NotchPreferences(), "corrupt file can be recovered");
 }

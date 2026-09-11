@@ -19,16 +19,24 @@ public sealed class EdgeWindow : Window
 
     private const double CollapsedDepth = 10;
     private const double CollapsedLength = 82;
-    private const double ExpandedDepth = 88;
-    private double ExpandedLength => StackHeight + 66;
+    private const double ExpandedDepth = 92;
+    private const double ExpandedFlare = 24;
+    private const double ContentLengthPadding = 24;
+    private const double VerticalContentDepthPadding = 12;
+    private const double HorizontalContentDepthPadding = 8;
+    private double ExpandedLength => StackHeight + ExpandedFlare * 2 + ContentLengthPadding * 2;
+    private double ExpandedContentTop =>
+        (WindowHeight - ExpandedLength) / 2 + ExpandedFlare + ContentLengthPadding;
     private double HotZoneDepth => _sensitivity switch { HoverSensitivity.Precise => 18, HoverSensitivity.Wide => 54, _ => 36 };
     private double HotZoneLength => _sensitivity switch { HoverSensitivity.Precise => 96, HoverSensitivity.Wide => 152, _ => 120 };
 
     private const double FoldDelayMs = 450;
-    private const double CellHeight = 78;
+    private const double CellHeight = 76;
     private const double CellGap = 10;
     private int[] _visibleMetricIndices = [0, 1, 2, 3];
-    private double StackHeight => _visibleMetricIndices.Length * CellHeight + (_visibleMetricIndices.Length - 1) * CellGap;
+    private double StackHeight => _visibleMetricIndices.Length == 0
+        ? 0
+        : _visibleMetricIndices.Length * CellHeight + (_visibleMetricIndices.Length - 1) * CellGap;
     private HoverSensitivity _sensitivity = HoverSensitivity.Normal;
     private VisibleMetrics _metrics = VisibleMetrics.All;
 
@@ -37,6 +45,7 @@ public sealed class EdgeWindow : Window
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer _cursorTimer;
 
+    private readonly ExperimentalAcrylicBorder _notchAcrylicSurface;
     private readonly Path _notchShape;
     private readonly Canvas _notchContent;
     private readonly StackPanel _metricStack;
@@ -62,7 +71,10 @@ public sealed class EdgeWindow : Window
     private bool _pinned;
     private bool _screensSubscribed;
     private bool _started;
+    private bool _windowsVisualClickThroughReady;
     private NotchDisplayMode _mode;
+    private SettingsBackdrop _backdrop = SettingsBackdrop.Flat;
+    private SettingsThemePreference _settingsTheme = SettingsThemePreference.System;
     private string? _selectedDrive;
     private bool _startAtLogin;
     private Language? _language;
@@ -73,7 +85,8 @@ public sealed class EdgeWindow : Window
     private SettingsWindow? _settingsWindow;
     private int? _hoveredMetric;
 
-    private readonly PlatformInputRegion _inputRegion;
+    private readonly PlatformInputRegion? _inputRegion;
+    private EdgeInputOverlayWindow? _windowsInputOverlay;
 
     public EdgeWindow()
     {
@@ -90,12 +103,22 @@ public sealed class EdgeWindow : Window
         TransparencyBackgroundFallback = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
 
-        _inputRegion = new PlatformInputRegion(this);
+        _inputRegion = OperatingSystem.IsLinux() ? new PlatformInputRegion(this) : null;
+
+        _notchAcrylicSurface = new ExperimentalAcrylicBorder
+        {
+            Width = WindowWidth,
+            Height = WindowHeight,
+            IsVisible = false,
+            IsHitTestVisible = false,
+            Material = NotchMaterials.Acrylic(dark: true)
+        };
 
         _notchShape = new Path
         {
-            Fill = Brush("#050608"),
-            StrokeThickness = 0,
+            Fill = NotchMaterials.FlatFill,
+            Stroke = NotchMaterials.FlatStroke,
+            StrokeThickness = 1,
             IsHitTestVisible = false
         };
 
@@ -106,7 +129,7 @@ public sealed class EdgeWindow : Window
 
         _metricStack = new StackPanel
         {
-            Width = ExpandedDepth,
+            Width = ExpandedDepth - VerticalContentDepthPadding * 2,
             Spacing = CellGap,
             Height = StackHeight,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -125,8 +148,6 @@ public sealed class EdgeWindow : Window
             IsHitTestVisible = false
         };
         _notchContent.Children.Add(_metricStack);
-        Canvas.SetLeft(_metricStack, WindowWidth - ExpandedDepth);
-        Canvas.SetTop(_metricStack, (WindowHeight - StackHeight) / 2);
 
         _tooltipTitle = Text("CPU", 10, FontWeight.Bold, "#858E9B");
         _tooltipValue = Text("—", 28, FontWeight.SemiBold, "#F5F7FA");
@@ -161,6 +182,11 @@ public sealed class EdgeWindow : Window
             Width = WindowWidth,
             Height = WindowHeight
         };
+        TextOptions.SetTextRenderingMode(root, TextRenderingMode.Antialias);
+        TextOptions.SetTextHintingMode(root, TextHintingMode.Strong);
+        TextOptions.SetBaselinePixelAlignment(root, BaselinePixelAlignment.Aligned);
+
+        root.Children.Add(_notchAcrylicSurface);
         root.Children.Add(_notchShape);
         root.Children.Add(_notchContent);
         root.Children.Add(_tooltipCard);
@@ -209,8 +235,17 @@ public sealed class EdgeWindow : Window
         _cursorTimer.Tick += (_, _) => PollCursor();
     }
 
-    internal bool HasSafePlatformInput =>
-        (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) || _inputRegion.IsReady;
+    internal bool HasSafePlatformInput
+    {
+        get
+        {
+            if (OperatingSystem.IsWindows())
+                return _windowsVisualClickThroughReady && _windowsInputOverlay?.IsReady == true;
+            if (OperatingSystem.IsLinux())
+                return _inputRegion?.IsReady == true;
+            return true;
+        }
+    }
 
     private void OnOpened(object? sender, EventArgs e)
     {
@@ -220,9 +255,23 @@ public sealed class EdgeWindow : Window
         Screens.Changed += OnScreensChanged;
         _screensSubscribed = true;
         _ = Task.Run(() => _monitor.RunAsync(_lifetime.Token));
+
+        if (OperatingSystem.IsWindows())
+        {
+            _windowsVisualClickThroughReady = WindowsVisualClickThrough.TryEnable(this);
+            if (!_windowsVisualClickThroughReady)
+            {
+                DisableEdgeSurface("EdgePilot could not establish a click-through Windows visual surface.");
+                return;
+            }
+
+            _windowsInputOverlay ??= new EdgeInputOverlayWindow(HandlePointerPressed);
+        }
+
         if (_mode == NotchDisplayMode.Hidden)
         {
             _cursorTimer.Stop();
+            _windowsInputOverlay?.Suspend();
             Hide();
         }
         else if (UpdatePlatformInputRegion())
@@ -242,11 +291,16 @@ public sealed class EdgeWindow : Window
         _monitor.SnapshotUpdated -= OnSnapshotUpdated;
         _monitor.CaptureFailed -= OnCaptureFailed;
 
-        _inputRegion.Dispose();
+        _windowsInputOverlay?.Dispose();
+        _inputRegion?.Dispose();
         _lifetime.Dispose();
     }
 
-    private void OnScreensChanged(object? sender, EventArgs e) => Relocate();
+    private void OnScreensChanged(object? sender, EventArgs e)
+    {
+        Relocate();
+        UpdatePlatformInputRegion();
+    }
 
     private void OnSnapshotUpdated(SystemSnapshot snapshot)
     {
@@ -324,17 +378,26 @@ public sealed class EdgeWindow : Window
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
-        {
-            if (IsInteractive(e.GetPosition(this))) ShowSettings();
+        var current = e.GetCurrentPoint(this);
+        var left = current.Properties.IsLeftButtonPressed;
+        var right = current.Properties.IsRightButtonPressed;
+        HandlePointerPressed(e.GetPosition(this), left, right);
+        if (left || right)
             e.Handled = true;
+    }
+
+    private void HandlePointerPressed(Point point, bool left, bool right)
+    {
+        if (right)
+        {
+            if (IsInteractive(point))
+                ShowSettings();
             return;
         }
-        if (_mode == NotchDisplayMode.Always) return;
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+
+        if (_mode == NotchDisplayMode.Always || !left)
             return;
 
-        var point = e.GetPosition(this);
         if (!ShapeContains(point))
             return;
 
@@ -345,7 +408,7 @@ public sealed class EdgeWindow : Window
         }
 
         _pinned = !_pinned;
-        CancelFold(); // The click is inside the notch; fold only after leaving.
+        CancelFold();
     }
 
     private void Expand()
@@ -372,6 +435,87 @@ public sealed class EdgeWindow : Window
         _motionTimer.Start();
     }
 
+    private void ApplyBackdrop()
+    {
+        _backdrop = SettingsBackdropSupport.Coerce(_backdrop);
+        var glass = Glass.IsGlass(_backdrop);
+        var dark = glass ? ThemeIsDark() : true;
+
+        // The notch never uses a full-HWND native backdrop. Its material is rendered locally
+        // inside the antialiased geometry; native Mica/Acrylic remain available to SettingsWindow.
+        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+
+        RequestedThemeVariant = glass
+            ? (dark ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light)
+            : Avalonia.Styling.ThemeVariant.Dark;
+
+        _notchShape.StrokeThickness = 1;
+        switch (_backdrop)
+        {
+            case SettingsBackdrop.Mica:
+                _notchAcrylicSurface.IsVisible = false;
+                _notchShape.Fill = NotchMaterials.MicaFill(dark);
+                _notchShape.Stroke = NotchMaterials.MicaStroke(dark);
+                _tooltipCard.Background = new SolidColorBrush(
+                    dark ? Color.FromArgb(0x0D, 255, 255, 255) : Color.FromArgb(0x80, 255, 255, 255));
+                _tooltipCard.BorderBrush = Glass.MicaCardStroke(dark);
+                _tooltipCard.BorderThickness = new Thickness(1);
+                ApplyTooltipTextColors(dark, lighten: false);
+                break;
+
+            case SettingsBackdrop.Acrylic:
+                _notchAcrylicSurface.Material = NotchMaterials.Acrylic(dark);
+                _notchAcrylicSurface.IsVisible = true;
+                _notchShape.Fill = NotchMaterials.AcrylicOverlay(dark);
+                _notchShape.Stroke = NotchMaterials.AcrylicStroke(dark);
+                _tooltipCard.Background = Glass.AcrylicCard(dark);
+                _tooltipCard.BorderBrush = Glass.EdgeBrush(dark);
+                _tooltipCard.BorderThickness = Glass.EdgeThickness;
+                ApplyTooltipTextColors(dark, lighten: dark);
+                break;
+
+            default:
+                _notchAcrylicSurface.IsVisible = false;
+                _notchShape.Fill = NotchMaterials.FlatFill;
+                _notchShape.Stroke = NotchMaterials.FlatStroke;
+                _tooltipCard.Background = Brush("#101318");
+                _tooltipCard.BorderBrush = Brush("#2A3039");
+                _tooltipCard.BorderThickness = new Thickness(1);
+                ApplyTooltipTextColors(dark: true, lighten: false);
+                break;
+        }
+
+        foreach (var ring in new[] { _cpuRing, _ramRing, _diskRing, _networkRing })
+            ring.SetTheme(dark, translucent: glass);
+
+        UpdateNotchVisual();
+    }
+
+    private bool ThemeIsDark() => Glass.ResolveDark(_settingsTheme);
+
+    private void ApplyTooltipTextColors(bool dark, bool lighten)
+    {
+        if (dark)
+        {
+            _tooltipTitle.Foreground = TextBrush("#858E9B", lighten, 0.40);
+            _tooltipValue.Foreground = Brush("#F5F7FA");
+            _tooltipLine1.Foreground = TextBrush("#C9D0D8", lighten, 0.40);
+            _tooltipLine2.Foreground = TextBrush("#8B93A1", lighten, 0.45);
+            _tooltipLine3.Foreground = TextBrush("#68717E", lighten, 0.50);
+        }
+        else
+        {
+            _tooltipTitle.Foreground = Brush("#55585E");
+            _tooltipValue.Foreground = Brush("#1A1C21");
+            _tooltipLine1.Foreground = Brush("#3A3D42");
+            _tooltipLine2.Foreground = Brush("#55585E");
+            _tooltipLine3.Foreground = Brush("#6A6D73");
+        }
+    }
+
+    private static IBrush TextBrush(string hex, bool lighten, double amount) =>
+        new SolidColorBrush(lighten ? Glass.Lighten(Color.Parse(hex), amount) : Color.Parse(hex));
+
     private void UpdateNotchVisual()
     {
         var p = Math.Clamp(_expansion, 0, 1.025);
@@ -382,10 +526,10 @@ public sealed class EdgeWindow : Window
         geometry.Transform = new MatrixTransform(NotchLayout.Transform(_edge));
         _notchShape.Data = geometry;
         _notchContent.Clip = geometry;
+        _notchAcrylicSurface.Clip = geometry;
 
         var contentProgress = Math.Clamp((p - 0.16) / 0.72, 0, 1);
         _notchContent.Opacity = contentProgress;
-        // Cells stay at their final positions; the shared silhouette reveals them.
 
         if (p < 0.78)
         {
@@ -412,7 +556,7 @@ public sealed class EdgeWindow : Window
         if (point.X < xMin || point.X > WindowWidth)
             return null;
 
-        var stackTop = (WindowHeight - StackHeight) / 2;
+        var stackTop = ExpandedContentTop;
         const double cell = CellHeight;
         const double gap = CellGap;
 
@@ -509,15 +653,20 @@ public sealed class EdgeWindow : Window
 
     public NotchPreferences Preferences => new(_edge, _mode)
     {
-        SelectedDrive = _selectedDrive, StartAtLogin = _startAtLogin,
-        Metrics = _metrics, Sensitivity = _sensitivity,
+        SelectedDrive = _selectedDrive,
+        StartAtLogin = _startAtLogin,
+        Metrics = _metrics,
+        Sensitivity = _sensitivity,
         RefreshIntervalMs = (int)_monitor.RefreshInterval.TotalMilliseconds,
-        Language = _language
+        Language = _language,
+        SettingsTheme = _settingsTheme,
+        Backdrop = _backdrop
     };
 
     public void ApplyPreferences(NotchPreferences preferences)
     {
         PreferenceStore.Validate(preferences);
+        preferences = PreferenceStore.CoerceForPlatform(preferences);
         CancelFold();
         SetHoveredMetric(null);
         _pinned = false;
@@ -528,6 +677,8 @@ public sealed class EdgeWindow : Window
         _metrics = preferences.Metrics;
         _sensitivity = preferences.Sensitivity;
         _language = preferences.Language;
+        _settingsTheme = preferences.SettingsTheme;
+        _backdrop = preferences.Backdrop;
         Localization.SetLanguage(preferences.Language ?? Localization.DetectSystemLanguage());
         _diskRing.SetCaption(Localization.T("ring.disk"));
         _networkRing.SetCaption(Localization.T("ring.network"));
@@ -537,6 +688,7 @@ public sealed class EdgeWindow : Window
         MetricRing[] rings = [_cpuRing, _ramRing, _diskRing, _networkRing];
         foreach (var index in _visibleMetricIndices) _metricStack.Children.Add(rings[index]);
         ConfigureLayout();
+        ApplyBackdrop();
         _expanded = _mode == NotchDisplayMode.Always;
         StartMotion(_expanded ? 1 : 0);
         UpdateNotchVisual();
@@ -545,17 +697,18 @@ public sealed class EdgeWindow : Window
             if (_mode == NotchDisplayMode.Hidden)
             {
                 _cursorTimer.Stop();
+                _windowsInputOverlay?.Suspend();
                 Hide();
             }
             else
             {
                 Show();
+                Relocate();
                 if (UpdatePlatformInputRegion()) _cursorTimer.Start();
                 else _cursorTimer.Stop();
             }
         }
         if (_latestSnapshot is not null) RenderSnapshot(_latestSnapshot);
-        Relocate();
         PreferencesChanged?.Invoke();
     }
 
@@ -597,33 +750,43 @@ public sealed class EdgeWindow : Window
         Width = size.Width;
         Height = size.Height;
         var root = (Canvas)Content!;
-        root.Width = _notchContent.Width = size.Width;
-        root.Height = _notchContent.Height = size.Height;
+        root.Width = _notchContent.Width = _notchAcrylicSurface.Width = size.Width;
+        root.Height = _notchContent.Height = _notchAcrylicSurface.Height = size.Height;
+
         var horizontal = NotchLayout.Horizontal(_edge);
         _metricStack.Orientation = horizontal ? Orientation.Horizontal : Orientation.Vertical;
-        _metricStack.Width = horizontal ? StackHeight : ExpandedDepth;
-        _metricStack.Height = horizontal ? ExpandedDepth : StackHeight;
+
+        var depthPadding = horizontal ? HorizontalContentDepthPadding : VerticalContentDepthPadding;
+        var designBounds = new Rect(
+            WindowWidth - ExpandedDepth + depthPadding,
+            ExpandedContentTop,
+            ExpandedDepth - depthPadding * 2,
+            StackHeight);
+        var bounds = NotchLayout.ToScreen(designBounds, _edge);
+
+        _metricStack.Width = bounds.Width;
+        _metricStack.Height = bounds.Height;
         foreach (var ring in _metricStack.Children)
         {
             ring.Width = horizontal ? CellHeight : 62;
+            ring.Height = CellHeight;
             ring.VerticalAlignment = VerticalAlignment.Center;
         }
-        var bounds = NotchLayout.ToScreen(new Rect(WindowWidth - ExpandedDepth,
-            (WindowHeight - StackHeight) / 2, ExpandedDepth, StackHeight), _edge);
+
         Canvas.SetLeft(_metricStack, bounds.X);
         Canvas.SetTop(_metricStack, bounds.Y);
+        _windowsInputOverlay?.Sync(new Size(Width, Height), Position);
     }
 
     private void PositionTooltip(int index)
     {
         const double tooltipWidth = 270;
         const double gap = 16;
-        // Measure while visible; invisible controls otherwise report zero desired size.
         _tooltipCard.IsVisible = true;
         _tooltipCard.Measure(new Size(tooltipWidth, double.PositiveInfinity));
         var height = Math.Max(174, _tooltipCard.DesiredSize.Height);
         var center = NotchLayout.ToScreen(new Point(WindowWidth - ExpandedDepth / 2,
-            (WindowHeight - StackHeight) / 2 + Array.IndexOf(_visibleMetricIndices, index) * (CellHeight + CellGap) + CellHeight / 2), _edge);
+            ExpandedContentTop + Array.IndexOf(_visibleMetricIndices, index) * (CellHeight + CellGap) + CellHeight / 2), _edge);
         var x = _edge switch
         {
             EdgeSide.Right => Width - ExpandedDepth - gap - tooltipWidth,
@@ -713,6 +876,57 @@ public sealed class EdgeWindow : Window
         return regions.ToArray();
     }
 
+    private Rect[] VisibleInputRects()
+    {
+        if (_mode == NotchDisplayMode.Hidden)
+            return [];
+
+        var shape = ShapeInputRects();
+        var regions = new List<Rect>(shape.Length + 180);
+        regions.AddRange(shape);
+
+        var tooltip = TooltipLiveRect();
+        if (tooltip.Width > 0 && tooltip.Height > 0)
+            regions.AddRange(RoundedRectStrips(tooltip, 14));
+
+        return regions.ToArray();
+    }
+
+    private static Rect[] RoundedRectStrips(Rect rect, double radius)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+            return [];
+
+        radius = Math.Clamp(radius, 0, Math.Min(rect.Width, rect.Height) / 2);
+        if (radius < 0.5)
+            return [rect];
+
+        var strips = new List<Rect>((int)Math.Ceiling(rect.Height));
+        for (var y = rect.Top; y < rect.Bottom; y += 1)
+        {
+            var height = Math.Min(1, rect.Bottom - y);
+            var centerY = y + height / 2;
+            var inset = 0d;
+
+            if (centerY < rect.Top + radius)
+            {
+                var dy = rect.Top + radius - centerY;
+                inset = radius - Math.Sqrt(Math.Max(0, radius * radius - dy * dy));
+            }
+            else if (centerY > rect.Bottom - radius)
+            {
+                var dy = centerY - (rect.Bottom - radius);
+                inset = radius - Math.Sqrt(Math.Max(0, radius * radius - dy * dy));
+            }
+
+            var width = rect.Width - inset * 2;
+            if (width > 0)
+                strips.Add(new Rect(rect.Left + inset, y, width, height));
+        }
+
+        return strips.ToArray();
+    }
+
     private bool IsInteractive(Point point) => InteractiveRects().Any(rect => rect.Contains(point));
 
     private bool UpdatePlatformInputRegion()
@@ -720,15 +934,37 @@ public sealed class EdgeWindow : Window
         if ((!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) || !_started || !IsVisible)
             return true;
 
-        if (_inputRegion.TryApply(InteractiveRects(), RenderScaling, new Size(Width, Height)))
+        bool applied;
+        if (OperatingSystem.IsWindows())
+        {
+            if (!_windowsVisualClickThroughReady || _windowsInputOverlay is null)
+            {
+                DisableEdgeSurface("EdgePilot could not initialize the Windows input overlay.");
+                return false;
+            }
+
+            applied = _windowsInputOverlay.TryApply(
+                VisibleInputRects(), RenderScaling, new Size(Width, Height), Position);
+        }
+        else
+        {
+            applied = _inputRegion?.TryApply(
+                InteractiveRects(), RenderScaling, new Size(Width, Height)) == true;
+        }
+
+        if (applied)
             return true;
 
-        // Failing closed is intentional: a hidden edge surface is preferable to leaving a
-        // transparent topmost rectangle that blocks the user's desktop or another application.
-        System.Diagnostics.Trace.WriteLine("EdgePilot disabled the edge surface because a safe native input region could not be established.");
-        _cursorTimer.Stop();
-        Hide();
+        DisableEdgeSurface("EdgePilot disabled the edge surface because a safe native input region could not be established.");
         return false;
+    }
+
+    private void DisableEdgeSurface(string message)
+    {
+        System.Diagnostics.Trace.WriteLine(message);
+        _cursorTimer.Stop();
+        _windowsInputOverlay?.Suspend();
+        Hide();
     }
 
     private bool TryGetCursorLocal(out Point point)
@@ -753,6 +989,7 @@ public sealed class EdgeWindow : Window
         if (screen is null) return;
 
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
+        _windowsInputOverlay?.Sync(new Size(Width, Height), Position);
     }
 
     private static TextBlock Text(string value, double size, FontWeight weight, string color) => new()
