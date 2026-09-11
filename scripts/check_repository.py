@@ -1,9 +1,10 @@
-"""Check repository links, locale catalogs and private commit attribution."""
+"""Check repository links, locale catalogs, release metadata and private commit attribution."""
 from pathlib import Path
 from urllib.parse import unquote
 import json
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 
 root = Path.cwd().resolve()
 errors = []
@@ -20,6 +21,27 @@ for doc in root.rglob("*.md"):
         target = (doc.parent / unquote(link.split("#")[0])).resolve()
         if not target.exists():
             errors.append(f"Missing link target in {doc.relative_to(root)}: {link}")
+
+# The app version is the release source of truth. Every version must have matching
+# changelog coverage and a notes file before a main build can prepare a draft release.
+project_path = root / "src" / "EdgePilot" / "EdgePilot.csproj"
+try:
+    project = ET.parse(project_path).getroot()
+    version_node = project.find(".//Version")
+    version = (version_node.text or "").strip() if version_node is not None else ""
+except (ET.ParseError, OSError) as exc:
+    version = ""
+    errors.append(f"Cannot read EdgePilot version from {project_path.relative_to(root)}: {exc}")
+
+if not version:
+    errors.append("src/EdgePilot/EdgePilot.csproj must define a non-empty Version")
+else:
+    release_notes = root / "docs" / "releases" / f"v{version}.md"
+    if not release_notes.is_file():
+        errors.append(f"Missing release notes for project version {version}: {release_notes.relative_to(root)}")
+    changelog_path = root / "CHANGELOG.md"
+    if not changelog_path.is_file() or f"## {version}" not in changelog_path.read_text(encoding="utf-8"):
+        errors.append(f"CHANGELOG.md does not contain a section for project version {version}")
 
 # Scan published branch history; GitHub's legacy pull refs and caches require a separate check.
 emails = subprocess.check_output(
@@ -84,4 +106,4 @@ for required in ("LICENSE", "README.md", "SECURITY.md", "CONTRIBUTING.md", "THIR
 
 if errors:
     raise SystemExit("\n".join(errors))
-print("Documentation links, locale catalogs, required documents and private commit attribution passed.")
+print("Documentation links, release metadata, locale catalogs, required documents and private commit attribution passed.")
