@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Media;
 using EdgePilot.Core;
-using FluentIcons.Avalonia;
 using FluentIcons.Common;
 using FluentIconName = FluentIcons.Common.Icon;
 
@@ -9,7 +8,7 @@ namespace EdgePilot.UI;
 
 public sealed partial class SettingsWindow
 {
-    private readonly Dictionary<SettingsPage, FluentIcon> _navIcons = new();
+    private readonly Dictionary<SettingsPage, FluentIcons.Avalonia.FluentIcon> _navIcons = new();
     private bool _settingsIconsInstalled;
 
     private void InstallSettingsIcons()
@@ -48,7 +47,6 @@ public sealed partial class SettingsWindow
                 FluentIconName.Checkmark,
                 Localization.T("settings.saveChanges"),
                 Brushes.White);
-            _applyButton.Foreground = Brushes.White;
             _resetButton.Content = ButtonContent(
                 FluentIconName.ArrowUndo,
                 Localization.T("settings.resetChanges"));
@@ -58,30 +56,21 @@ public sealed partial class SettingsWindow
 
         RefreshSegmentVisuals();
         UpdateNavigationIconStates(_selectedPage);
+        RefreshActionButtonVisuals();
     }
 
     private void RefreshSegmentVisuals()
     {
-        ApplySegmentVisuals(_edgeButtons, (int)_selectedEdge);
-        ApplySegmentVisuals(_modeButtons, (int)_selectedMode);
-        ApplySegmentVisuals(_sensitivityButtons, (int)_selectedSensitivity);
-        ApplySegmentVisuals(_themeButtons, (int)_selectedTheme);
-        ApplySegmentVisuals(_backdropButtons, (int)_selectedBackdrop);
-    }
-
-    private static void ApplySegmentVisuals(IReadOnlyList<Button> buttons, int selectedIndex)
-    {
-        for (var i = 0; i < buttons.Count; i++)
-            UpdateSegmentContentVisual(buttons[i], i == selectedIndex);
+        SetSegmentSelection(_edgeButtons, (int)_selectedEdge);
+        SetSegmentSelection(_modeButtons, (int)_selectedMode);
+        SetSegmentSelection(_sensitivityButtons, (int)_selectedSensitivity);
+        SetSegmentSelection(_themeButtons, (int)_selectedTheme);
+        SetSegmentSelection(_backdropButtons, (int)_selectedBackdrop);
     }
 
     private void UpdateNavigationIconStates(SettingsPage selectedPage)
     {
-        foreach (var (page, icon) in _navIcons)
-        {
-            var selected = page == selectedPage;
-            icon.Foreground = selected ? AccentBrush : MutedBrush;
-            icon.IconVariant = selected ? IconVariant.Filled : IconVariant.Regular;
-        }
+        foreach (var page in _navButtons.Keys)
+            PaintNavigationButton(page);
     }
 }
