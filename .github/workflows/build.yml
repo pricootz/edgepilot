@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feat/v0.1-system-monitor
   workflow_dispatch:
   pull_request:
     branches:
@@ -18,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Check documentation and private commit attribution
@@ -45,15 +44,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
       - name: Set up Python for asset and package checks
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -130,6 +129,11 @@ jobs:
           timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test &
           smoke_pid=$!
           sleep 2
+          if ! kill -0 "$smoke_pid" 2>/dev/null; then
+            echo 'Primary instance exited prematurely or native input-region initialization failed.' >&2
+            wait "$smoke_pid"
+            exit 1
+          fi
           # A new Unix session must still resolve to the same per-user EdgePilot instance.
           timeout 6s setsid dist/EdgePilot/EdgePilot --settings
           wait "$smoke_pid"
@@ -143,7 +147,7 @@ jobs:
 
       - name: Upload Windows package
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: EdgePilot-win-x64
           path: |
@@ -153,7 +157,7 @@ jobs:
 
       - name: Upload Ubuntu package
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: EdgePilot-linux-x64
           path: |
