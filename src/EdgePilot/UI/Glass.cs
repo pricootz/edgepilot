@@ -71,9 +71,11 @@ internal static class Glass
             CardBorderThickness: glass && !mica ? EdgeThickness : new Thickness(1),
             Line: mica ? MicaCardStroke(dark)
                 : glass ? GlassLine(dark) : new SolidColorBrush(Color.Parse(dark ? "#2C2C2C" : "#DDDDDF")),
+            // Secondary copy must remain readable over both solid and blurred backgrounds.
+            // Keep Acrylic a little brighter because its backdrop luminance varies with the desktop.
             MutedForeground: dark
-                ? (acrylic ? Color.Parse("#D4D8DF") : Color.Parse("#8D9096"))
-                : glass ? Color.Parse("#44474D") : Color.Parse("#8D9096"));
+                ? (acrylic ? Color.Parse("#D4D8DF") : Color.Parse("#A9AFB8"))
+                : glass ? Color.Parse("#4A4F57") : Color.Parse("#61666E"));
     }
 
     // Restore Arnie's stronger glass edge. It is part of what makes the blurred material read
