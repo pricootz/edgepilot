@@ -18,7 +18,7 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 - Translator documentation and repository checks for locale key parity and invalid/missing translation keys.
 - Canonical SVG rendering inside Settings and About, while retaining a generated native ICO for Windows integration.
 - Product-focused About page with author attribution, GitHub repository/profile links and local-first principles.
-- Dedicated localization regression suite running on Windows and Ubuntu CI.
+- Dedicated localization and native input-region regression suites running on Windows and Ubuntu CI.
 
 ### Changed
 
@@ -27,6 +27,14 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 - Changing language preserves the currently open Settings page when the window is rebuilt.
 - Settings save/reset state, labels, descriptions, icons and responsive behavior were redesigned without removing existing preferences.
 - Product positioning now describes EdgePilot as an edge-native desktop surface; the System monitor is the first module rather than the whole product.
+- Preview release automation now derives its tag from the application version instead of carrying a hard-coded release tag.
+- GitHub Actions workflows use current Node 24-compatible action generations.
+
+### Fixed
+
+- Transparent portions of the large edge window no longer intercept clicks intended for browser or desktop controls. Native input is constrained to live EdgePilot regions on Windows and X11/XWayland (#16/#17).
+- Single-instance activation is hardened so a second launch resolves to the existing per-user EdgePilot instance instead of leaving duplicate desktop surfaces.
+- CI package smoke processes now terminate deterministically instead of depending on desktop-lifetime teardown timing.
 
 ### Contributors
 
