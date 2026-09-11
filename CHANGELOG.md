@@ -8,6 +8,7 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 
 - Responsive Settings shell with dedicated General, Edge, Monitor, Behavior, Startup and About sections.
 - General page for interface language and Settings appearance (`System`, `Light`, `Dark`).
+- Windows surface choices with platform-aware fallback: Flat everywhere, Acrylic on Windows 10 1803+, and Mica on Windows 11 build 22000+.
 - Interactive metric cards with contextual configuration; the disk-volume selector is hidden when Disk is disabled.
 - Italian, English, French and Spanish interface localization with automatic system-language detection and a persisted manual override.
 - File-based locale assets under `Assets/Locales`, discovered automatically at build time so a new language is contributed as one JSON file rather than a C# catalog edit.
@@ -26,6 +27,9 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 - Language selection moved from Behavior to General, where app-level preferences belong.
 - Changing language preserves the currently open Settings page when the window is rebuilt.
 - Settings save/reset state, labels, descriptions, icons and responsive behavior were redesigned without removing existing preferences.
+- Settings navigation now uses Fluent UI System Icons with the EdgePilot accent instead of platform-dependent Unicode glyphs.
+- Glass Settings use the real rectangular OS Mica/Acrylic backdrop with restrained translucent panels/cards; metric tiles follow the same resolved palette.
+- Backdrop and Settings theme are independent preferences, so Acrylic no longer silently forces Dark mode.
 - Product positioning now describes EdgePilot as an edge-native desktop surface; the System monitor is the first module rather than the whole product.
 - Preview release automation now derives its tag from the application version instead of carrying a hard-coded release tag.
 - GitHub Actions workflows use current Node 24-compatible action generations.
@@ -33,6 +37,7 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 ### Fixed
 
 - Transparent portions of the large edge window no longer intercept clicks intended for browser or desktop controls. Native input is constrained to live EdgePilot regions on Windows and X11/XWayland (#16/#17).
+- Windows Glass no longer uses a pixel-quantized native region as the visible notch boundary: Avalonia/Skia keeps the approved antialiased silhouette while a separate invisible shaped overlay owns pointer input.
 - Single-instance activation is hardened so a second launch resolves to the existing per-user EdgePilot instance instead of leaving duplicate desktop surfaces.
 - CI package smoke processes now terminate deterministically instead of depending on desktop-lifetime teardown timing.
 
@@ -41,6 +46,7 @@ The v0.2 preview turns the initial system-monitor settings panel into a more coh
 - IT / EN / FR localization foundation contributed by [@IamArayel](https://github.com/IamArayel) in [PR #5](https://github.com/pricootz/edgepilot/pull/5), then reconciled with the v0.2 Settings redesign.
 - File-based locale architecture, translator-friendly workflow, fallback strategy, Linux locale metadata and translation validation ideas contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #8](https://github.com/pricootz/edgepilot/pull/8), reconciled without dropping the French localization or the current Settings architecture.
 - Spanish localization contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #12](https://github.com/pricootz/edgepilot/pull/12), using the file-per-language workflow against current `main`.
+- Flat / Mica / Acrylic surface architecture and visual direction originally contributed by [@ArnieGA](https://github.com/ArnieGA) in [PR #15](https://github.com/pricootz/edgepilot/pull/15), then adapted in PR #19 to the post-#17 input-safety architecture after real Windows testing.
 
 ## 0.1.0-preview.1
 
