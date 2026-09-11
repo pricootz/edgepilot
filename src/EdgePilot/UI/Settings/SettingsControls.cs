@@ -44,6 +44,7 @@ public sealed partial class SettingsWindow
         var title = new TextBlock
         {
             Text = checkbox.Content?.ToString(),
+            Foreground = PrimaryBrush,
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -72,10 +73,11 @@ public sealed partial class SettingsWindow
             OnMetricChanged();
             e.Handled = true;
         };
+        RegisterMetricTile(tile);
         return tile;
     }
 
-    private static Control SettingField(string label, Control control)
+    private Control SettingField(string label, Control control)
     {
         var stack = new StackPanel { Spacing = 6 };
         stack.Children.Add(Label(label));
@@ -83,10 +85,10 @@ public sealed partial class SettingsWindow
         return stack;
     }
 
-    private static StackPanel SectionTitle(string icon, string text) =>
+    private StackPanel SectionTitle(string icon, string text) =>
         SectionTitle(ResolveIcon(icon, text), text);
 
-    private static StackPanel SectionTitle(FluentIconName icon, string text)
+    private StackPanel SectionTitle(FluentIconName icon, string text)
     {
         return new StackPanel
         {
@@ -98,6 +100,7 @@ public sealed partial class SettingsWindow
                 new TextBlock
                 {
                     Text = text,
+                    Foreground = PrimaryBrush,
                     FontSize = 16,
                     FontWeight = FontWeight.SemiBold,
                     VerticalAlignment = VerticalAlignment.Center
@@ -106,9 +109,10 @@ public sealed partial class SettingsWindow
         };
     }
 
-    private static TextBlock Label(string text) => new()
+    private TextBlock Label(string text) => new()
     {
         Text = text,
+        Foreground = PrimaryBrush,
         FontWeight = FontWeight.SemiBold
     };
 
@@ -123,7 +127,7 @@ public sealed partial class SettingsWindow
     private static Border Divider() => new()
     {
         Height = 1,
-        Background = new SolidColorBrush(Color.FromArgb(60, 128, 128, 128)),
+        Background = ControlBorderBrush,
         Margin = new Thickness(0, 4)
     };
 
@@ -149,16 +153,22 @@ public sealed partial class SettingsWindow
                 CornerRadius = new CornerRadius(999),
                 Padding = new Thickness(9, 4),
                 Margin = new Thickness(0, 4, 7, 0),
-                Child = new TextBlock { Text = label, FontSize = 11, FontWeight = FontWeight.SemiBold }
+                Child = new TextBlock
+                {
+                    Text = label,
+                    Foreground = PrimaryBrush,
+                    FontSize = 11,
+                    FontWeight = FontWeight.SemiBold
+                }
             });
         }
         return row;
     }
 
-    private static StackPanel FeatureRow(string icon, string title, string description) =>
+    private StackPanel FeatureRow(string icon, string title, string description) =>
         FeatureRow(ResolveIcon(icon, title), title, description);
 
-    private static StackPanel FeatureRow(FluentIconName icon, string title, string description)
+    private StackPanel FeatureRow(FluentIconName icon, string title, string description)
     {
         return new StackPanel
         {
@@ -172,7 +182,13 @@ public sealed partial class SettingsWindow
                     Spacing = 3,
                     Children =
                     {
-                        new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock
+                        {
+                            Text = title,
+                            Foreground = PrimaryBrush,
+                            FontWeight = FontWeight.SemiBold,
+                            TextWrapping = TextWrapping.Wrap
+                        },
                         Description(description)
                     }
                 }
@@ -185,32 +201,39 @@ public sealed partial class SettingsWindow
 
     private static StackPanel ButtonContent(FluentIconName icon, string text, IBrush? foreground = null)
     {
+        var resolvedForeground = foreground ?? PrimaryBrush;
         return new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 7,
             Children =
             {
-                UiIcon(icon, 16, foreground),
-                new TextBlock { Text = text, Foreground = foreground, VerticalAlignment = VerticalAlignment.Center }
+                UiIcon(icon, 16, resolvedForeground),
+                new TextBlock
+                {
+                    Text = text,
+                    Foreground = resolvedForeground,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
             }
         };
     }
 
-    private static Button SegmentButton(string? icon, string text, Action select)
+    private Button SegmentButton(string? icon, string text, Action select)
     {
         FluentIconName? resolved = string.IsNullOrWhiteSpace(icon) ? null : ResolveIcon(icon, text);
         var button = new Button
         {
             Content = resolved is { } fluent ? ButtonContent(fluent, text) : text,
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
+            BorderBrush = ControlBorderBrush,
+            BorderThickness = new Thickness(1),
             Padding = new Thickness(13, 8),
             MinWidth = 72
         };
-        button.Click += (_, _) =>
-        {
-            select();
-            RefreshSegmentRow(button);
-        };
+        RegisterSegmentButton(button);
+        button.Click += (_, _) => select();
         return button;
     }
 
@@ -232,6 +255,7 @@ public sealed partial class SettingsWindow
                 new TextBlock
                 {
                     Text = text,
+                    Foreground = PrimaryBrush,
                     TextWrapping = TextWrapping.Wrap,
                     VerticalAlignment = VerticalAlignment.Center
                 }
@@ -240,17 +264,16 @@ public sealed partial class SettingsWindow
         var button = new Button
         {
             Content = content,
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Padding = new Thickness(11, 10),
             BorderThickness = new Thickness(0)
         };
-        button.Click += (_, _) =>
-        {
-            ShowPage(page);
-            UpdateNavigationIconStates(page);
-        };
+        button.Click += (_, _) => ShowPage(page);
         _navButtons[page] = button;
+        RegisterNavigationButton(button, page);
         return button;
     }
 
@@ -264,12 +287,28 @@ public sealed partial class SettingsWindow
                 Spacing = 8,
                 Children =
                 {
-                    new PathIcon { Data = Geometry.Parse(GitHubMarkPath), Width = 16, Height = 16 },
-                    new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center }
+                    new PathIcon
+                    {
+                        Data = Geometry.Parse(GitHubMarkPath),
+                        Width = 16,
+                        Height = 16,
+                        Foreground = AccentBrush
+                    },
+                    new TextBlock
+                    {
+                        Text = text,
+                        Foreground = PrimaryBrush,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
                 }
             },
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
+            BorderBrush = ControlBorderBrush,
+            BorderThickness = new Thickness(1),
             Padding = new Thickness(13, 8)
         };
+        RegisterActionButton(button, ActionButtonRole.Secondary);
         button.Click += (_, _) => OpenUrl(url);
         return button;
     }
@@ -302,32 +341,6 @@ public sealed partial class SettingsWindow
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-    }
-
-    private static void RefreshSegmentRow(Button source)
-    {
-        if (source.Parent is not WrapPanel row) return;
-        foreach (var child in row.Children.OfType<Button>())
-            UpdateSegmentContentVisual(child, ReferenceEquals(child.Background, AccentBrush));
-    }
-
-    private static void UpdateSegmentContentVisual(Button button, bool selected)
-    {
-        if (button.Content is not StackPanel content) return;
-
-        foreach (var child in content.Children)
-        {
-            switch (child)
-            {
-                case FluentIcon icon:
-                    icon.Foreground = selected ? Brushes.White : AccentBrush;
-                    icon.IconVariant = selected ? IconVariant.Filled : IconVariant.Regular;
-                    break;
-                case TextBlock text:
-                    text.Foreground = selected ? Brushes.White : null;
-                    break;
-            }
-        }
     }
 
     private static FluentIconName ResolveIcon(string glyph, string? context = null)
