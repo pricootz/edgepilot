@@ -23,7 +23,13 @@ public sealed partial class SettingsWindow
                     Spacing = 1,
                     Children =
                     {
-                        new TextBlock { Text = "EdgePilot", FontSize = 20, FontWeight = FontWeight.SemiBold },
+                        new TextBlock
+                        {
+                            Text = "EdgePilot",
+                            Foreground = PrimaryBrush,
+                            FontSize = 20,
+                            FontWeight = FontWeight.SemiBold
+                        },
                         new TextBlock
                         {
                             Text = Localization.T("settings.headerSubtitle"),
@@ -46,6 +52,7 @@ public sealed partial class SettingsWindow
             Child = new TextBlock
             {
                 Text = VersionLabel(),
+                Foreground = PrimaryBrush,
                 FontSize = 10,
                 FontWeight = FontWeight.SemiBold
             }
@@ -261,9 +268,14 @@ public sealed partial class SettingsWindow
         var exitButton = new Button
         {
             Content = ButtonContent("⏻", Localization.T("startup.exitButton")),
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
+            BorderBrush = ControlBorderBrush,
+            BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Left,
             Padding = new Thickness(14, 8)
         };
+        RegisterActionButton(exitButton, ActionButtonRole.Secondary);
         exitButton.Click += (_, _) =>
         {
             if (exit is not null) exit();
@@ -306,12 +318,14 @@ public sealed partial class SettingsWindow
                 new TextBlock
                 {
                     Text = "EdgePilot",
+                    Foreground = PrimaryBrush,
                     FontSize = 28,
                     FontWeight = FontWeight.SemiBold
                 },
                 new TextBlock
                 {
                     Text = "Your desktop has edges. EdgePilot makes them useful.",
+                    Foreground = PrimaryBrush,
                     FontSize = 16,
                     TextWrapping = TextWrapping.Wrap
                 },
@@ -336,6 +350,7 @@ public sealed partial class SettingsWindow
                 new TextBlock
                 {
                     Text = Localization.T("about.authorLine"),
+                    Foreground = PrimaryBrush,
                     FontSize = 18,
                     FontWeight = FontWeight.SemiBold,
                     TextWrapping = TextWrapping.Wrap
@@ -351,7 +366,12 @@ public sealed partial class SettingsWindow
                 SegmentRow(new[] { arnieButton, iamarayelButton })),
             Card(
                 SectionTitle("ⓘ", Localization.T("about.versionTitle")),
-                new TextBlock { Text = FullVersionLabel(), FontWeight = FontWeight.SemiBold },
+                new TextBlock
+                {
+                    Text = FullVersionLabel(),
+                    Foreground = PrimaryBrush,
+                    FontWeight = FontWeight.SemiBold
+                },
                 Description(Localization.T("about.versionDescription"))));
     }
 
@@ -366,6 +386,7 @@ public sealed partial class SettingsWindow
         stack.Children.Add(new TextBlock
         {
             Text = title,
+            Foreground = PrimaryBrush,
             FontSize = 28,
             FontWeight = FontWeight.SemiBold
         });
