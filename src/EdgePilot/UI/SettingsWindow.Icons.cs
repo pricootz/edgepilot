@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using EdgePilot.Core;
 using FluentIcons.Avalonia;
 using FluentIcons.Common;
 using FluentIconName = FluentIcons.Common.Icon;
