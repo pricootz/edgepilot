@@ -5,6 +5,7 @@ EdgePilot's own code is MIT-licensed. Dependencies and bundled runtimes retain t
 Direct application dependencies:
 
 - Avalonia, Avalonia.Desktop and Avalonia.Themes.Fluent 12.1.2: [Avalonia license](https://github.com/AvaloniaUI/Avalonia/blob/master/licence.md).
+- FluentIcons.Avalonia 2.1.339.1: MIT-licensed Avalonia wrapper for [Microsoft Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons), used for the Settings navigation iconography.
 - .NET runtime: [license](https://github.com/dotnet/runtime/blob/main/LICENSE.TXT) and [third-party notices](https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT).
 - Avalonia.Headless is used by the regression suite and is not an application feature.
 - Pillow is only used for developer asset conversion, not shipped as an application dependency.
