@@ -30,14 +30,14 @@ public sealed partial class SettingsWindow
         return card;
     }
 
-    private Border MetricTile(CheckBox checkbox, string icon, string description)
+    private Border MetricTile(CheckBox checkbox, FluentIconName icon, string description)
     {
         var heading = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             ColumnSpacing = 9
         };
-        heading.Children.Add(UiIcon(ResolveIcon(icon, checkbox.Content?.ToString()), 18));
+        heading.Children.Add(UiIcon(icon, 18));
         var title = new TextBlock
         {
             Text = checkbox.Content?.ToString(),
@@ -80,7 +80,7 @@ public sealed partial class SettingsWindow
         return stack;
     }
 
-    private static StackPanel SectionTitle(string icon, string text)
+    private static StackPanel SectionTitle(FluentIconName icon, string text)
     {
         return new StackPanel
         {
@@ -88,7 +88,7 @@ public sealed partial class SettingsWindow
             Spacing = 9,
             Children =
             {
-                UiIcon(ResolveIcon(icon, text), 18),
+                UiIcon(icon, 18),
                 new TextBlock
                 {
                     Text = text,
@@ -149,7 +149,7 @@ public sealed partial class SettingsWindow
         return row;
     }
 
-    private static StackPanel FeatureRow(string icon, string title, string description)
+    private static StackPanel FeatureRow(FluentIconName icon, string title, string description)
     {
         return new StackPanel
         {
@@ -157,7 +157,7 @@ public sealed partial class SettingsWindow
             Spacing = 12,
             Children =
             {
-                UiIcon(ResolveIcon(icon, title), 18),
+                UiIcon(icon, 18),
                 new StackPanel
                 {
                     Spacing = 3,
@@ -171,10 +171,7 @@ public sealed partial class SettingsWindow
         };
     }
 
-    private static StackPanel ButtonContent(string icon, string text) =>
-        ButtonContent(ResolveIcon(icon, text), text);
-
-    private static StackPanel ButtonContent(FluentIconName icon, string text)
+    private static StackPanel ButtonContent(FluentIconName icon, string text, IBrush? foreground = null)
     {
         return new StackPanel
         {
@@ -182,18 +179,17 @@ public sealed partial class SettingsWindow
             Spacing = 7,
             Children =
             {
-                UiIcon(icon, 16),
-                new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center }
+                UiIcon(icon, 16, foreground),
+                new TextBlock { Text = text, Foreground = foreground, VerticalAlignment = VerticalAlignment.Center }
             }
         };
     }
 
-    private static Button SegmentButton(string? icon, string text, Action select)
+    private static Button SegmentButton(FluentIconName icon, string text, Action select)
     {
-        FluentIconName? resolved = string.IsNullOrWhiteSpace(icon) ? null : ResolveIcon(icon, text);
         var button = new Button
         {
-            Content = resolved is { } fluent ? ButtonContent(fluent, text) : text,
+            Content = ButtonContent(icon, text),
             Padding = new Thickness(13, 8),
             MinWidth = 72
         };
@@ -201,9 +197,9 @@ public sealed partial class SettingsWindow
         return button;
     }
 
-    private Button NavButton(string icon, string text, SettingsPage page)
+    private Button NavButton(FluentIconName icon, string text, SettingsPage page)
     {
-        var fluent = UiIcon(ResolveIcon(icon, text), 18, MutedBrush);
+        var fluent = UiIcon(icon, 18, MutedBrush);
         _navIcons[page] = fluent;
 
         var content = new StackPanel
@@ -288,47 +284,22 @@ public sealed partial class SettingsWindow
         };
     }
 
-    private static FluentIconName ResolveIcon(string glyph, string? context = null)
+    private static void UpdateSegmentContentVisual(Button button, bool selected)
     {
-        if (glyph == "●")
-            return context == Localization.T("theme.dark") ? FluentIconName.DarkTheme : FluentIconName.RadioButton;
-        if (glyph == "↻")
-            return context == Localization.T("startup.autostartTitle") ? FluentIconName.Power : FluentIconName.ArrowSync;
-        if (glyph == "▦")
-            return context == Localization.T("general.surfaceTitle") ? FluentIconName.Layer : FluentIconName.DesktopPulse;
-        if (glyph == "◉")
-            return context == Localization.T("about.localTitle") ? FluentIconName.LockShield : FluentIconName.DataUsage;
-        if (glyph == "◐" && context == Localization.T("general.themeTitle"))
-            return FluentIconName.DarkTheme;
+        if (button.Content is not StackPanel content) return;
 
-        return glyph switch
+        foreach (var child in content.Children)
         {
-            "⚙" => FluentIconName.Settings,
-            "◨" => FluentIconName.Target,
-            "▦" => FluentIconName.DesktopPulse,
-            "◎" => FluentIconName.Gesture,
-            "↻" => FluentIconName.ArrowSync,
-            "ⓘ" => FluentIconName.Info,
-            "文" => FluentIconName.LocalLanguage,
-            "◐" => FluentIconName.System,
-            "▱" => FluentIconName.Storage,
-            "◌" => FluentIconName.Gesture,
-            "○" => FluentIconName.DismissCircle,
-            "⏻" => FluentIconName.Power,
-            "✦" => FluentIconName.Person,
-            "⌁" => FluentIconName.Lightbulb,
-            "◉" => FluentIconName.DataUsage,
-            "◇" => FluentIconName.Branch,
-            "↕" => FluentIconName.ArrowsBidirectional,
-            "▤" => FluentIconName.Storage,
-            "✓" => FluentIconName.Checkmark,
-            "↶" => FluentIconName.ArrowUndo,
-            "▸" => FluentIconName.ArrowRight,
-            "◂" => FluentIconName.ArrowLeft,
-            "▴" => FluentIconName.ArrowUp,
-            "▾" => FluentIconName.ArrowDown,
-            "☀" => FluentIconName.WeatherSunny,
-            _ => FluentIconName.AppGeneric
-        };
+            switch (child)
+            {
+                case FluentIcon icon:
+                    icon.Foreground = selected ? Brushes.White : AccentBrush;
+                    icon.IconVariant = selected ? IconVariant.Filled : IconVariant.Regular;
+                    break;
+                case TextBlock text:
+                    text.Foreground = selected ? Brushes.White : null;
+                    break;
+            }
+        }
     }
 }
