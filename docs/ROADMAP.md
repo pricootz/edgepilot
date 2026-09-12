@@ -41,6 +41,16 @@ This roadmap is directional, not a delivery schedule.
 
 ## v0.3 direction — Signals / ambient awareness
 
+### Multi-monitor foundation
+
+- [x] Automatic primary-display mode and explicit monitor selection.
+- [x] Persist display intent across restarts without relying on one volatile identifier.
+- [x] Fall back safely while a chosen monitor is disconnected and return when it reconnects.
+- [x] Debounce topology changes before relocation.
+- [ ] Validate docking, rotation and mixed 100%/125%/150% DPI on physical Windows and Linux desktops.
+
+### Signals / ambient awareness
+
 The next major feature is a signal engine following the model **Observe → Decide → Surface → Act**. Signals should be temporary, deduplicated and context-aware rather than behaving like a traditional notification center.
 
 Initial scope:

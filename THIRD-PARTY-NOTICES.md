@@ -10,4 +10,11 @@ Direct application dependencies:
 - Avalonia.Headless is used by the regression suite and is not an application feature.
 - Pillow is only used for developer asset conversion, not shipped as an application dependency.
 
+Display targeting resolver:
+
+- Portions of `src/EdgePilot/UI/DisplayTarget.cs` are adapted from [`electron/main/geometry.ts`](https://github.com/Deepender25/Edge-Drop/blob/15ad660bdf643624355c31383c7f2a768c820ea8/electron/main/geometry.ts) in Edge-Drop.
+- Copyright the Edge-Drop contributors. Licensed under Apache License 2.0.
+- The source was ported to C#/Avalonia and modified for persistent choices, four-edge placement, cross-platform handles, localized labels and reconnect-safe fallback behavior.
+- A copy of Apache License 2.0 is included at [`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt).
+
 Self-contained archives include transitive managed/native dependencies. Packaging generates a dependency inventory and copies available package/runtime license and notice files into third-party-licenses. Consult those notices for component-specific terms. This document does not replace their licenses.

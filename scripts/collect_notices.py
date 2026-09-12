@@ -6,7 +6,8 @@ import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 
-out = Path("dist/EdgePilot/third-party-licenses")
+package_root = Path(os.environ.get("EDGEPILOT_PACKAGE_DIR", "dist/EdgePilot"))
+out = package_root / "third-party-licenses"
 out.mkdir(parents=True, exist_ok=True)
 cache = Path(os.environ.get("NUGET_PACKAGES", str(Path.home() / ".nuget/packages")))
 assets = json.loads(Path("src/EdgePilot/obj/project.assets.json").read_text(encoding="utf-8"))
@@ -44,6 +45,9 @@ for base in (cache, dotnet / "packs"):
                     shutil.copy2(source, target)
 (out / "dependencies.json").write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")
 for name in ("LICENSE", "THIRD-PARTY-NOTICES.md"):
-    shutil.copy2(name, Path("dist/EdgePilot") / name)
+    shutil.copy2(name, package_root / name)
+repository_licenses = Path("licenses")
+if repository_licenses.is_dir():
+    shutil.copytree(repository_licenses, package_root / "licenses", dirs_exist_ok=True)
 assert inventory, "Dependency inventory is empty"
 print(f"Preserved metadata for {len(inventory)} packages and available upstream notices.")

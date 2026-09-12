@@ -2,7 +2,7 @@
 
 Open Settings by right-clicking the notch, choosing **Settings / Impostazioni / Paramètres / Ajustes** from the tray menu, or launching EdgePilot with `--settings`. Starting EdgePilot a second time activates the Settings window of the running instance.
 
-The v0.2 Settings experience is split into six sections.
+The Settings experience introduced in v0.2 is split into six sections. v0.3 development extends the Panel section with display targeting.
 
 ## General
 
@@ -22,9 +22,10 @@ The appearance setting applies to the Settings window. The edge/notch retains it
 Controls where EdgePilot lives and how it appears.
 
 - **Position:** right, left, top or bottom edge, with a live visual preview.
+- **Display:** Automatic follows the primary display, or choose one connected display explicitly. Labels include resolution, scale and the primary-display marker.
 - **Panel behavior:** on hover, always visible or hidden.
 
-v0.2 does not expose a display selector or create one EdgePilot surface per display. Multi-monitor targeting is a future feature, separate from choosing one of the four edges.
+An explicit display is matched across restarts using its current session identity, friendly name, working area and scale. If it is disconnected, EdgePilot temporarily uses the primary display but keeps the explicit choice; reconnecting it restores the target automatically. EdgePilot still creates one surface total, not one independent surface per display.
 
 ## Monitor
 
@@ -53,7 +54,7 @@ Shows the EdgePilot product positioning, current version, local-first principles
 
 Edits remain pending until **Save changes / Salva modifiche / Enregistrer / Guardar cambios** is pressed. The footer shows whether changes are pending and provides a reset action. Saving is atomic: a failed save does not replace the last valid preferences.
 
-Preferences live in `EdgePilot/settings.json` under the user's application-data directory: `%APPDATA%` on Windows and normally `~/.config` on Linux. Missing fields in older files retain defaults; invalid files open Settings with an explanation.
+Preferences live in `EdgePilot/settings.json` under the user's application-data directory: `%APPDATA%` on Windows and normally `~/.config` on Linux. Missing fields in older files retain defaults; a v0.2 file without a display target migrates to Automatic. Invalid files open Settings with an explanation.
 
 The original v0.2 preview stored languages as `Italian`, `English` and `French`. The current loader accepts those values and migrates them to `it`, `en` and `fr`, so upgrading does not discard existing preferences. Spanish was added after the extensible locale-code format was introduced and therefore stores directly as `es`.
 

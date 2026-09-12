@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — v0.3 development
+
+### Added
+
+- Selectable multi-monitor placement with an Automatic primary-display mode.
+- Persisted display targeting that reconciles session identity, friendly name, working-area geometry and scaling.
+- Safe hot-plug fallback: a disconnected selected display temporarily falls back to the primary display without forgetting the user's choice.
+
+### Changed
+
+- Display-topology bursts are debounced before the notch is repositioned and the Settings display list is refreshed.
+- The display-target resolver is adapted from Edge-Drop with explicit Apache-2.0 attribution; EdgePilot itself remains MIT-licensed.
+
 ## 0.2.0-preview.2 — 2026-09-12
 
 A focused stabilization update for the v0.2 preview. It does not add a new product module.

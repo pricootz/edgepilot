@@ -4,7 +4,7 @@ EdgePilot is an edge-native desktop surface for Windows and Linux. The current `
 
 ## Included today
 
-Windows and Linux desktop support; CPU, physical memory, disk capacity, network throughput and interface details; uptime and machine identity; four-edge placement; hover expansion, delayed fold, pinning and tooltips; persistent settings; disk selection; tray integration; optional start at login; per-user installation.
+Windows and Linux desktop support; CPU, physical memory, disk capacity, network throughput and interface details; uptime and machine identity; four-edge placement; selectable monitor targeting with automatic-primary and reconnect-safe fallback; hover expansion, delayed fold, pinning and tooltips; persistent settings; disk selection; tray integration; optional start at login; per-user installation.
 
 The v0.2 product surface also includes a responsive Settings experience with General, Edge, Monitor, Behavior, Startup and About sections, automatic/manual language selection, and System/Light/Dark Settings appearance.
 
@@ -21,6 +21,7 @@ Refresh intervals are 0.5, 1, 2 or 5 seconds. Repository documentation uses Engl
 5. Reopening the executable recovers settings through the running instance.
 6. Missing readings and missing selected volumes degrade visibly without inventing replacement data.
 7. Language and Settings appearance are persisted independently from the notch's dedicated visual style.
+8. Automatic display selection follows the primary monitor. An explicit monitor choice survives restarts and temporarily falls back to the primary monitor while unavailable.
 
 ## Product direction
 
@@ -34,4 +35,4 @@ Signals are being developed separately and are not part of the current `main` pr
 
 ## Not current scope
 
-Remote servers, Docker, clipboard tools, VPN/Tailscale, removable-device workflows and quick actions are future ideas, not shipped features. Selectable multi-monitor targeting and per-display EdgePilot surfaces are not implemented. GPU, temperature and fan sensors are not part of this preview. macOS and ARM packages are not current supported targets.
+Remote servers, Docker, clipboard tools, VPN/Tailscale, removable-device workflows and quick actions are future ideas, not shipped features. Running independent EdgePilot surfaces on several displays at once is not implemented. GPU, temperature and fan sensors are not part of this preview. macOS and ARM packages are not current supported targets.

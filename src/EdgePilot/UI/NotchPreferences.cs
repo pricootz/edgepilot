@@ -35,6 +35,8 @@ public enum VisibleMetrics { Cpu = 1, Memory = 2, Disk = 4, Network = 8, All = 1
 public sealed record NotchPreferences(EdgeSide Edge = EdgeSide.Right,
     NotchDisplayMode Mode = NotchDisplayMode.Hover)
 {
+    // Null preserves the v0.2 behavior: follow the current primary display.
+    public DisplayTarget? Display { get; init; }
     public string? SelectedDrive { get; init; }
     public bool StartAtLogin { get; init; }
     public int RefreshIntervalMs { get; init; } = 1000;
@@ -74,6 +76,11 @@ public static class PreferenceStore
             throw new InvalidDataException(Localization.T("prefs.invalidBackdrop"));
         if (value.Language is { } language && string.IsNullOrWhiteSpace(language.Code))
             throw new InvalidDataException(Localization.T("prefs.invalidLanguage"));
+        if (value.Display is { } display &&
+            (display.WorkingArea is null || !display.WorkingArea.IsValid ||
+             !double.IsFinite(display.Scaling) || display.Scaling is < 0.25 or > 8 ||
+             display.SessionId?.Length > 512 || display.Name?.Length > 512))
+            throw new InvalidDataException(Localization.T("prefs.invalidDisplay"));
     }
 
     public static NotchPreferences CoerceForPlatform(NotchPreferences value)

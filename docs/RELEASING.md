@@ -43,7 +43,7 @@ Archives contain the .NET runtime, application icon/assets, installation instruc
 - Windows 10 when supported by the feature set: launch, Acrylic/Flat availability and fallback behavior.
 - Ubuntu: record distribution and desktop session; verify transparency, native input region, tray support and Settings under light/dark themes.
 - Both: test common scaling where available, choose the intended volume, restart, confirm selection, and test the unavailable-volume state.
-- With more than one display: verify safe repositioning after topology changes. Do not claim selectable multi-monitor targeting until that feature exists.
+- With more than one display: test Automatic and an explicit secondary display, restart, change the primary display, dock/undock, reconnect the chosen display and verify safe repositioning at mixed scaling levels.
 - Both: verify a second launch activates the existing instance instead of creating a duplicate surface.
 - Both: install for the current user, enable startup, log out/in, then disable startup and confirm it is removed.
 - Exit before upgrading; verify the installed launcher still opens the new build.

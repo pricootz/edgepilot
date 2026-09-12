@@ -44,6 +44,7 @@ public sealed class EdgeWindow : Window
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer _cursorTimer;
+    private readonly DispatcherTimer _screenChangeTimer = new();
 
     private readonly ExperimentalAcrylicBorder _notchAcrylicSurface;
     private readonly Path _notchShape;
@@ -78,6 +79,7 @@ public sealed class EdgeWindow : Window
     private string? _selectedDrive;
     private bool _startAtLogin;
     private Language? _language;
+    private DisplayTarget? _displayTarget;
     public bool HasTray { get; set; }
     public event Action? ExitRequested;
     public event Action? PreferencesChanged;
@@ -217,6 +219,15 @@ public sealed class EdgeWindow : Window
         };
         PointerPressed += OnPointerPressed;
 
+        _screenChangeTimer.Interval = TimeSpan.FromMilliseconds(600);
+        _screenChangeTimer.Tick += (_, _) =>
+        {
+            _screenChangeTimer.Stop();
+            Relocate();
+            UpdatePlatformInputRegion();
+            _settingsWindow?.UpdateDisplays(CurrentDisplays());
+        };
+
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
         _monitor.CaptureFailed += OnCaptureFailed;
 
@@ -285,6 +296,7 @@ public sealed class EdgeWindow : Window
         _cursorTimer.Stop();
         _foldTimer.Stop();
         _motionTimer.Stop();
+        _screenChangeTimer.Stop();
         _lifetime.Cancel();
         _settingsWindow?.Close();
         if (_screensSubscribed) Screens.Changed -= OnScreensChanged;
@@ -298,8 +310,10 @@ public sealed class EdgeWindow : Window
 
     private void OnScreensChanged(object? sender, EventArgs e)
     {
-        Relocate();
-        UpdatePlatformInputRegion();
+        // Display drivers often emit a short burst while docking, rotating, or changing DPI.
+        // Reconcile once the topology has settled instead of jumping through intermediate layouts.
+        _screenChangeTimer.Stop();
+        _screenChangeTimer.Start();
     }
 
     private void OnSnapshotUpdated(SystemSnapshot snapshot)
@@ -653,6 +667,7 @@ public sealed class EdgeWindow : Window
 
     public NotchPreferences Preferences => new(_edge, _mode)
     {
+        Display = _displayTarget,
         SelectedDrive = _selectedDrive,
         StartAtLogin = _startAtLogin,
         Metrics = _metrics,
@@ -672,6 +687,7 @@ public sealed class EdgeWindow : Window
         _pinned = false;
         _edge = preferences.Edge;
         _mode = preferences.Mode;
+        _displayTarget = preferences.Display;
         _selectedDrive = preferences.SelectedDrive;
         _startAtLogin = preferences.StartAtLogin;
         _metrics = preferences.Metrics;
@@ -733,7 +749,7 @@ public sealed class EdgeWindow : Window
         }
         CancelFold();
         _settingsWindow = new SettingsWindow(Preferences, ApplyPreferences, warning,
-            drives: _latestSnapshot?.Drives, savePreferences: SavePreferences,
+            drives: _latestSnapshot?.Drives, displays: CurrentDisplays(), savePreferences: SavePreferences,
             exit: RequestExit, hasTray: HasTray, reopen: () => Dispatcher.UIThread.Post(() => ShowSettings()));
         _settingsWindow.Closed += (_, _) =>
         {
@@ -985,12 +1001,20 @@ public sealed class EdgeWindow : Window
     private void Relocate()
     {
         if (!IsVisible) return;
-        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var screens = Screens.All;
+        var displays = screens.Select(DisplaySnapshot.FromScreen).ToArray();
+        var resolution = DisplayTargetResolver.Resolve(displays, _displayTarget);
+        var screen = resolution is not null && resolution.Index < screens.Count
+            ? screens[resolution.Index]
+            : Screens.Primary;
         if (screen is null) return;
 
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
         _windowsInputOverlay?.Sync(new Size(Width, Height), Position);
     }
+
+    private IReadOnlyList<DisplaySnapshot> CurrentDisplays() =>
+        Screens.All.Select(DisplaySnapshot.FromScreen).ToArray();
 
     private static TextBlock Text(string value, double size, FontWeight weight, string color) => new()
     {

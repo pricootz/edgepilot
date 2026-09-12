@@ -199,7 +199,10 @@ public sealed partial class SettingsWindow
             Card(
                 SectionTitle("◨", Localization.T("edge.positionTitle")),
                 Description(Localization.T("edge.positionDescription")),
-                _previewLayout),
+                _previewLayout,
+                Divider(),
+                SettingField(Localization.T("edge.displayLabel"), _display),
+                Description(Localization.T("edge.displayDescription"))),
             Card(
                 SectionTitle("◌", Localization.T("edge.behaviorTitle")),
                 Description(Localization.T("edge.behaviorDescription")),

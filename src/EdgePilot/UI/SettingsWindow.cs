@@ -24,6 +24,7 @@ public sealed partial class SettingsWindow : GlassWindow
         { VisibleMetrics.Cpu, VisibleMetrics.Memory, VisibleMetrics.Disk, VisibleMetrics.Network };
 
     private readonly ComboBox _drive;
+    private readonly ComboBox _display;
     private readonly ComboBox _refresh;
     private readonly ComboBox _language;
     private readonly CheckBox[] _metrics;
@@ -47,6 +48,7 @@ public sealed partial class SettingsWindow : GlassWindow
     private readonly List<Border> _cards = new();
     private readonly List<StackPanel> _pageStacks = new();
     private readonly string? _initialDrive;
+    private IReadOnlyList<DisplaySnapshot> _displays = Array.Empty<DisplaySnapshot>();
     private readonly int[] _intervals = { 500, 1000, 2000, 5000 };
 
     private Border _diskCard = null!;
@@ -65,12 +67,15 @@ public sealed partial class SettingsWindow : GlassWindow
     private HoverSensitivity _selectedSensitivity;
     private SettingsThemePreference _selectedTheme;
     private SettingsBackdrop _selectedBackdrop;
+    private DisplayTarget? _selectedDisplayTarget;
     private SettingsPage _selectedPage;
     private bool _ready;
     private bool _darkTheme;
+    private bool _updatingDisplaySelection;
 
     public SettingsWindow(NotchPreferences current, Action<NotchPreferences> apply, string? warning = null,
         string? storagePath = null, IReadOnlyList<DriveSnapshot>? drives = null,
+        IReadOnlyList<DisplaySnapshot>? displays = null,
         Action<NotchPreferences>? savePreferences = null, Action? exit = null, bool hasTray = false,
         Action? reopen = null, int initialPage = -1)
     {
@@ -80,6 +85,7 @@ public sealed partial class SettingsWindow : GlassWindow
         _selectedSensitivity = current.Sensitivity;
         _selectedTheme = current.SettingsTheme;
         _selectedBackdrop = current.Backdrop;
+        _selectedDisplayTarget = current.Display;
         _initialDrive = current.SelectedDrive;
 
         Title = Localization.T("settings.title");
@@ -100,6 +106,16 @@ public sealed partial class SettingsWindow : GlassWindow
             MaxWidth = 460
         };
         UpdateDrives(drives ?? Array.Empty<DriveSnapshot>());
+
+        _display = new ComboBox
+        {
+            Foreground = PrimaryBrush,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MaxDropDownHeight = 280,
+            MaxWidth = 460,
+            MinWidth = 260
+        };
+        UpdateDisplays(displays ?? Array.Empty<DisplaySnapshot>());
 
         _refresh = new ComboBox
         {
@@ -255,6 +271,12 @@ public sealed partial class SettingsWindow : GlassWindow
         RegisterActionButton(_resetButton, ActionButtonRole.Secondary);
 
         _drive.SelectionChanged += (_, _) => MarkDirty();
+        _display.SelectionChanged += (_, _) =>
+        {
+            if (_updatingDisplaySelection) return;
+            _selectedDisplayTarget = (_display.SelectedItem as DisplayChoice)?.Target;
+            MarkDirty();
+        };
         _refresh.SelectionChanged += (_, _) => MarkDirty();
         _language.SelectionChanged += (_, _) => MarkDirty();
         foreach (var metric in _metrics) metric.Click += (_, _) => OnMetricChanged();
@@ -327,6 +349,26 @@ public sealed partial class SettingsWindow : GlassWindow
         if (_drive is null) return;
         _drive.ItemsSource = choices;
         _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, selected));
+    }
+
+    public void UpdateDisplays(IReadOnlyList<DisplaySnapshot> displays)
+    {
+        _displays = displays.ToArray();
+        var options = DisplaySelection.Build(_displays, _selectedDisplayTarget);
+        if (_display?.ItemsSource is IReadOnlyList<DisplayChoice> old && old.SequenceEqual(options.Choices) &&
+            Equals(_display.SelectedItem, options.Selected)) return;
+        if (_display is null) return;
+
+        _updatingDisplaySelection = true;
+        try
+        {
+            _display.ItemsSource = options.Choices;
+            _display.SelectedItem = options.Selected;
+        }
+        finally
+        {
+            _updatingDisplaySelection = false;
+        }
     }
 
     private void ShowPage(SettingsPage page)
@@ -431,6 +473,7 @@ public sealed partial class SettingsWindow : GlassWindow
     {
         return new NotchPreferences(_selectedEdge, _selectedMode)
         {
+            Display = _selectedDisplayTarget,
             RefreshIntervalMs = _intervals[_refresh.SelectedIndex],
             Sensitivity = _selectedSensitivity,
             Metrics = SelectedMetrics(),
@@ -461,6 +504,7 @@ public sealed partial class SettingsWindow : GlassWindow
         _selectedSensitivity = _savedPreferences.Sensitivity;
         _selectedTheme = _savedPreferences.SettingsTheme;
         _selectedBackdrop = _savedPreferences.Backdrop;
+        _selectedDisplayTarget = _savedPreferences.Display;
         _refresh.SelectedIndex = Array.IndexOf(_intervals, _savedPreferences.RefreshIntervalMs);
         for (var i = 0; i < _metrics.Length; i++)
             _metrics[i].IsChecked = _savedPreferences.Metrics.HasFlag(MetricOptions[i]);
@@ -475,6 +519,7 @@ public sealed partial class SettingsWindow : GlassWindow
         }
         if (_drive.ItemsSource is IReadOnlyList<DriveChoice> choices)
             _drive.SelectedItem = choices.First(x => DriveSelection.PathComparer.Equals(x.Name, _savedPreferences.SelectedDrive));
+        UpdateDisplays(_displays);
 
         UpdateSegments(_edgeButtons, (int)_selectedEdge);
         UpdateSegments(_modeButtons, (int)_selectedMode);

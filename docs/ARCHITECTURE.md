@@ -20,11 +20,11 @@ Linux desktop-entry comments are generated for every shipped locale so desktop m
 
 `EdgeWindow` owns interaction state and rendering. `EdgeNotchGeometry` supplies the shared silhouette and clip; `NotchLayout` maps geometry and hit targets to all four edges while preserving upright text. `NotchSpring` retains motion continuity when a transition reverses. `MetricRing` and `DisplayFormat` present snapshots.
 
-Placement uses Avalonia's screen containing the Edge window, falling back to the primary screen, and recalculates when the desktop screen collection changes. v0.2 does not persist a display identity or expose selectable multi-monitor targeting.
+`DisplayTargetResolver` separates saved display intent from Avalonia's live screen objects. Automatic mode follows the primary display. Explicit choices are reconciled in order by session handle, unique friendly name, then working-area geometry and scaling. If no match exists, placement temporarily uses the primary display while preserving the saved target for a later reconnect. Screen-collection change bursts are debounced before relocation and Settings refresh.
 
 `SettingsWindow` owns Settings state and navigation. Page composition lives under `UI/Settings`, keeping General, Edge, Monitor, Behavior, Startup and About separate from reusable controls.
 
-`NotchPreferences` stores persisted interface state including edge, display mode, visible metrics, refresh, hover sensitivity, selected disk, language and Settings theme. `PreferenceStore` saves atomically and preserves compatibility with the original v0.2 language values.
+`NotchPreferences` stores persisted interface state including edge, display mode, selected display, visible metrics, refresh, hover sensitivity, selected disk, language and Settings theme. `PreferenceStore` saves atomically; the nullable display target keeps v0.2 settings compatible and means Automatic.
 
 Language choices are populated from the embedded locale catalogs, so shipping a new translation normally means adding one JSON file rather than changing Settings or introducing a new language enum.
 
@@ -44,6 +44,7 @@ Current `main` ships:
 - Sampling does not create UI timers.
 - Platform details remain outside Core.
 - Placement uses the OS working area.
+- Display fallback must never erase an unavailable explicit target.
 - Failure should leave settings and recovery accessible.
 - Localization catalogs contain text; application behavior remains in code.
 - New languages should not require a closed language enum or Settings rewrite.
@@ -53,6 +54,6 @@ Current `main` ships:
 
 The executable headless suites cover geometry, motion, interaction, settings, disk selection and localization behavior. CI adds repository/privacy validation, native packaged launch, second-instance activation and per-user installation on disposable Windows and Ubuntu runners. Compositor behavior and actual login sessions require hands-on testing.
 
-The next architecture direction is Signals / ambient awareness, but Signals are not part of current `main` behavior yet and are being developed separately until validated.
+Signals / ambient awareness continue on a separate draft branch until validated; selectable display targeting is the first isolated v0.3 foundation developed from current `main`.
 
-The edge-attached interaction was informed by prior notch-style UI exploration. EdgePilot is maintained as its own codebase.
+The edge-attached interaction was informed by prior notch-style UI exploration. The v0.3 display reconciliation strategy is adapted from Edge-Drop under Apache-2.0 and modified for Avalonia, four-edge placement and persisted reconnect behavior; packaging retains the corresponding notice and license. EdgePilot remains MIT-licensed.
