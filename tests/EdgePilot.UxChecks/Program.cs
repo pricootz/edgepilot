@@ -60,6 +60,12 @@ Check(DriveSelection.Choices(manyDrives, null).Count == 13, "selector does not t
 Check(DriveSelection.Choices(drives, null)[2].Caption.Contains("16 TB"), "decimal disk capacity is recognizable");
 _ = AppIcon.Load();
 Check(true, "embedded tray icon decodes");
+var informationalVersion = typeof(ProductVersion).Assembly
+    .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?
+    .InformationalVersion?
+    .Split('+')[0];
+Check(ProductVersion.Value == informationalVersion && ProductVersion.Label == $"v{informationalVersion}",
+    "product version preserves preview identity");
 var window = new EdgeWindow();
 Call(window, "UpdatePointer", new Point(405, 310));
 Check((bool)Field(window, "_expanded")!, "hot-zone opens");
@@ -270,6 +276,42 @@ try
     Check(exitIcon.Icon == FluentIcons.Common.Icon.SignOut, "exit action uses SignOut icon");
     Check(exitIcon.IconSize == FluentIcons.Common.IconSize.Size20 && Math.Abs(exitIcon.FontSize - 16) < 0.001,
         "compact exit icon uses available glyph set at 16px");
+
+    var settingsBody = (Grid)SettingsField(settings, "_body")!;
+    var versionBadge = (Border)SettingsField(settings, "_versionBadge")!;
+    var previewLayout = (Grid)SettingsField(settings, "_previewLayout")!;
+    var positionOptions = (StackPanel)SettingsField(settings, "_positionOptions")!;
+    var previewFrame = (Border)SettingsField(settings, "_previewFrame")!;
+    var metricGrid = (Grid)SettingsField(settings, "_metricGrid")!;
+    var metricTiles = (Border[])SettingsField(settings, "_metricTiles")!;
+    Check(settings.MinWidth == 680 && settings.MinHeight == 520,
+        "settings exposes the supported minimum window size");
+
+    SettingsCall(settings, "ApplyResponsiveLayout", 920d);
+    Check(Math.Abs(settingsBody.ColumnDefinitions[0].Width.Value - 184) < 0.001,
+        "regular settings layout uses full navigation width");
+    Check(versionBadge.IsVisible, "regular settings layout shows version badge");
+    Check(previewLayout.ColumnDefinitions.Count == 2 && previewLayout.RowDefinitions.Count == 1 &&
+        Grid.GetColumn(positionOptions) == 1 && Grid.GetRow(positionOptions) == 0,
+        "regular edge preview uses two columns");
+    Check(metricGrid.ColumnDefinitions.Count == 2 && metricGrid.RowDefinitions.Count == 2 &&
+        metricTiles.Select(Grid.GetColumn).SequenceEqual(new[] { 0, 1, 0, 1 }) &&
+        metricTiles.Select(Grid.GetRow).SequenceEqual(new[] { 0, 0, 1, 1 }),
+        "regular metric cards use a two-column grid");
+
+    SettingsCall(settings, "ApplyResponsiveLayout", 680d);
+    Check(Math.Abs(settingsBody.ColumnDefinitions[0].Width.Value - 154) < 0.001,
+        "minimum settings layout compacts navigation");
+    Check(!versionBadge.IsVisible, "minimum settings layout hides version badge");
+    Check(previewLayout.ColumnDefinitions.Count == 1 && previewLayout.RowDefinitions.Count == 2 &&
+        Grid.GetColumn(positionOptions) == 0 && Grid.GetRow(positionOptions) == 1 &&
+        previewFrame.Width == 260 && previewFrame.Height == 158,
+        "minimum edge preview stacks without clipping its frame");
+    Check(metricGrid.ColumnDefinitions.Count == 1 && metricGrid.RowDefinitions.Count == 4 &&
+        metricTiles.All(tile => Grid.GetColumn(tile) == 0) &&
+        metricTiles.Select(Grid.GetRow).SequenceEqual(new[] { 0, 1, 2, 3 }),
+        "minimum metric cards use a single-column grid");
+    SettingsCall(settings, "ApplyResponsiveLayout", 920d);
 
     SettingsCall(settings, "SelectEdge", EdgeSide.Bottom, true);
     SettingsCall(settings, "SelectMode", NotchDisplayMode.Always, true);

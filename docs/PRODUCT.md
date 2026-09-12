@@ -34,4 +34,4 @@ Signals are being developed separately and are not part of the current `main` pr
 
 ## Not current scope
 
-Remote servers, Docker, clipboard tools, VPN/Tailscale, removable-device workflows and quick actions are future ideas, not shipped features. GPU, temperature and fan sensors are not part of this preview. macOS and ARM packages are not current supported targets.
+Remote servers, Docker, clipboard tools, VPN/Tailscale, removable-device workflows and quick actions are future ideas, not shipped features. Selectable multi-monitor targeting and per-display EdgePilot surfaces are not implemented. GPU, temperature and fan sensors are not part of this preview. macOS and ARM packages are not current supported targets.

@@ -30,12 +30,13 @@ This roadmap is directional, not a delivery schedule.
 
 ## Before promoting v0.2 beyond preview
 
-- [ ] Broader Windows 11 and Ubuntu desktop testing.
+- [x] Hands-on Windows 10 and Windows 11 checks for supported Flat/Mica/Acrylic surfaces and input safety.
+- [ ] Broader Ubuntu desktop testing.
 - [ ] Verify real logout/login startup and tray behavior.
 - [ ] Test Settings at common scaling levels (100%, 125%, 150%) and smaller window sizes.
-- [ ] Validate all four edges and monitor changes on physical multi-monitor systems.
+- [ ] Validate all four edges and safe repositioning when physical display topology changes. Selectable multi-monitor targeting is not a v0.2 feature.
 - [ ] Confirm language switching and Automatic mode on Italian, English, French and Spanish desktop locales.
-- [ ] Add current v0.2 Windows and Ubuntu screenshots.
+- [ ] Replace the pre-v0.2 Settings/overview captures with current Windows screenshots and add Ubuntu captures.
 - [ ] Gather feedback from the preview release.
 
 ## v0.3 direction — Signals / ambient awareness

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -603,14 +602,7 @@ public sealed partial class SettingsWindow : GlassWindow
         return version.ToUpperInvariant();
     }
 
-    private static string FullVersionLabel()
-    {
-        var informational = typeof(SettingsWindow).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion?
-            .Split('+')[0];
-        return string.IsNullOrWhiteSpace(informational) ? "Preview" : $"v{informational}";
-    }
+    private static string FullVersionLabel() => ProductVersion.Label;
 
     private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
 

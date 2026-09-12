@@ -97,6 +97,11 @@ jobs:
           Copy-Item packaging/Install.ps1 dist/EdgePilot/
           Copy-Item packaging/README.md dist/EdgePilot/
           $exe = (Resolve-Path dist/EdgePilot/EdgePilot.exe).Path
+          $expectedVersion = (dotnet msbuild src/EdgePilot/EdgePilot.csproj -getProperty:Version).Trim()
+          $reportedVersion = (& $exe --version | Out-String).Trim()
+          if ($reportedVersion -ne "EdgePilot $expectedVersion") {
+            throw "Package version mismatch. Expected EdgePilot $expectedVersion, got $reportedVersion"
+          }
           $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
           Start-Sleep -Milliseconds 1500
           if ($smoke.HasExited) { throw 'Primary instance exited prematurely or native input-region initialization failed.' }
@@ -126,6 +131,9 @@ jobs:
         run: |
           cp packaging/install.sh packaging/README.md dist/EdgePilot/
           chmod +x dist/EdgePilot/EdgePilot dist/EdgePilot/install.sh
+          expected_version="$(dotnet msbuild src/EdgePilot/EdgePilot.csproj -getProperty:Version)"
+          reported_version="$(dist/EdgePilot/EdgePilot --version)"
+          test "$reported_version" = "EdgePilot $expected_version"
           timeout 20s xvfb-run -a dist/EdgePilot/EdgePilot --smoke-test &
           smoke_pid=$!
           sleep 2

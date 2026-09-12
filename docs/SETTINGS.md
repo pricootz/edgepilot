@@ -24,6 +24,8 @@ Controls where EdgePilot lives and how it appears.
 - **Position:** right, left, top or bottom edge, with a live visual preview.
 - **Panel behavior:** on hover, always visible or hidden.
 
+v0.2 does not expose a display selector or create one EdgePilot surface per display. Multi-monitor targeting is a future feature, separate from choosing one of the four edges.
+
 ## Monitor
 
 Controls the current System module.

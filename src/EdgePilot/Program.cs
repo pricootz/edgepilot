@@ -12,7 +12,7 @@ internal static class Program
         Localization.SetLanguage(Localization.DetectSystemLanguage());
         if (args.Contains("--version"))
         {
-            Console.WriteLine("EdgePilot " + typeof(Program).Assembly.GetName().Version);
+            Console.WriteLine("EdgePilot " + ProductVersion.Value);
             return;
         }
         if (args.Contains("--install"))
