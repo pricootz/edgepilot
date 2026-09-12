@@ -2,6 +2,7 @@
   "_language": "English",
   "tray.settings": "Settings",
   "tray.toggle": "Show / Hide panel",
+  "tray.display": "Move EdgePilot to",
   "tray.moveHere": "Move EdgePilot to this display",
   "tray.exit": "Exit",
   "warning.loadFailed": "Unable to read saved settings. Defaults are active. Save your preferences again to restore the file.",

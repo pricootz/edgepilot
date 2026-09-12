@@ -2,6 +2,7 @@
   "_language": "Español",
   "tray.settings": "Ajustes",
   "tray.toggle": "Mostrar / Ocultar panel",
+  "tray.display": "Mover EdgePilot a",
   "tray.moveHere": "Mover EdgePilot a esta pantalla",
   "tray.exit": "Salir",
   "warning.loadFailed": "No se pudieron leer los ajustes guardados. Se han activado los valores predeterminados. Vuelve a guardar tus preferencias para restaurar el archivo.",

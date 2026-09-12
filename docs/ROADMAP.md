@@ -45,7 +45,7 @@ This roadmap is directional, not a delivery schedule.
 
 - [x] Automatic primary-display mode and explicit monitor selection.
 - [x] Persist display intent across restarts without relying on one volatile identifier.
-- [x] Fall back safely while a chosen monitor is reported disconnected and return when it reconnects; provide an explicit current-display recovery for drivers that retain a powered-off logical target.
+- [x] Fall back safely while a chosen monitor is reported disconnected and return when it reconnects; provide an explicit, verified tray destination for drivers that retain a powered-off logical target.
 - [x] Debounce topology changes before relocation.
 - [ ] Validate docking, rotation and mixed 100%/125%/150% DPI on physical Windows and Linux desktops.
 

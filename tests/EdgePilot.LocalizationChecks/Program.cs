@@ -23,6 +23,7 @@ Localization.SetLanguage(Language.Italian);
 Check(Localization.T("nav.about") == "Informazioni", "Italian navigation translation");
 Check(Localization.T("settings.saveChanges") == "Salva modifiche", "Italian settings translation");
 Check(Localization.T("tray.exit") == "Esci", "Italian tray translation");
+Check(Localization.T("tray.display") == "Sposta EdgePilot su", "Italian display submenu translation");
 Check(Localization.T("tray.moveHere") == "Sposta EdgePilot su questo monitor",
     "Italian display recovery translation");
 Check(CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator == ",", "Italian number culture");

@@ -2,6 +2,7 @@
   "_language": "Français",
   "tray.settings": "Paramètres",
   "tray.toggle": "Afficher / Masquer le panneau",
+  "tray.display": "Déplacer EdgePilot vers",
   "tray.moveHere": "Déplacer EdgePilot vers cet écran",
   "tray.exit": "Quitter",
   "warning.loadFailed": "Impossible de lire les paramètres enregistrés. Les valeurs par défaut sont actives. Enregistrez à nouveau vos préférences pour restaurer le fichier.",

@@ -68,6 +68,7 @@ public sealed class EdgeWindow : Window
 
     private readonly DispatcherTimer _foldTimer = new();
     private readonly DispatcherTimer _motionTimer = new();
+    private readonly DispatcherTimer _recoveryPreviewTimer = new();
     private readonly NotchSpring _spring = new();
     private readonly System.Diagnostics.Stopwatch _motionClock = new();
     private SystemSnapshot? _latestSnapshot;
@@ -224,6 +225,19 @@ public sealed class EdgeWindow : Window
             UpdateNotchVisual();
             if (_spring.IsSettled) _motionTimer.Stop();
         };
+        _recoveryPreviewTimer.Interval = TimeSpan.FromMilliseconds(1600);
+        _recoveryPreviewTimer.Tick += (_, _) =>
+        {
+            _recoveryPreviewTimer.Stop();
+            if (_mode != NotchDisplayMode.Hover || _pinned || !_expanded)
+                return;
+            if (TryGetCursorLocal(out var point) && IsInteractive(point))
+                return;
+
+            _expanded = false;
+            SetHoveredMetric(null);
+            StartMotion(0);
+        };
         PointerPressed += OnPointerPressed;
 
         _screenChangeTimer.Interval = TimeSpan.FromMilliseconds(600);
@@ -310,6 +324,7 @@ public sealed class EdgeWindow : Window
         _cursorTimer.Stop();
         _foldTimer.Stop();
         _motionTimer.Stop();
+        _recoveryPreviewTimer.Stop();
         _screenChangeTimer.Stop();
         _displayHealthTimer.Stop();
         _lifetime.Cancel();
@@ -784,13 +799,64 @@ public sealed class EdgeWindow : Window
             return false;
 
         var displays = DisplaySnapshot.FromScreens(screens);
-        var target = DisplayTargetResolver.Capture(displays[index], displays);
-        var preferences = Preferences with { Display = target };
+        return MoveToResolvedDisplay(
+            screens,
+            displays,
+            index,
+            DisplayTargetResolver.Capture(displays[index], displays));
+    }
+
+    internal IReadOnlyList<DisplayMenuOption> DisplayMenuOptions() =>
+        DisplayRecovery.MenuOptions(CurrentDisplays(), _displayTarget);
+
+    public bool MoveToDisplay(DisplayTarget? requestedTarget)
+    {
+        var screens = Screens.All;
+        if (screens.Count == 0)
+            return false;
+
+        var displays = DisplaySnapshot.FromScreens(screens);
+        var resolution = DisplayTargetResolver.Resolve(displays, requestedTarget);
+        if (resolution is null || resolution.Index < 0 || resolution.Index >= screens.Count)
+            return false;
+
+        var persistedTarget = requestedTarget is null
+            ? null
+            : DisplayTargetResolver.Capture(displays[resolution.Index], displays);
+        return MoveToResolvedDisplay(screens, displays, resolution.Index, persistedTarget);
+    }
+
+    private bool MoveToResolvedDisplay(IReadOnlyList<Screen> screens,
+        IReadOnlyList<DisplaySnapshot> displays, int index, DisplayTarget? persistedTarget)
+    {
+        if (index < 0 || index >= screens.Count || index >= displays.Count)
+            return false;
+
+        // This is an explicit recovery action. If the panel was fully hidden, make the result
+        // visible and usable instead of silently persisting a new off-screen location.
+        var preferences = DisplayRecovery.RevealOn(Preferences, persistedTarget);
         try
         {
             SavePreferences?.Invoke(preferences);
             ApplyPreferences(preferences);
+
+            if (!IsVisible)
+                return false;
+
+            var screen = screens[index];
+            var position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
+            Position = position;
+
+            if (!WindowsWindowPlacement.TryMoveAndVerify(this, position, screen.Bounds))
+                return false;
+
+            _windowsInputOverlay?.Sync(new Size(Width, Height), position);
+            if (!UpdatePlatformInputRegion())
+                return false;
+
+            _lastDisplays = displays.ToArray();
             _settingsWindow?.UpdateDisplays(displays);
+            RevealRecoveryMove();
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or
@@ -799,6 +865,18 @@ public sealed class EdgeWindow : Window
             System.Diagnostics.Trace.WriteLine(ex);
             return false;
         }
+    }
+
+    private void RevealRecoveryMove()
+    {
+        if (_mode != NotchDisplayMode.Hover)
+            return;
+
+        _recoveryPreviewTimer.Stop();
+        _expanded = true;
+        SetHoveredMetric(null);
+        StartMotion(1);
+        _recoveryPreviewTimer.Start();
     }
 
     public void ShowSettings(string? warning = null)

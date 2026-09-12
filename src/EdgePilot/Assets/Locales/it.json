@@ -2,6 +2,7 @@
   "_language": "Italiano",
   "tray.settings": "Impostazioni",
   "tray.toggle": "Mostra / Nascondi pannello",
+  "tray.display": "Sposta EdgePilot su",
   "tray.moveHere": "Sposta EdgePilot su questo monitor",
   "tray.exit": "Esci",
   "warning.loadFailed": "Impossibile leggere le impostazioni salvate. Sono attive quelle predefinite. Salva nuovamente le preferenze per ripristinare il file.",

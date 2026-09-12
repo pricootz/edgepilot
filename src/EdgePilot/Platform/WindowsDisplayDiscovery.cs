@@ -54,9 +54,14 @@ internal static class WindowsDisplayDiscovery
                     ? candidates.Any(path => path.IsAvailable)
                     : catalog.AllSourceNamesResolved ? false : null;
 
+                var stableId = Normalize(preferred?.StableId) ?? Normalize(legacy.StableId);
+                var friendlyName = Normalize(preferred?.FriendlyName) ?? Normalize(legacy.FriendlyName);
+                if (IsGenericMonitorName(friendlyName))
+                    friendlyName = null;
+
                 result[handle] = new WindowsDisplayMetadata(
-                    Normalize(preferred?.StableId) ?? Normalize(legacy.StableId),
-                    Normalize(preferred?.FriendlyName) ?? Normalize(legacy.FriendlyName),
+                    stableId,
+                    friendlyName ?? HardwareModelCode(stableId),
                     connector,
                     ConnectorNumber(connector),
                     available);
@@ -87,6 +92,29 @@ internal static class WindowsDisplayDiscovery
         return start < end && int.TryParse(connector.AsSpan(start), out var number) && number > 0
             ? number
             : null;
+    }
+
+    internal static string? HardwareModelCode(string? deviceId)
+    {
+        deviceId = Normalize(deviceId);
+        if (deviceId is null)
+            return null;
+
+        var parts = deviceId.Split(['\\', '#', '/'], StringSplitOptions.RemoveEmptyEntries |
+            StringSplitOptions.TrimEntries);
+        for (var index = 0; index + 1 < parts.Length; index++)
+        {
+            if (!string.Equals(parts[index], "DISPLAY", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(parts[index], "MONITOR", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var model = parts[index + 1];
+            if (model.Length is > 2 and <= 32 && model.All(character =>
+                    char.IsAsciiLetterOrDigit(character) || character is '-' or '_'))
+                return model.ToUpperInvariant();
+        }
+
+        return null;
     }
 
     internal static bool InteropLayoutIsExpected =>
@@ -216,6 +244,18 @@ internal static class WindowsDisplayDiscovery
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().TrimEnd('\0');
+
+    private static bool IsGenericMonitorName(string? value)
+    {
+        value = Normalize(value);
+        if (value is null)
+            return false;
+
+        return value.Contains("generic", StringComparison.OrdinalIgnoreCase) ||
+               value.Contains("generico", StringComparison.OrdinalIgnoreCase) ||
+               value.Contains("genérico", StringComparison.OrdinalIgnoreCase) ||
+               value.Contains("générique", StringComparison.OrdinalIgnoreCase);
+    }
 
     private sealed record DisplayPath(
         string ConnectorName,

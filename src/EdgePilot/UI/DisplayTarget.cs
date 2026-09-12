@@ -227,6 +227,33 @@ internal sealed record DisplayChoice(DisplayTarget? Target, string Caption, bool
 
 internal sealed record DisplayOptions(IReadOnlyList<DisplayChoice> Choices, DisplayChoice Selected);
 
+internal sealed record DisplayMenuOption(DisplayTarget? Target, string Caption, bool IsSelected);
+
+internal static class DisplayRecovery
+{
+    public static IReadOnlyList<DisplayMenuOption> MenuOptions(
+        IReadOnlyList<DisplaySnapshot> displays, DisplayTarget? selected)
+    {
+        var options = DisplaySelection.Build(displays, selected);
+        return options.Choices
+            .Where(choice => choice.IsAvailable)
+            .Select(choice => new DisplayMenuOption(
+                choice.Target,
+                choice.Caption,
+                Equals(choice, options.Selected)))
+            .ToArray();
+    }
+
+    public static NotchPreferences RevealOn(NotchPreferences current, DisplayTarget? target) =>
+        current with
+        {
+            Display = target,
+            Mode = current.Mode == NotchDisplayMode.Hidden
+                ? NotchDisplayMode.Hover
+                : current.Mode
+        };
+}
+
 internal static class DisplaySelection
 {
     public static DisplayOptions Build(IReadOnlyList<DisplaySnapshot> displays, DisplayTarget? selected)

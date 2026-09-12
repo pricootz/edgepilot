@@ -7,8 +7,8 @@
 - Selectable multi-monitor placement with an Automatic primary-display mode.
 - Persisted display targeting that reconciles stable Windows monitor identity, session identity, friendly name, working-area geometry and scaling.
 - Safe topology fallback: a display reported unavailable by the OS temporarily falls back to an available display without forgetting the user's choice.
-- Windows monitor labels use the EDID friendly model name when available and a deterministic numbered label otherwise.
-- A **Use the display containing Settings** action and a Windows tray **Move EdgePilot to this display** command provide deterministic recovery when a powered-off monitor remains falsely reported as active by its driver.
+- Windows monitor labels use the EDID friendly model name when available, fall back to the hardware model code from the device identity, and only then use a deterministic number.
+- **Use the display containing Settings** and a Windows tray display submenu provide deterministic recovery when a powered-off monitor remains falsely reported as active by its driver. Tray moves target a chosen display directly, verify the resulting native window placement and briefly reveal the panel.
 
 ### Changed
 

@@ -157,12 +157,35 @@ Check(unnamedOptions.Choices[1].Caption.Contains(Localization.T("display.fallbac
       unnamedOptions.Choices[2].Caption.Contains(Localization.T("display.fallbackName", 2)) &&
       unnamedOptions.Choices[1].Caption != unnamedOptions.Choices[2].Caption,
     "unnamed displays receive useful numbered labels");
+var displayMenuOptions = DisplayRecovery.MenuOptions(displays, studioTarget);
+Check(displayMenuOptions.Count == 3 && displayMenuOptions[0].Target is null &&
+      !displayMenuOptions[0].IsSelected && displayMenuOptions[2].IsSelected &&
+      displayMenuOptions[2].Target?.SessionId == "win:2",
+    "tray display menu exposes deterministic targets and current selection");
+var hiddenRecovery = DisplayRecovery.RevealOn(
+    new NotchPreferences(EdgeSide.Bottom, NotchDisplayMode.Hidden)
+    {
+        Metrics = VisibleMetrics.Network,
+        Display = studioTarget
+    }, DisplayTargetResolver.Capture(displays[0], displays));
+Check(hiddenRecovery.Mode == NotchDisplayMode.Hover && hiddenRecovery.Edge == EdgeSide.Bottom &&
+      hiddenRecovery.Metrics == VisibleMetrics.Network && hiddenRecovery.Display?.SessionId == "win:1",
+    "manual display recovery reveals a hidden panel without losing preferences");
+Check(DisplayRecovery.RevealOn(new NotchPreferences(EdgeSide.Left, NotchDisplayMode.Always), studioTarget).Mode ==
+      NotchDisplayMode.Always,
+    "manual display recovery preserves a visible mode");
 var unavailableOptions = DisplaySelection.Build(unavailableDisplays, studioTarget);
 Check(!unavailableOptions.Selected.IsAvailable && unavailableOptions.Choices.Count == 3,
     "OS-unavailable selected display is retained without a duplicate choice");
 Check(WindowsDisplayDiscovery.ConnectorNumber(@"\\.\DISPLAY12") == 12 &&
       WindowsDisplayDiscovery.ConnectorNumber("connector") is null,
     "Windows connector number parsing is defensive");
+Check(WindowsDisplayDiscovery.HardwareModelCode(
+          @"\\?\DISPLAY#AOC3279#5&ea10951&0&UID41219#{4d36e96e-e325-11ce-bfc1-08002be10318}") == "AOC3279" &&
+      WindowsDisplayDiscovery.HardwareModelCode(@"DISPLAY\GSM59F2\5&ea10951&0&UID41221") == "GSM59F2" &&
+      WindowsDisplayDiscovery.HardwareModelCode(@"MONITOR\DEL40A9\7&123") == "DEL40A9" &&
+      WindowsDisplayDiscovery.HardwareModelCode("not-a-display-id") is null,
+    "Windows display model codes are recovered from device identities");
 Check(WindowsDisplayDiscovery.InteropLayoutIsExpected,
     "Windows display-discovery interop layout matches Win32 structures");
 Check(DisplayTargetResolver.Resolve(Array.Empty<DisplaySnapshot>(), studioTarget) is null,
@@ -181,6 +204,9 @@ Check(screenChangeTimer.Interval == TimeSpan.FromMilliseconds(600), "display top
 var displayHealthTimer = (DispatcherTimer)Field(window, "_displayHealthTimer")!;
 Check(displayHealthTimer.Interval == TimeSpan.FromMilliseconds(1500),
     "Windows display availability polling stays low-frequency");
+var recoveryPreviewTimer = (DispatcherTimer)Field(window, "_recoveryPreviewTimer")!;
+Check(recoveryPreviewTimer.Interval == TimeSpan.FromMilliseconds(1600),
+    "manual display recovery has visible feedback");
 Call(window, "OnScreensChanged", null!, EventArgs.Empty);
 Check(screenChangeTimer.IsEnabled, "display topology change is debounced");
 screenChangeTimer.Stop();
