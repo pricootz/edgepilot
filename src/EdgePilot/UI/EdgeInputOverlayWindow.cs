@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using EdgePilot.Platform;
 
 namespace EdgePilot.UI;
@@ -14,6 +15,10 @@ internal sealed class EdgeInputOverlayWindow : Window, IDisposable
 {
     private readonly PlatformInputRegion _inputRegion;
     private readonly Action<Point, bool, bool> _pointerPressed;
+    private Rect[] _latestLogicalRects = [];
+    private Size _latestLogicalWindowSize;
+    private bool _hasRegion;
+    private bool _reapplyQueued;
     private bool _disposed;
 
     public EdgeInputOverlayWindow(Action<Point, bool, bool> pointerPressed)
@@ -36,6 +41,11 @@ internal sealed class EdgeInputOverlayWindow : Window, IDisposable
 
         _inputRegion = new PlatformInputRegion(this);
 
+        // A top-level has its own DPI lifecycle. In particular, moving the input HWND from an
+        // off-screen bootstrap position to a monitor with different scaling can complete after
+        // Position has been assigned. Rebuild the pixel region from this window's final scaling.
+        ScalingChanged += (_, _) => QueueRegionReapply();
+
         PointerPressed += (_, e) =>
         {
             var current = e.GetCurrentPoint(this);
@@ -57,6 +67,9 @@ internal sealed class EdgeInputOverlayWindow : Window, IDisposable
         if (_disposed)
             return false;
 
+        _latestLogicalRects = logicalRects.ToArray();
+        _latestLogicalWindowSize = logicalWindowSize;
+        _hasRegion = true;
         Width = logicalWindowSize.Width;
         Height = logicalWindowSize.Height;
 
@@ -68,10 +81,19 @@ internal sealed class EdgeInputOverlayWindow : Window, IDisposable
             Show();
         }
 
-        if (!_inputRegion.TryApply(logicalRects, scaling, logicalWindowSize))
+        if (!_inputRegion.TryApply(_latestLogicalRects, scaling, logicalWindowSize))
             return false;
 
         Position = targetPosition;
+        var settledScaling = RenderScaling > 0 && double.IsFinite(RenderScaling)
+            ? RenderScaling
+            : scaling;
+        if (!_inputRegion.TryApply(_latestLogicalRects, settledScaling, logicalWindowSize))
+        {
+            Hide();
+            return false;
+        }
+        QueueRegionReapply();
         return true;
     }
 
@@ -83,12 +105,39 @@ internal sealed class EdgeInputOverlayWindow : Window, IDisposable
         Width = logicalWindowSize.Width;
         Height = logicalWindowSize.Height;
         Position = position;
+        _latestLogicalWindowSize = logicalWindowSize;
+        QueueRegionReapply();
     }
 
     public void Suspend()
     {
         if (!_disposed && IsVisible)
             Hide();
+    }
+
+    private void QueueRegionReapply()
+    {
+        if (_disposed || !_hasRegion || _reapplyQueued)
+            return;
+
+        _reapplyQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _reapplyQueued = false;
+            if (_disposed || !_hasRegion || !IsVisible)
+                return;
+
+            var scaling = RenderScaling > 0 && double.IsFinite(RenderScaling)
+                ? RenderScaling
+                : 1;
+            if (!_inputRegion.TryApply(_latestLogicalRects, scaling, _latestLogicalWindowSize))
+            {
+                // A full transparent input HWND is worse than temporarily losing notch input.
+                System.Diagnostics.Trace.WriteLine(
+                    "EdgePilot suspended the Windows input overlay after a DPI/HWND transition could not be secured.");
+                Hide();
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     public void Dispose()

@@ -25,6 +25,7 @@ public sealed partial class SettingsWindow : GlassWindow
 
     private readonly ComboBox _drive;
     private readonly ComboBox _display;
+    private readonly Button _useCurrentDisplayButton;
     private readonly ComboBox _refresh;
     private readonly ComboBox _language;
     private readonly CheckBox[] _metrics;
@@ -116,6 +117,7 @@ public sealed partial class SettingsWindow : GlassWindow
             MinWidth = 260
         };
         UpdateDisplays(displays ?? Array.Empty<DisplaySnapshot>());
+        _useCurrentDisplayButton = BuildUseCurrentDisplayButton();
 
         _refresh = new ComboBox
         {
@@ -369,6 +371,42 @@ public sealed partial class SettingsWindow : GlassWindow
         {
             _updatingDisplaySelection = false;
         }
+    }
+
+    private void SelectCurrentDisplay()
+    {
+        var screens = Screens.All;
+        var current = Screens.ScreenFromWindow(this);
+        if (current is null || screens.Count == 0)
+        {
+            _status.Text = Localization.T("display.currentUnavailable");
+            return;
+        }
+
+        var currentHandle = current.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        var index = -1;
+        for (var candidate = 0; candidate < screens.Count; candidate++)
+        {
+            var handle = screens[candidate].TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            if (ReferenceEquals(screens[candidate], current) ||
+                (currentHandle != IntPtr.Zero && handle == currentHandle) ||
+                screens[candidate].Bounds == current.Bounds)
+            {
+                index = candidate;
+                break;
+            }
+        }
+
+        if (index < 0)
+        {
+            _status.Text = Localization.T("display.currentUnavailable");
+            return;
+        }
+
+        _displays = DisplaySnapshot.FromScreens(screens);
+        _selectedDisplayTarget = DisplayTargetResolver.Capture(_displays[index], _displays);
+        UpdateDisplays(_displays);
+        MarkDirty();
     }
 
     private void ShowPage(SettingsPage page)

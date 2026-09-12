@@ -26,6 +26,7 @@ public sealed class EdgeWindow : Window
     private const double VerticalContentDepthPadding = 12;
     private const double HorizontalContentDepthPadding = 8;
     private const double NativeInputContourInset = 2;
+    private const double NativeVisualContourBleed = 2;
     private double ExpandedLength => StackHeight + ExpandedFlare * 2 + ContentLengthPadding * 2;
     private double ExpandedContentTop =>
         (WindowHeight - ExpandedLength) / 2 + ExpandedFlare + ContentLengthPadding;
@@ -92,6 +93,7 @@ public sealed class EdgeWindow : Window
     private int? _hoveredMetric;
 
     private readonly PlatformInputRegion? _inputRegion;
+    private readonly PlatformInputRegion? _windowsVisualRegion;
     private EdgeInputOverlayWindow? _windowsInputOverlay;
 
     public EdgeWindow()
@@ -110,6 +112,7 @@ public sealed class EdgeWindow : Window
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
 
         _inputRegion = OperatingSystem.IsLinux() ? new PlatformInputRegion(this) : null;
+        _windowsVisualRegion = OperatingSystem.IsWindows() ? new PlatformInputRegion(this) : null;
 
         _notchAcrylicSurface = new ExperimentalAcrylicBorder
         {
@@ -259,7 +262,9 @@ public sealed class EdgeWindow : Window
         get
         {
             if (OperatingSystem.IsWindows())
-                return _windowsVisualClickThroughReady && _windowsInputOverlay?.IsReady == true;
+                return _windowsVisualClickThroughReady &&
+                       _windowsVisualRegion?.IsReady == true &&
+                       _windowsInputOverlay?.IsReady == true;
             if (OperatingSystem.IsLinux())
                 return _inputRegion?.IsReady == true;
             return true;
@@ -314,6 +319,7 @@ public sealed class EdgeWindow : Window
         _monitor.CaptureFailed -= OnCaptureFailed;
 
         _windowsInputOverlay?.Dispose();
+        _windowsVisualRegion?.Dispose();
         _inputRegion?.Dispose();
         _lifetime.Dispose();
     }
@@ -750,6 +756,51 @@ public sealed class EdgeWindow : Window
         if (_mode == NotchDisplayMode.Hidden && !HasTray) ShowSettings();
     }
 
+    public bool MoveToCursorDisplay()
+    {
+        if (!OperatingSystem.IsWindows() || !GetCursorPos(out var cursor))
+            return false;
+
+        var screens = Screens.All;
+        var screen = Screens.ScreenFromPoint(new PixelPoint(cursor.X, cursor.Y));
+        if (screen is null || screens.Count == 0)
+            return false;
+
+        var handle = screen.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        var index = -1;
+        for (var candidate = 0; candidate < screens.Count; candidate++)
+        {
+            var candidateHandle = screens[candidate].TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            if (ReferenceEquals(screens[candidate], screen) ||
+                (handle != IntPtr.Zero && candidateHandle == handle) ||
+                screens[candidate].Bounds == screen.Bounds)
+            {
+                index = candidate;
+                break;
+            }
+        }
+
+        if (index < 0)
+            return false;
+
+        var displays = DisplaySnapshot.FromScreens(screens);
+        var target = DisplayTargetResolver.Capture(displays[index], displays);
+        var preferences = Preferences with { Display = target };
+        try
+        {
+            SavePreferences?.Invoke(preferences);
+            ApplyPreferences(preferences);
+            _settingsWindow?.UpdateDisplays(displays);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or
+                                   System.Security.SecurityException)
+        {
+            System.Diagnostics.Trace.WriteLine(ex);
+            return false;
+        }
+    }
+
     public void ShowSettings(string? warning = null)
     {
         if (_settingsWindow is not null)
@@ -921,6 +972,37 @@ public sealed class EdgeWindow : Window
         return regions.ToArray();
     }
 
+    private Rect[] VisibleWindowRects()
+    {
+        if (_mode == NotchDisplayMode.Hidden)
+            return [];
+
+        // The visible HWND remains render-only, but constraining its native bounds is a second
+        // line of defence if a driver/compositor ever stops honouring WS_EX_TRANSPARENT. A small
+        // outward bleed keeps the antialiased Mica/Acrylic contour wholly inside the HWND region.
+        var visible = new List<Rect>(ShapeInputRectsInside(-NativeVisualContourBleed));
+        var tooltip = TooltipLiveRect();
+        if (tooltip.Width > 0 && tooltip.Height > 0)
+            visible.AddRange(RoundedRectStrips(tooltip, 14 - NativeVisualContourBleed));
+
+        var windowBounds = new Rect(new Size(Width, Height));
+        return visible
+            .Select(rect => Intersect(rect, windowBounds))
+            .Where(rect => rect.Width > 0 && rect.Height > 0)
+            .ToArray();
+    }
+
+    private static Rect Intersect(Rect first, Rect second)
+    {
+        var left = Math.Max(first.Left, second.Left);
+        var top = Math.Max(first.Top, second.Top);
+        var right = Math.Min(first.Right, second.Right);
+        var bottom = Math.Min(first.Bottom, second.Bottom);
+        return right > left && bottom > top
+            ? new Rect(left, top, right - left, bottom - top)
+            : default;
+    }
+
     private static Rect[] RoundedRectStrips(Rect rect, double radius)
     {
         if (rect.Width <= 0 || rect.Height <= 0)
@@ -966,9 +1048,20 @@ public sealed class EdgeWindow : Window
         bool applied;
         if (OperatingSystem.IsWindows())
         {
-            if (!_windowsVisualClickThroughReady || _windowsInputOverlay is null)
+            // The managed Window can survive a native HWND replacement. Re-check the style here
+            // as well as on Opened so a recreated visual surface never becomes input-owning.
+            _windowsVisualClickThroughReady = WindowsVisualClickThrough.TryEnable(this);
+            if (!_windowsVisualClickThroughReady || _windowsVisualRegion is null ||
+                _windowsInputOverlay is null)
             {
                 DisableEdgeSurface("EdgePilot could not initialize the Windows input overlay.");
+                return false;
+            }
+
+            if (!_windowsVisualRegion.TryApply(
+                    VisibleWindowRects(), RenderScaling, new Size(Width, Height)))
+            {
+                DisableEdgeSurface("EdgePilot could not constrain the Windows visual surface.");
                 return false;
             }
 

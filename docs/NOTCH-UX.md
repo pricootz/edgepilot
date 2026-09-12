@@ -16,7 +16,7 @@ The logical live-input model contains only the current notch silhouette, the con
 
 Windows and Linux enforce that safety with platform-specific paths:
 
-- Windows makes the visible `EdgeWindow` fully click-through. A separate invisible overlay uses `SetWindowRgn` for the notch silhouette inset two DIPs from its antialiased contour and for the rounded tooltip; global cursor polling handles the transparent Hover hot-zone and tooltip bridge without intercepting the desktop.
+- Windows makes the visible `EdgeWindow` fully click-through and also constrains that render-only HWND to a close-fitting region with a two-DIP antialiasing bleed. A separate invisible overlay uses `SetWindowRgn` for the notch silhouette inset two DIPs from its contour and for the rounded tooltip; it validates native-handle changes and reapplies at the overlay's own settled DPI. Global cursor polling handles the transparent Hover hot-zone and tooltip bridge without intercepting the desktop.
 - Linux X11/XWayland applies the full logical live-input model to the visible window's X Shape `ShapeInput` region and updates it during spring motion, tooltip changes, scaling and preference changes.
 - Logical strip boundaries are quantized to the nearest native pixel. Adjacent strips therefore share a boundary even at fractional DPI instead of creating one-pixel seams through the animated notch.
 - Windows reads the overlay region back once and verifies it; Linux sends a checked XCB SHAPE request so native package smoke tests fail if the display server rejects the region.

@@ -96,7 +96,7 @@ python scripts/check_repository.py
 - Current packages target **x64**. macOS, ARM packages and headless SSH sessions are not supported targets.
 - Linux transparency, positioning and tray visibility depend on the desktop/compositor. A GNOME AppIndicator extension may be needed.
 - The current Linux desktop path uses X11/XWayland input regions; Avalonia's native Wayland backend is not enabled by this project.
-- The v0.3 development branch adds selectable multi-monitor targeting, native Windows monitor names and reconnect-safe fallback. Mixed-DPI and physical dock/undock behavior still need broader real-desktop testing before release.
+- The v0.3 development branch adds selectable multi-monitor targeting, native Windows monitor names, reconnect-safe fallback and a move-to-current-display recovery command for hardware that stays logically connected while powered off. Mixed-DPI and physical dock/undock behavior still need broader real-desktop testing before release.
 - Disk selection follows a drive letter or mount path, not a hardware serial number.
 - Network interface selection is automatic. Temperatures, GPU and fan readings are not implemented.
 - Packages are unsigned and updates are manual. This is not yet a stable release.

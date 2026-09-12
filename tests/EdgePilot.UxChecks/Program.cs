@@ -397,11 +397,16 @@ try
     var metricChecks = (CheckBox[])SettingsField(settings, "_metrics")!;
     var previewNotch = (Border)SettingsField(settings, "_previewNotch")!;
     var exitButton = (Button)SettingsField(settings, "_exitButton")!;
+    var useCurrentDisplayButton = (Button)SettingsField(settings, "_useCurrentDisplayButton")!;
     var exitContent = (StackPanel)exitButton.Content!;
     var exitIcon = exitContent.Children.OfType<FluentIcons.Avalonia.FluentIcon>().Single();
     Check(exitIcon.Icon == FluentIcons.Common.Icon.SignOut, "exit action uses SignOut icon");
     Check(exitIcon.IconSize == FluentIcons.Common.IconSize.Size20 && Math.Abs(exitIcon.FontSize - 16) < 0.001,
         "compact exit icon uses available glyph set at 16px");
+    var useCurrentContent = (StackPanel)useCurrentDisplayButton.Content!;
+    var useCurrentIcon = useCurrentContent.Children.OfType<FluentIcons.Avalonia.FluentIcon>().Single();
+    Check(useCurrentIcon.Icon == FluentIcons.Common.Icon.Target,
+        "current-display recovery uses a target icon");
 
     var settingsBody = (Grid)SettingsField(settings, "_body")!;
     var versionBadge = (Border)SettingsField(settings, "_versionBadge")!;

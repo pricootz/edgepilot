@@ -15,6 +15,7 @@ public sealed class App : Application
     private TrayIcon? _tray;
     private NativeMenuItem? _settingsMenuItem;
     private NativeMenuItem? _toggleMenuItem;
+    private NativeMenuItem? _moveHereMenuItem;
     private NativeMenuItem? _exitMenuItem;
 
     public override void Initialize()
@@ -61,10 +62,18 @@ public sealed class App : Application
                 _settingsMenuItem.Click += (_, _) => window.ShowSettings();
                 _toggleMenuItem = new NativeMenuItem { Header = Localization.T("tray.toggle") };
                 _toggleMenuItem.Click += (_, _) => window.ToggleVisibility();
+                _moveHereMenuItem = new NativeMenuItem { Header = Localization.T("tray.moveHere") };
+                _moveHereMenuItem.Click += (_, _) =>
+                {
+                    if (!window.MoveToCursorDisplay())
+                        window.ShowSettings(Localization.T("display.currentUnavailable"));
+                };
                 _exitMenuItem = new NativeMenuItem { Header = Localization.T("tray.exit") };
                 _exitMenuItem.Click += (_, _) => desktop.Shutdown();
                 menu.Items.Add(_settingsMenuItem);
                 menu.Items.Add(_toggleMenuItem);
+                if (OperatingSystem.IsWindows())
+                    menu.Items.Add(_moveHereMenuItem);
                 menu.Items.Add(new NativeMenuItemSeparator());
                 menu.Items.Add(_exitMenuItem);
                 _tray = new TrayIcon { Icon = AppIcon.Load(), ToolTipText = "EdgePilot", Menu = menu, IsVisible = true };
@@ -85,6 +94,8 @@ public sealed class App : Application
                 if (_settingsMenuItem is null) return;
                 _settingsMenuItem.Header = Localization.T("tray.settings");
                 _toggleMenuItem!.Header = Localization.T("tray.toggle");
+                if (_moveHereMenuItem is not null)
+                    _moveHereMenuItem.Header = Localization.T("tray.moveHere");
                 _exitMenuItem!.Header = Localization.T("tray.exit");
             };
             SingleInstance.Bind(() => Dispatcher.UIThread.Post(() => window.ShowSettings()));

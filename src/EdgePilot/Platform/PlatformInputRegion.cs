@@ -17,7 +17,6 @@ internal sealed class PlatformInputRegion : IDisposable
     private IntPtr _hwnd;
     private IntPtr _connection;
     private uint _xid;
-    private bool _windowsInitializationAttempted;
     private bool _x11InitializationAttempted;
     private bool _windowsRegionVerified;
     private bool _ready;
@@ -29,6 +28,12 @@ internal sealed class PlatformInputRegion : IDisposable
 
     public bool TryApply(IReadOnlyList<Rect> logicalRects, double scaling, Size logicalWindowSize)
     {
+        // Avalonia can recreate a native top-level while the managed Window survives (for
+        // example across hide/show and mixed-DPI display transitions). Never trust a cached
+        // region until the current HWND has been compared with the one it was applied to.
+        if (OperatingSystem.IsWindows() && !EnsureWindows())
+            return false;
+
         var rectangles = ToNativeRectangles(logicalRects, scaling, logicalWindowSize);
         var hash = HashNativeRectangles(rectangles);
         if (_ready && _lastNativeRegionHash == hash)
@@ -152,18 +157,21 @@ internal sealed class PlatformInputRegion : IDisposable
 
     private bool EnsureWindows()
     {
-        if (_ready && _hwnd != IntPtr.Zero)
-            return true;
-        if (_windowsInitializationAttempted)
-            return false;
-
-        _windowsInitializationAttempted = true;
         var handle = _window.TryGetPlatformHandle();
         if (handle is null || !string.Equals(handle.HandleDescriptor, "HWND", StringComparison.OrdinalIgnoreCase)
             || handle.Handle == IntPtr.Zero)
         {
             System.Diagnostics.Trace.WriteLine("EdgePilot input-region safety requires a valid HWND on Windows.");
             return false;
+        }
+
+        if (_hwnd != IntPtr.Zero && _hwnd != handle.Handle)
+        {
+            // SetWindowRgn belongs to the native HWND, not the managed Avalonia Window. A new
+            // handle starts as a full rectangle, so force a fresh application and verification.
+            _ready = false;
+            _windowsRegionVerified = false;
+            _lastNativeRegionHash = null;
         }
 
         _hwnd = handle.Handle;

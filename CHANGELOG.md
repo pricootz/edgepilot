@@ -6,13 +6,14 @@
 
 - Selectable multi-monitor placement with an Automatic primary-display mode.
 - Persisted display targeting that reconciles stable Windows monitor identity, session identity, friendly name, working-area geometry and scaling.
-- Safe hot-plug/power-off fallback: an unavailable selected display temporarily falls back to an available display without forgetting the user's choice.
+- Safe topology fallback: a display reported unavailable by the OS temporarily falls back to an available display without forgetting the user's choice.
 - Windows monitor labels use the EDID friendly model name when available and a deterministic numbered label otherwise.
+- A **Use the display containing Settings** action and a Windows tray **Move EdgePilot to this display** command provide deterministic recovery when a powered-off monitor remains falsely reported as active by its driver.
 
 ### Changed
 
-- Display-topology bursts are debounced before relocation; Windows also performs a low-frequency availability check for powered-off targets that remain in the logical topology without raising an event.
-- The Windows input overlay now stays two DIPs inside the antialiased notch contour for tighter click-through at its boundary.
+- Display-topology bursts are debounced before relocation; Windows also performs a low-frequency check for availability changes that occur without a normal Avalonia screen event.
+- The Windows input overlay now stays two DIPs inside the antialiased notch contour, rebuilds after HWND/DPI changes, and the render-only window has a close-fitting fail-safe region so its transparent layout rectangle cannot intercept the desktop.
 - The display-target resolver is adapted from Edge-Drop with explicit Apache-2.0 attribution; EdgePilot itself remains MIT-licensed.
 
 ## 0.2.0-preview.2 — 2026-09-12

@@ -35,7 +35,11 @@ internal static class WindowsVisualClickThrough
 
             var hwnd = handle.Handle;
             var current = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
-            var desired = current | WsExLayered | WsExTransparent | WsExNoActivate;
+            var required = WsExLayered | WsExTransparent | WsExNoActivate;
+            if ((current & required) == required)
+                return true;
+
+            var desired = current | required;
 
             _ = SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(desired));
             _ = SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,

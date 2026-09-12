@@ -23,12 +23,16 @@ Localization.SetLanguage(Language.Italian);
 Check(Localization.T("nav.about") == "Informazioni", "Italian navigation translation");
 Check(Localization.T("settings.saveChanges") == "Salva modifiche", "Italian settings translation");
 Check(Localization.T("tray.exit") == "Esci", "Italian tray translation");
+Check(Localization.T("tray.moveHere") == "Sposta EdgePilot su questo monitor",
+    "Italian display recovery translation");
 Check(CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator == ",", "Italian number culture");
 
 Localization.SetLanguage(Language.English);
 Check(Localization.T("nav.about") == "About", "English navigation translation");
 Check(Localization.T("settings.saveChanges") == "Save changes", "English settings translation");
 Check(Localization.T("tray.exit") == "Exit", "English tray translation");
+Check(Localization.T("display.useCurrent") == "Use the display containing Settings",
+    "English current-display action translation");
 Check(CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator == ".", "English number culture");
 
 Localization.SetLanguage(Language.French);

@@ -29,6 +29,7 @@ void Set(EdgeWindow window, string name, object value) =>
 Rect[] Regions(EdgeWindow window) => (Rect[])Call(window, "InteractiveRects")!;
 Rect[] ShapeRegions(EdgeWindow window) => (Rect[])Call(window, "ShapeInputRects")!;
 Rect[] VisibleInputRegions(EdgeWindow window) => (Rect[])Call(window, "VisibleInputRects")!;
+Rect[] VisibleWindowRegions(EdgeWindow window) => (Rect[])Call(window, "VisibleWindowRects")!;
 bool Interactive(EdgeWindow window, Point point) => (bool)Call(window, "IsInteractive", point)!;
 
 Point? FindPoint(Rect area, Func<Point, bool> predicate)
@@ -87,6 +88,12 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     Check(hotOnly is not null, $"collapsed hover has an invisible hot-zone sample on {edge}");
     Check(hotOnly is { } hotPoint && !visibleCollapsed.Any(rect => rect.Contains(hotPoint)),
         $"Windows input overlay excludes invisible hover hot-zone on {edge}");
+    var visualCollapsed = VisibleWindowRegions(window);
+    Check(visualCollapsed.Length > 0 &&
+          visibleCollapsed.All(input => visualCollapsed.Any(visual => visual.Contains(input))),
+        $"Windows visual safety region contains the shaped input overlay on {edge}");
+    Check(!visualCollapsed.Any(rect => rect.Contains(windowRect.Center)),
+        $"Windows visual safety region excludes the transparent window center on {edge}");
 
     Set(window, "_expanded", true);
     Set(window, "_expansion", 1d);
@@ -158,6 +165,9 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
         $"transparent notch shoulder passes through on {edge}");
     Check(!VisibleInputRegions(window).Any(rect => rect.Contains(transparentShoulder)),
         $"Windows input overlay excludes transparent notch shoulder on {edge}");
+    Check(!VisibleWindowRegions(window).Any(rect =>
+              rect.Width >= size.Width * 0.9 && rect.Height >= size.Height * 0.9),
+        $"Windows visual safety region never becomes the full transparent window on {edge}");
 }
 
 foreach (var theme in Enum.GetValues<SettingsThemePreference>())
