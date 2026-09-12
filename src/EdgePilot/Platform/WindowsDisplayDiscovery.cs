@@ -11,9 +11,9 @@ internal sealed record WindowsDisplayMetadata(
 
 /// <summary>
 /// Enriches Avalonia's Windows screens with CCD metadata. HMONITOR is only a session handle;
-/// the monitor device path is stable enough to persist, while targetAvailable detects the short
-/// (and sometimes surprisingly long) interval where Windows still exposes a powered-off target
-/// in the desktop topology.
+/// the monitor device path is stable enough to persist, while targetAvailable reports whether
+/// Windows considers the display path usable. A monitor whose physical power button is off can
+/// still be reported as active by its driver, so this is not a physical-power detector.
 /// </summary>
 internal static class WindowsDisplayDiscovery
 {

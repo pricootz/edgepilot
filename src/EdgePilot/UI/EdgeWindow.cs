@@ -233,9 +233,9 @@ public sealed class EdgeWindow : Window
             ReconcileDisplays(force: true);
         };
 
-        // Some displays remain in Avalonia/Win32 screen enumeration after their power button is
-        // pressed and Windows emits no topology event. Poll CCD at a deliberately low cadence so
-        // targetAvailable can trigger fallback and later restore the user's selected monitor.
+        // Poll CCD at a deliberately low cadence so OS-reported display-path changes can trigger
+        // fallback and later restore the user's selected monitor even without an Avalonia event.
+        // Drivers may keep a physically powered-off monitor active; manual recovery covers that case.
         _displayHealthTimer.Interval = TimeSpan.FromMilliseconds(1500);
         _displayHealthTimer.Tick += (_, _) => ReconcileDisplays();
 

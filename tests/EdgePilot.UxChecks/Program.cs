@@ -135,9 +135,9 @@ var unavailableDisplays = new[]
     displays[0],
     displays[1] with { Availability = DisplayAvailability.Unavailable }
 };
-var poweredOffDisplay = DisplayTargetResolver.Resolve(unavailableDisplays, studioTarget);
-Check(poweredOffDisplay?.Index == 0 && poweredOffDisplay.MatchKind == DisplayMatchKind.FallbackPrimary,
-    "powered-off selected display falls back to available primary");
+var unavailableDisplay = DisplayTargetResolver.Resolve(unavailableDisplays, studioTarget);
+Check(unavailableDisplay?.Index == 0 && unavailableDisplay.MatchKind == DisplayMatchKind.FallbackPrimary,
+    "OS-unavailable selected display falls back to available primary");
 var restoredDisplay = DisplayTargetResolver.Resolve(displays, studioTarget);
 Check(restoredDisplay?.Index == 1, "selected display is restored when it becomes available again");
 var unavailablePrimary = new[]
@@ -159,7 +159,7 @@ Check(unnamedOptions.Choices[1].Caption.Contains(Localization.T("display.fallbac
     "unnamed displays receive useful numbered labels");
 var unavailableOptions = DisplaySelection.Build(unavailableDisplays, studioTarget);
 Check(!unavailableOptions.Selected.IsAvailable && unavailableOptions.Choices.Count == 3,
-    "powered-off selected display is retained as unavailable without a duplicate choice");
+    "OS-unavailable selected display is retained without a duplicate choice");
 Check(WindowsDisplayDiscovery.ConnectorNumber(@"\\.\DISPLAY12") == 12 &&
       WindowsDisplayDiscovery.ConnectorNumber("connector") is null,
     "Windows connector number parsing is defensive");
