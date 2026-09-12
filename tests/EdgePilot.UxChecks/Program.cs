@@ -23,6 +23,10 @@ void Set(EdgeWindow w, string name, object value) => typeof(EdgeWindow).GetField
 object? SettingsField(SettingsWindow w, string name) => typeof(SettingsWindow).GetField(name, flags)!.GetValue(w);
 object? SettingsCall(SettingsWindow w, string name, params object[] args) =>
     typeof(SettingsWindow).GetMethod(name, flags)!.Invoke(w, args);
+DisplaySnapshot Display(string id, string name, int x, int y, int width, int height,
+    double scaling = 1, bool primary = false) =>
+    new(id, name, new DisplayRect(x, y, width, height),
+        new DisplayRect(x, y, width, height - 40), scaling, primary);
 
 foreach (var frame in new[] { 1d / 30, 1d / 60, 1d / 144, 0.5 })
 {
@@ -58,6 +62,134 @@ Check(DriveSelection.Choices(drives, "/missing").Any(x => x.Name == "/missing"),
 var manyDrives = Enumerable.Range(0, 12).Select(i => new DriveSnapshot("/disk" + i, "Disco", 1000, 500)).ToArray();
 Check(DriveSelection.Choices(manyDrives, null).Count == 13, "selector does not truncate disk list");
 Check(DriveSelection.Choices(drives, null)[2].Caption.Contains("16 TB"), "decimal disk capacity is recognizable");
+
+var displays = new[]
+{
+    Display("win:1", "Laptop panel", 0, 0, 1920, 1080, primary: true),
+    Display("win:2", "Studio display", 1920, 0, 2560, 1440, 1.25)
+};
+var automaticDisplay = DisplayTargetResolver.Resolve(displays, null);
+Check(automaticDisplay?.Index == 0 && automaticDisplay.MatchKind == DisplayMatchKind.AutomaticPrimary,
+    "automatic display follows primary");
+var studioTarget = DisplayTargetResolver.Capture(displays[1]);
+var exactDisplay = DisplayTargetResolver.Resolve(displays, studioTarget);
+Check(exactDisplay?.Index == 1 && exactDisplay.MatchKind == DisplayMatchKind.SessionId,
+    "session display identity wins");
+var stableStudio = displays[1] with { StableId = "monitor#studio" };
+var stableTarget = DisplayTargetResolver.Capture(stableStudio, [displays[0], stableStudio]);
+var stableRestart = DisplayTargetResolver.Resolve(
+    [displays[0], stableStudio with
+    {
+        SessionId = "win:restarted", Name = "Renamed by driver",
+        WorkingArea = new DisplayRect(-4000, 100, 2560, 1400)
+    }], stableTarget);
+Check(stableRestart?.Index == 1 && stableRestart.MatchKind == DisplayMatchKind.StableId,
+    "stable display identity survives handle name and geometry changes");
+var restartedDisplays = new[]
+{
+    displays[0] with { SessionId = "win:101" },
+    displays[1] with { SessionId = "win:202", Bounds = new DisplayRect(-2560, 0, 2560, 1440),
+        WorkingArea = new DisplayRect(-2560, 0, 2560, 1400) }
+};
+var restartedDisplay = DisplayTargetResolver.Resolve(restartedDisplays, studioTarget);
+Check(restartedDisplay?.Index == 1 && restartedDisplay.MatchKind == DisplayMatchKind.Name,
+    "friendly display name survives restart and rearrangement");
+var geometryDisplay = DisplayTargetResolver.Resolve(
+    new[]
+    {
+        displays[0],
+        displays[1] with { SessionId = "wayland:new", Name = "Renamed",
+            WorkingArea = new DisplayRect(1926, 4, 2554, 1396) }
+    }, studioTarget with { Name = "Old connector" });
+Check(geometryDisplay?.Index == 1 && geometryDisplay.MatchKind == DisplayMatchKind.Geometry,
+    "nearby display geometry survives connector rename");
+var scalingTarget = new DisplayTarget(null, "Duplicated", new DisplayRect(0, 0, 1920, 1040), 1.5);
+var scalingDisplay = DisplayTargetResolver.Resolve(
+    new[]
+    {
+        Display("a", "Duplicated", 0, 0, 1920, 1080),
+        Display("b", "Duplicated", 0, 0, 1920, 1080, 1.5, primary: true)
+    }, scalingTarget);
+Check(scalingDisplay?.Index == 1, "display scaling disambiguates matching geometry");
+var duplicateDisplays = new[]
+{
+    displays[0],
+    Display("dup:left", "Twin display", 1920, 0, 1920, 1080),
+    Display("dup:right", "Twin display", 3840, 0, 1920, 1080)
+};
+var duplicateTarget = DisplayTargetResolver.Capture(duplicateDisplays[1], duplicateDisplays);
+var afterDuplicateDisconnect = DisplayTargetResolver.Resolve(
+    new[] { duplicateDisplays[0], duplicateDisplays[2] }, duplicateTarget);
+Check(!duplicateTarget.NameWasUnique &&
+      afterDuplicateDisconnect?.MatchKind == DisplayMatchKind.FallbackPrimary,
+    "identical remaining display is not mistaken for disconnected target");
+var duplicateOptions = DisplaySelection.Build(duplicateDisplays, duplicateTarget);
+Check(duplicateOptions.Choices.Select(choice => choice.Caption).Distinct().Count() == duplicateOptions.Choices.Count,
+    "identical display choices have distinct labels");
+var missingTarget = new DisplayTarget("gone", "Projector", new DisplayRect(9000, 0, 1920, 1080), 1);
+var missingDisplay = DisplayTargetResolver.Resolve(displays, missingTarget);
+Check(missingDisplay?.Index == 0 && missingDisplay.MatchKind == DisplayMatchKind.FallbackPrimary,
+    "missing selected display falls back to primary");
+var unavailableDisplays = new[]
+{
+    displays[0],
+    displays[1] with { Availability = DisplayAvailability.Unavailable }
+};
+var unavailableDisplay = DisplayTargetResolver.Resolve(unavailableDisplays, studioTarget);
+Check(unavailableDisplay?.Index == 0 && unavailableDisplay.MatchKind == DisplayMatchKind.FallbackPrimary,
+    "OS-unavailable selected display falls back to available primary");
+var restoredDisplay = DisplayTargetResolver.Resolve(displays, studioTarget);
+Check(restoredDisplay?.Index == 1, "selected display is restored when it becomes available again");
+var unavailablePrimary = new[]
+{
+    displays[0] with { Availability = DisplayAvailability.Unavailable },
+    displays[1] with { Availability = DisplayAvailability.Available }
+};
+Check(DisplayTargetResolver.Resolve(unavailablePrimary, null)?.Index == 1,
+    "automatic display avoids an unavailable primary");
+var unnamedDisplays = new[]
+{
+    Display("win:1", null!, 0, 0, 1920, 1080, primary: true) with { ConnectorNumber = 1 },
+    Display("win:2", null!, 1920, 0, 1920, 1080) with { ConnectorNumber = 2 }
+};
+var unnamedOptions = DisplaySelection.Build(unnamedDisplays, null);
+Check(unnamedOptions.Choices[1].Caption.Contains(Localization.T("display.fallbackName", 1)) &&
+      unnamedOptions.Choices[2].Caption.Contains(Localization.T("display.fallbackName", 2)) &&
+      unnamedOptions.Choices[1].Caption != unnamedOptions.Choices[2].Caption,
+    "unnamed displays receive useful numbered labels");
+var displayMenuOptions = DisplayRecovery.MenuOptions(displays, studioTarget);
+Check(displayMenuOptions.Count == 3 && displayMenuOptions[0].Target is null &&
+      !displayMenuOptions[0].IsSelected && displayMenuOptions[2].IsSelected &&
+      displayMenuOptions[2].Target?.SessionId == "win:2",
+    "tray display menu exposes deterministic targets and current selection");
+var hiddenRecovery = DisplayRecovery.RevealOn(
+    new NotchPreferences(EdgeSide.Bottom, NotchDisplayMode.Hidden)
+    {
+        Metrics = VisibleMetrics.Network,
+        Display = studioTarget
+    }, DisplayTargetResolver.Capture(displays[0], displays));
+Check(hiddenRecovery.Mode == NotchDisplayMode.Hover && hiddenRecovery.Edge == EdgeSide.Bottom &&
+      hiddenRecovery.Metrics == VisibleMetrics.Network && hiddenRecovery.Display?.SessionId == "win:1",
+    "manual display recovery reveals a hidden panel without losing preferences");
+Check(DisplayRecovery.RevealOn(new NotchPreferences(EdgeSide.Left, NotchDisplayMode.Always), studioTarget).Mode ==
+      NotchDisplayMode.Always,
+    "manual display recovery preserves a visible mode");
+var unavailableOptions = DisplaySelection.Build(unavailableDisplays, studioTarget);
+Check(!unavailableOptions.Selected.IsAvailable && unavailableOptions.Choices.Count == 3,
+    "OS-unavailable selected display is retained without a duplicate choice");
+Check(WindowsDisplayDiscovery.ConnectorNumber(@"\\.\DISPLAY12") == 12 &&
+      WindowsDisplayDiscovery.ConnectorNumber("connector") is null,
+    "Windows connector number parsing is defensive");
+Check(WindowsDisplayDiscovery.HardwareModelCode(
+          @"\\?\DISPLAY#AOC3279#5&ea10951&0&UID41219#{4d36e96e-e325-11ce-bfc1-08002be10318}") == "AOC3279" &&
+      WindowsDisplayDiscovery.HardwareModelCode(@"DISPLAY\GSM59F2\5&ea10951&0&UID41221") == "GSM59F2" &&
+      WindowsDisplayDiscovery.HardwareModelCode(@"MONITOR\DEL40A9\7&123") == "DEL40A9" &&
+      WindowsDisplayDiscovery.HardwareModelCode("not-a-display-id") is null,
+    "Windows display model codes are recovered from device identities");
+Check(WindowsDisplayDiscovery.InteropLayoutIsExpected,
+    "Windows display-discovery interop layout matches Win32 structures");
+Check(DisplayTargetResolver.Resolve(Array.Empty<DisplaySnapshot>(), studioTarget) is null,
+    "empty display topology is safe");
 _ = AppIcon.Load();
 Check(true, "embedded tray icon decodes");
 var informationalVersion = typeof(ProductVersion).Assembly
@@ -67,6 +199,17 @@ var informationalVersion = typeof(ProductVersion).Assembly
 Check(ProductVersion.Value == informationalVersion && ProductVersion.Label == $"v{informationalVersion}",
     "product version preserves preview identity");
 var window = new EdgeWindow();
+var screenChangeTimer = (DispatcherTimer)Field(window, "_screenChangeTimer")!;
+Check(screenChangeTimer.Interval == TimeSpan.FromMilliseconds(600), "display topology debounce interval is stable");
+var displayHealthTimer = (DispatcherTimer)Field(window, "_displayHealthTimer")!;
+Check(displayHealthTimer.Interval == TimeSpan.FromMilliseconds(1500),
+    "Windows display availability polling stays low-frequency");
+var recoveryPreviewTimer = (DispatcherTimer)Field(window, "_recoveryPreviewTimer")!;
+Check(recoveryPreviewTimer.Interval == TimeSpan.FromMilliseconds(1600),
+    "manual display recovery has visible feedback");
+Call(window, "OnScreensChanged", null!, EventArgs.Empty);
+Check(screenChangeTimer.IsEnabled, "display topology change is debounced");
+screenChangeTimer.Stop();
 Call(window, "UpdatePointer", new Point(405, 310));
 Check((bool)Field(window, "_expanded")!, "hot-zone opens");
 Call(window, "ScheduleFold");
@@ -204,6 +347,8 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
         "sensitivity grows hit area on " + edge);
 }
 window.ApplyPreferences(new NotchPreferences());
+window.ApplyPreferences(new NotchPreferences { Display = studioTarget });
+Check(window.Preferences.Display == studioTarget, "live display preference round trip");
 
 window.ApplyPreferences(new NotchPreferences { SelectedDrive = "/mnt/dati16" });
 var snapshot = new SystemSnapshot("host", "Ubuntu", 10, 1000, 500, TimeSpan.FromMinutes(10),
@@ -229,7 +374,12 @@ try
         Check(PreferenceStore.Load(settingsPath) == saved, "settings round trip " + edge + mode);
     }
     File.WriteAllText(settingsPath, "{\"Edge\":\"Left\",\"Mode\":\"Hover\"}");
-    Check(PreferenceStore.Load(settingsPath) == new NotchPreferences(EdgeSide.Left), "old settings retain defaults");
+    var migratedPreferences = PreferenceStore.Load(settingsPath);
+    Check(migratedPreferences == new NotchPreferences(EdgeSide.Left) && migratedPreferences.Display is null,
+        "old settings retain automatic display default");
+    var displayPreferences = new NotchPreferences(EdgeSide.Bottom) { Display = studioTarget };
+    PreferenceStore.Save(settingsPath, displayPreferences);
+    Check(PreferenceStore.Load(settingsPath) == displayPreferences, "selected display persists");
     foreach (var interval in new[] { 500, 1000, 2000, 5000 })
     {
         var extended = new NotchPreferences(EdgeSide.Top) { Metrics = VisibleMetrics.Network,
@@ -241,7 +391,9 @@ try
     foreach (var invalid in new[]
     {
         new NotchPreferences { Metrics = 0 }, new NotchPreferences { Metrics = (VisibleMetrics)16 },
-        new NotchPreferences { RefreshIntervalMs = 0 }, new NotchPreferences { Sensitivity = (HoverSensitivity)999 }
+        new NotchPreferences { RefreshIntervalMs = 0 }, new NotchPreferences { Sensitivity = (HoverSensitivity)999 },
+        new NotchPreferences { Display = new DisplayTarget(null, null, new DisplayRect(0, 0, 0, 1080), 1) },
+        new NotchPreferences { Display = studioTarget with { Scaling = double.NaN } }
     })
     {
         try { PreferenceStore.Save(settingsPath, invalid); Check(false, "invalid preference rejected"); }
@@ -271,11 +423,16 @@ try
     var metricChecks = (CheckBox[])SettingsField(settings, "_metrics")!;
     var previewNotch = (Border)SettingsField(settings, "_previewNotch")!;
     var exitButton = (Button)SettingsField(settings, "_exitButton")!;
+    var useCurrentDisplayButton = (Button)SettingsField(settings, "_useCurrentDisplayButton")!;
     var exitContent = (StackPanel)exitButton.Content!;
     var exitIcon = exitContent.Children.OfType<FluentIcons.Avalonia.FluentIcon>().Single();
     Check(exitIcon.Icon == FluentIcons.Common.Icon.SignOut, "exit action uses SignOut icon");
     Check(exitIcon.IconSize == FluentIcons.Common.IconSize.Size20 && Math.Abs(exitIcon.FontSize - 16) < 0.001,
         "compact exit icon uses available glyph set at 16px");
+    var useCurrentContent = (StackPanel)useCurrentDisplayButton.Content!;
+    var useCurrentIcon = useCurrentContent.Children.OfType<FluentIcons.Avalonia.FluentIcon>().Single();
+    Check(useCurrentIcon.Icon == FluentIcons.Common.Icon.Target,
+        "current-display recovery uses a target icon");
 
     var settingsBody = (Grid)SettingsField(settings, "_body")!;
     var versionBadge = (Border)SettingsField(settings, "_versionBadge")!;
@@ -338,6 +495,36 @@ try
         applied.Sensitivity == HoverSensitivity.Wide, "new UI selections apply");
     Check(PreferenceStore.Load(settingsPath) == applied, "new UI selections persist");
     settings.Close();
+
+    applied = null;
+    var displaySettings = new SettingsWindow(new NotchPreferences { Display = studioTarget },
+        value => applied = value, storagePath: settingsPath, displays: displays);
+    var displaySelector = (ComboBox)SettingsField(displaySettings, "_display")!;
+    var displayChoices = (IReadOnlyList<DisplayChoice>)displaySelector.ItemsSource!;
+    Check(displayChoices.Count == 3 &&
+          ((DisplayChoice)displaySelector.SelectedItem!).Target?.SessionId == "win:2",
+        "settings selects saved secondary display");
+    displaySelector.SelectedItem = displayChoices[1];
+    Check(((Button)SettingsField(displaySettings, "_applyButton")!).IsEnabled,
+        "display choice marks settings dirty");
+    ((Button)SettingsField(displaySettings, "_applyButton")!).RaiseEvent(
+        new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    Check(applied?.Display?.SessionId == "win:1" && PreferenceStore.Load(settingsPath).Display == applied.Display,
+        "display picker applies and persists target");
+    displaySettings.Close();
+
+    var unavailableSettings = new SettingsWindow(new NotchPreferences { Display = missingTarget },
+        _ => { }, displays: displays);
+    var unavailableSelector = (ComboBox)SettingsField(unavailableSettings, "_display")!;
+    var unavailableChoice = (DisplayChoice)unavailableSelector.SelectedItem!;
+    Check(!unavailableChoice.IsAvailable && unavailableChoice.Target == missingTarget,
+        "disconnected display remains visible in settings");
+    unavailableSettings.UpdateDisplays(displays.Append(
+        Display("gone", "Projector", 4480, 0, 1920, 1080)).ToArray());
+    Check(((DisplayChoice)unavailableSelector.SelectedItem!).IsAvailable &&
+          ((NotchPreferences)SettingsCall(unavailableSettings, "CurrentPreferences")!).Display == missingTarget,
+        "reconnected display resumes without rewriting saved identity");
+    unavailableSettings.Close();
 
     applied = null;
     var failingSettings = new SettingsWindow(new NotchPreferences(), value => applied = value,

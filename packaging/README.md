@@ -40,6 +40,8 @@ Right-click the notch or choose Impostazioni from the tray. Launching the execut
 
 Choose your volume under Disco da visualizzare; selection is saved by path. If it is missing, no substitute is selected. Start at login is optional and should be enabled after installation.
 
+On Windows, if a powered-off monitor remains logically connected, open **Move EdgePilot to** in the tray and choose the visible monitor explicitly. EdgePilot verifies the native move and briefly reveals the panel; this recovery action also changes a fully Hidden panel to On hover.
+
 Linux settings follow system theme information exposed to Avalonia. They are not native GTK/Yaru controls.
 
 ## Checksums

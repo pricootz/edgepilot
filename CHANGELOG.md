@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — v0.3 development
+
+### Added
+
+- Selectable multi-monitor placement with an Automatic primary-display mode.
+- Persisted display targeting that reconciles stable Windows monitor identity, session identity, friendly name, working-area geometry and scaling.
+- Safe topology fallback: a display reported unavailable by the OS temporarily falls back to an available display without forgetting the user's choice.
+- Windows monitor labels use the EDID friendly model name when available, fall back to the hardware model code from the device identity, and only then use a deterministic number.
+- **Use the display containing Settings** and a Windows tray display submenu provide deterministic recovery when a powered-off monitor remains falsely reported as active by its driver. Tray moves target a chosen display directly, verify the resulting native window placement and briefly reveal the panel.
+
+### Changed
+
+- Display-topology bursts are debounced before relocation; Windows also performs a low-frequency check for availability changes that occur without a normal Avalonia screen event.
+- The Windows input overlay now stays two DIPs inside the antialiased notch contour, rebuilds after HWND/DPI changes, and the render-only window has a close-fitting fail-safe region so its transparent layout rectangle cannot intercept the desktop.
+- The display-target resolver is adapted from Edge-Drop with explicit Apache-2.0 attribution; EdgePilot itself remains MIT-licensed.
+
 ## 0.2.0-preview.2 — 2026-09-12
 
 A focused stabilization update for the v0.2 preview. It does not add a new product module.

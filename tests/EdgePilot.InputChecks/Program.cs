@@ -29,6 +29,7 @@ void Set(EdgeWindow window, string name, object value) =>
 Rect[] Regions(EdgeWindow window) => (Rect[])Call(window, "InteractiveRects")!;
 Rect[] ShapeRegions(EdgeWindow window) => (Rect[])Call(window, "ShapeInputRects")!;
 Rect[] VisibleInputRegions(EdgeWindow window) => (Rect[])Call(window, "VisibleInputRects")!;
+Rect[] VisibleWindowRegions(EdgeWindow window) => (Rect[])Call(window, "VisibleWindowRects")!;
 bool Interactive(EdgeWindow window, Point point) => (bool)Call(window, "IsInteractive", point)!;
 
 Point? FindPoint(Rect area, Func<Point, bool> predicate)
@@ -76,11 +77,23 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     // keeps Hover working without stealing clicks from applications behind EdgePilot.
     var visibleCollapsed = VisibleInputRegions(window);
     var hotOnly = FindPoint(hot, point => !collapsedShape.Any(rect => rect.Contains(point)));
-    Check(visibleCollapsed.Length == collapsedShape.Length,
-        $"Windows collapsed input overlay contains only visible notch strips on {edge}");
+    Check(visibleCollapsed.Length > 0 && visibleCollapsed.Length <= collapsedShape.Length &&
+          visibleCollapsed.All(rect => collapsedShape.Any(shapeRect => shapeRect.Contains(rect))),
+        $"Windows collapsed input overlay stays conservatively inside notch strips on {edge}");
+    var contourOnly = FindPoint(shapeBounds, point =>
+        collapsedShape.Any(rect => rect.Contains(point)) &&
+        !visibleCollapsed.Any(rect => rect.Contains(point)));
+    Check(contourOnly is not null,
+        $"Windows collapsed input overlay leaves a two-DIP contour safety margin on {edge}");
     Check(hotOnly is not null, $"collapsed hover has an invisible hot-zone sample on {edge}");
     Check(hotOnly is { } hotPoint && !visibleCollapsed.Any(rect => rect.Contains(hotPoint)),
         $"Windows input overlay excludes invisible hover hot-zone on {edge}");
+    var visualCollapsed = VisibleWindowRegions(window);
+    Check(visualCollapsed.Length > 0 &&
+          visibleCollapsed.All(input => visualCollapsed.Any(visual => visual.Contains(input))),
+        $"Windows visual safety region contains the shaped input overlay on {edge}");
+    Check(!visualCollapsed.Any(rect => rect.Contains(windowRect.Center)),
+        $"Windows visual safety region excludes the transparent window center on {edge}");
 
     Set(window, "_expanded", true);
     Set(window, "_expansion", 1d);
@@ -132,8 +145,10 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
         $"always mode exposes only the exact current notch without tooltip on {edge}");
     Check(always.All(windowRect.Contains), $"always region stays inside window on {edge}");
     Check(!Interactive(window, windowRect.Center), $"always mode transparent area passes through on {edge}");
-    Check(VisibleInputRegions(window).Length == alwaysShape.Length,
-        $"Windows always-mode overlay matches the exact visible notch on {edge}");
+    var visibleAlways = VisibleInputRegions(window);
+    Check(visibleAlways.Length > 0 && visibleAlways.Length <= alwaysShape.Length &&
+          visibleAlways.All(rect => alwaysShape.Any(shapeRect => shapeRect.Contains(rect))),
+        $"Windows always-mode overlay stays inside the visible notch on {edge}");
 
     // This point is inside the expanded notch's old rectangular bounds, but outside its curved
     // shoulder. It must never become an invisible input blocker.
@@ -150,6 +165,9 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
         $"transparent notch shoulder passes through on {edge}");
     Check(!VisibleInputRegions(window).Any(rect => rect.Contains(transparentShoulder)),
         $"Windows input overlay excludes transparent notch shoulder on {edge}");
+    Check(!VisibleWindowRegions(window).Any(rect =>
+              rect.Width >= size.Width * 0.9 && rect.Height >= size.Height * 0.9),
+        $"Windows visual safety region never becomes the full transparent window on {edge}");
 }
 
 foreach (var theme in Enum.GetValues<SettingsThemePreference>())

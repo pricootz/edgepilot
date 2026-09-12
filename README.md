@@ -37,7 +37,7 @@ No account, server or telemetry uploader is required. The interface ships in **I
 - Details for the network interface, uptime, host and operating system.
 - Rounded collapsed pill, spring motion, hover expansion, delayed folding and click-to-pin.
 - Placement on any of the four screen edges, with upright metric labels.
-- Persistent display modes, visible metrics, refresh interval, hover sensitivity, language, Settings appearance and disk selection.
+- Persistent edge/display modes, selectable monitor targeting, visible metrics, refresh interval, hover sensitivity, language, Settings appearance and disk selection.
 - Responsive Settings UI; Settings can follow the system theme or use an explicit light/dark choice.
 - Automatic language detection plus manual selection from the shipped IT / EN / FR / ES locale files.
 - Tray menu, optional start at login, per-user installation and single-instance activation.
@@ -96,7 +96,7 @@ python scripts/check_repository.py
 - Current packages target **x64**. macOS, ARM packages and headless SSH sessions are not supported targets.
 - Linux transparency, positioning and tray visibility depend on the desktop/compositor. A GNOME AppIndicator extension may be needed.
 - The current Linux desktop path uses X11/XWayland input regions; Avalonia's native Wayland backend is not enabled by this project.
-- Display scaling, display-topology changes and login behavior still need broader real-desktop testing. Selectable multi-monitor targeting is not implemented yet.
+- The v0.3 development branch adds selectable multi-monitor targeting, native Windows monitor names, reconnect-safe fallback and an explicit tray display submenu for hardware that stays logically connected while powered off. Mixed-DPI and physical dock/undock behavior still need broader real-desktop testing before release.
 - Disk selection follows a drive letter or mount path, not a hardware serial number.
 - Network interface selection is automatic. Temperatures, GPU and fan readings are not implemented.
 - Packages are unsigned and updates are manual. This is not yet a stable release.
@@ -112,6 +112,8 @@ EdgePilot is created and primarily maintained by [@pricootz](https://github.com/
 The IT / EN / FR localization foundation was contributed by [@IamArayel](https://github.com/IamArayel) through [PR #5](https://github.com/pricootz/edgepilot/pull/5) and reconciled with the v0.2 Settings architecture.
 
 The file-based locale architecture, translator workflow, fallback strategy and localization validation ideas were contributed by [@ArnieGA](https://github.com/ArnieGA) through [PR #8](https://github.com/pricootz/edgepilot/pull/8) and reconciled without dropping the French localization or the current Settings design. [@ArnieGA](https://github.com/ArnieGA) then contributed the shipped Spanish locale through [PR #12](https://github.com/pricootz/edgepilot/pull/12), validating the one-file-per-language workflow against current `main`.
+
+The v0.3 display-target reconciliation strategy is adapted from [Edge-Drop](https://github.com/Deepender25/Edge-Drop) under Apache-2.0; see [third-party notices](THIRD-PARTY-NOTICES.md). EdgePilot remains MIT-licensed.
 
 - [Settings](docs/SETTINGS.md) · [Desktop integration](docs/DESKTOP-INTEGRATION.md) · [Translating](docs/TRANSLATING.md)
 - [Architecture](docs/ARCHITECTURE.md) · [Product scope](docs/PRODUCT.md) · [Roadmap](docs/ROADMAP.md)

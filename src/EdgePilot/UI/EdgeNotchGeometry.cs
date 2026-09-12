@@ -73,23 +73,32 @@ internal static class EdgeNotchGeometry
     /// Returns a conservative union of one-DIP scanline rectangles that lies inside the visible
     /// notch. Native window/input regions are rectangular, so this representation prevents the
     /// transparent corners and concave shoulders of the notch's bounding box from becoming
-    /// invisible click blockers. The intentional Hover hot-zone is added separately by EdgeWindow.
+    /// invisible click blockers. A positive contour inset keeps native input safely inside
+    /// antialiased edge pixels; a small negative value provides render-only antialiasing bleed.
+    /// The intentional Hover hot-zone is added separately by EdgeWindow.
     /// </summary>
     public static Rect[] BuildInputStripsRight(double windowWidth, double windowHeight,
-        double depth, double length)
+        double depth, double length, double contourInset = 0)
     {
         var shape = Calculate(windowWidth, windowHeight, depth, length);
-        var result = new List<Rect>((int)Math.Ceiling(shape.Bottom - shape.Top));
+        contourInset = double.IsFinite(contourInset) ? contourInset : 0;
+        var top = shape.Top + contourInset;
+        var bottomLimit = shape.Bottom - contourInset;
+        if (bottomLimit <= top)
+            return [];
 
-        for (var y = shape.Top; y < shape.Bottom - 0.001; y += InputStripHeight)
+        var result = new List<Rect>((int)Math.Ceiling(bottomLimit - top));
+
+        for (var y = top; y < bottomLimit - 0.001; y += InputStripHeight)
         {
-            var bottom = Math.Min(shape.Bottom, y + InputStripHeight);
+            var bottom = Math.Min(bottomLimit, y + InputStripHeight);
             // The left contour is monotonic toward the center and then monotonic away from it.
             // Taking the larger endpoint therefore under-approximates the curved silhouette for
             // the whole strip instead of accidentally claiming transparent pixels as input.
-            var left = Math.Max(LeftAt(shape, y), LeftAt(shape, bottom));
-            if (shape.Right - left > 0.01 && bottom - y > 0.01)
-                result.Add(new Rect(left, y, shape.Right - left, bottom - y));
+            var left = Math.Max(LeftAt(shape, y), LeftAt(shape, bottom)) + contourInset;
+            var right = shape.Right - contourInset;
+            if (right - left > 0.01 && bottom - y > 0.01)
+                result.Add(new Rect(left, y, right - left, bottom - y));
         }
 
         return result.ToArray();

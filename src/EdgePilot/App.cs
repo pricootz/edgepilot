@@ -15,6 +15,7 @@ public sealed class App : Application
     private TrayIcon? _tray;
     private NativeMenuItem? _settingsMenuItem;
     private NativeMenuItem? _toggleMenuItem;
+    private NativeMenuItem? _displayMenuItem;
     private NativeMenuItem? _exitMenuItem;
 
     public override void Initialize()
@@ -65,6 +66,17 @@ public sealed class App : Application
                 _exitMenuItem.Click += (_, _) => desktop.Shutdown();
                 menu.Items.Add(_settingsMenuItem);
                 menu.Items.Add(_toggleMenuItem);
+                if (OperatingSystem.IsWindows())
+                {
+                    _displayMenuItem = new NativeMenuItem
+                    {
+                        Header = Localization.T("tray.display"),
+                        Menu = new NativeMenu()
+                    };
+                    menu.Items.Add(_displayMenuItem);
+                    menu.NeedsUpdate += (_, _) => RefreshDisplayMenu(window);
+                    window.Opened += (_, _) => RefreshDisplayMenu(window);
+                }
                 menu.Items.Add(new NativeMenuItemSeparator());
                 menu.Items.Add(_exitMenuItem);
                 _tray = new TrayIcon { Icon = AppIcon.Load(), ToolTipText = "EdgePilot", Menu = menu, IsVisible = true };
@@ -85,6 +97,8 @@ public sealed class App : Application
                 if (_settingsMenuItem is null) return;
                 _settingsMenuItem.Header = Localization.T("tray.settings");
                 _toggleMenuItem!.Header = Localization.T("tray.toggle");
+                if (_displayMenuItem is not null)
+                    _displayMenuItem.Header = Localization.T("tray.display");
                 _exitMenuItem!.Header = Localization.T("tray.exit");
             };
             SingleInstance.Bind(() => Dispatcher.UIThread.Post(() => window.ShowSettings()));
@@ -116,5 +130,38 @@ public sealed class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void RefreshDisplayMenu(EdgeWindow window)
+    {
+        if (_displayMenuItem?.Menu is not { } submenu)
+            return;
+
+        submenu.Items.Clear();
+        foreach (var option in window.DisplayMenuOptions())
+        {
+            var item = new NativeMenuItem
+            {
+                Header = option.Caption,
+                ToggleType = MenuItemToggleType.Radio,
+                IsChecked = option.IsSelected
+            };
+            var target = option.Target;
+            item.Click += (_, _) =>
+            {
+                if (!window.MoveToDisplay(target))
+                    window.ShowSettings(Localization.T("display.currentUnavailable"));
+            };
+            submenu.Items.Add(item);
+        }
+
+        submenu.Items.Add(new NativeMenuItemSeparator());
+        var moveHere = new NativeMenuItem { Header = Localization.T("tray.moveHere") };
+        moveHere.Click += (_, _) =>
+        {
+            if (!window.MoveToCursorDisplay())
+                window.ShowSettings(Localization.T("display.currentUnavailable"));
+        };
+        submenu.Items.Add(moveHere);
     }
 }

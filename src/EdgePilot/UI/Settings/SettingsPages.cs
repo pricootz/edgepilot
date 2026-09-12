@@ -199,11 +199,32 @@ public sealed partial class SettingsWindow
             Card(
                 SectionTitle("◨", Localization.T("edge.positionTitle")),
                 Description(Localization.T("edge.positionDescription")),
-                _previewLayout),
+                _previewLayout,
+                Divider(),
+                SettingField(Localization.T("edge.displayLabel"), _display),
+                Description(Localization.T("edge.displayDescription")),
+                _useCurrentDisplayButton),
             Card(
                 SectionTitle("◌", Localization.T("edge.behaviorTitle")),
                 Description(Localization.T("edge.behaviorDescription")),
                 SegmentRow(_modeButtons)));
+    }
+
+    private Button BuildUseCurrentDisplayButton()
+    {
+        var button = new Button
+        {
+            Content = ButtonContent(FluentIconName.Target, Localization.T("display.useCurrent")),
+            Foreground = PrimaryBrush,
+            Background = Brushes.Transparent,
+            BorderBrush = ControlBorderBrush,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(13, 8),
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        RegisterActionButton(button, ActionButtonRole.Secondary);
+        button.Click += (_, _) => SelectCurrentDisplay();
+        return button;
     }
 
     private Control BuildMonitorPage()

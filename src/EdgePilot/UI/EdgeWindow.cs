@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using Path = Avalonia.Controls.Shapes.Path;
 using EdgePilot.Core;
@@ -24,6 +25,8 @@ public sealed class EdgeWindow : Window
     private const double ContentLengthPadding = 24;
     private const double VerticalContentDepthPadding = 12;
     private const double HorizontalContentDepthPadding = 8;
+    private const double NativeInputContourInset = 2;
+    private const double NativeVisualContourBleed = 2;
     private double ExpandedLength => StackHeight + ExpandedFlare * 2 + ContentLengthPadding * 2;
     private double ExpandedContentTop =>
         (WindowHeight - ExpandedLength) / 2 + ExpandedFlare + ContentLengthPadding;
@@ -44,6 +47,8 @@ public sealed class EdgeWindow : Window
     private readonly SystemMonitorService _monitor = new(new SystemMetricsProvider());
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer _cursorTimer;
+    private readonly DispatcherTimer _screenChangeTimer = new();
+    private readonly DispatcherTimer _displayHealthTimer = new();
 
     private readonly ExperimentalAcrylicBorder _notchAcrylicSurface;
     private readonly Path _notchShape;
@@ -63,6 +68,7 @@ public sealed class EdgeWindow : Window
 
     private readonly DispatcherTimer _foldTimer = new();
     private readonly DispatcherTimer _motionTimer = new();
+    private readonly DispatcherTimer _recoveryPreviewTimer = new();
     private readonly NotchSpring _spring = new();
     private readonly System.Diagnostics.Stopwatch _motionClock = new();
     private SystemSnapshot? _latestSnapshot;
@@ -72,12 +78,14 @@ public sealed class EdgeWindow : Window
     private bool _screensSubscribed;
     private bool _started;
     private bool _windowsVisualClickThroughReady;
+    private IReadOnlyList<DisplaySnapshot> _lastDisplays = Array.Empty<DisplaySnapshot>();
     private NotchDisplayMode _mode;
     private SettingsBackdrop _backdrop = SettingsBackdrop.Flat;
     private SettingsThemePreference _settingsTheme = SettingsThemePreference.System;
     private string? _selectedDrive;
     private bool _startAtLogin;
     private Language? _language;
+    private DisplayTarget? _displayTarget;
     public bool HasTray { get; set; }
     public event Action? ExitRequested;
     public event Action? PreferencesChanged;
@@ -86,6 +94,7 @@ public sealed class EdgeWindow : Window
     private int? _hoveredMetric;
 
     private readonly PlatformInputRegion? _inputRegion;
+    private readonly PlatformInputRegion? _windowsVisualRegion;
     private EdgeInputOverlayWindow? _windowsInputOverlay;
 
     public EdgeWindow()
@@ -104,6 +113,7 @@ public sealed class EdgeWindow : Window
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
 
         _inputRegion = OperatingSystem.IsLinux() ? new PlatformInputRegion(this) : null;
+        _windowsVisualRegion = OperatingSystem.IsWindows() ? new PlatformInputRegion(this) : null;
 
         _notchAcrylicSurface = new ExperimentalAcrylicBorder
         {
@@ -215,7 +225,33 @@ public sealed class EdgeWindow : Window
             UpdateNotchVisual();
             if (_spring.IsSettled) _motionTimer.Stop();
         };
+        _recoveryPreviewTimer.Interval = TimeSpan.FromMilliseconds(1600);
+        _recoveryPreviewTimer.Tick += (_, _) =>
+        {
+            _recoveryPreviewTimer.Stop();
+            if (_mode != NotchDisplayMode.Hover || _pinned || !_expanded)
+                return;
+            if (TryGetCursorLocal(out var point) && IsInteractive(point))
+                return;
+
+            _expanded = false;
+            SetHoveredMetric(null);
+            StartMotion(0);
+        };
         PointerPressed += OnPointerPressed;
+
+        _screenChangeTimer.Interval = TimeSpan.FromMilliseconds(600);
+        _screenChangeTimer.Tick += (_, _) =>
+        {
+            _screenChangeTimer.Stop();
+            ReconcileDisplays(force: true);
+        };
+
+        // Poll CCD at a deliberately low cadence so OS-reported display-path changes can trigger
+        // fallback and later restore the user's selected monitor even without an Avalonia event.
+        // Drivers may keep a physically powered-off monitor active; manual recovery covers that case.
+        _displayHealthTimer.Interval = TimeSpan.FromMilliseconds(1500);
+        _displayHealthTimer.Tick += (_, _) => ReconcileDisplays();
 
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
         _monitor.CaptureFailed += OnCaptureFailed;
@@ -240,7 +276,9 @@ public sealed class EdgeWindow : Window
         get
         {
             if (OperatingSystem.IsWindows())
-                return _windowsVisualClickThroughReady && _windowsInputOverlay?.IsReady == true;
+                return _windowsVisualClickThroughReady &&
+                       _windowsVisualRegion?.IsReady == true &&
+                       _windowsInputOverlay?.IsReady == true;
             if (OperatingSystem.IsLinux())
                 return _inputRegion?.IsReady == true;
             return true;
@@ -266,6 +304,7 @@ public sealed class EdgeWindow : Window
             }
 
             _windowsInputOverlay ??= new EdgeInputOverlayWindow(HandlePointerPressed);
+            _displayHealthTimer.Start();
         }
 
         if (_mode == NotchDisplayMode.Hidden)
@@ -285,6 +324,9 @@ public sealed class EdgeWindow : Window
         _cursorTimer.Stop();
         _foldTimer.Stop();
         _motionTimer.Stop();
+        _recoveryPreviewTimer.Stop();
+        _screenChangeTimer.Stop();
+        _displayHealthTimer.Stop();
         _lifetime.Cancel();
         _settingsWindow?.Close();
         if (_screensSubscribed) Screens.Changed -= OnScreensChanged;
@@ -292,14 +334,17 @@ public sealed class EdgeWindow : Window
         _monitor.CaptureFailed -= OnCaptureFailed;
 
         _windowsInputOverlay?.Dispose();
+        _windowsVisualRegion?.Dispose();
         _inputRegion?.Dispose();
         _lifetime.Dispose();
     }
 
     private void OnScreensChanged(object? sender, EventArgs e)
     {
-        Relocate();
-        UpdatePlatformInputRegion();
+        // Display drivers often emit a short burst while docking, rotating, or changing DPI.
+        // Reconcile once the topology has settled instead of jumping through intermediate layouts.
+        _screenChangeTimer.Stop();
+        _screenChangeTimer.Start();
     }
 
     private void OnSnapshotUpdated(SystemSnapshot snapshot)
@@ -653,6 +698,7 @@ public sealed class EdgeWindow : Window
 
     public NotchPreferences Preferences => new(_edge, _mode)
     {
+        Display = _displayTarget,
         SelectedDrive = _selectedDrive,
         StartAtLogin = _startAtLogin,
         Metrics = _metrics,
@@ -672,6 +718,7 @@ public sealed class EdgeWindow : Window
         _pinned = false;
         _edge = preferences.Edge;
         _mode = preferences.Mode;
+        _displayTarget = preferences.Display;
         _selectedDrive = preferences.SelectedDrive;
         _startAtLogin = preferences.StartAtLogin;
         _metrics = preferences.Metrics;
@@ -724,6 +771,114 @@ public sealed class EdgeWindow : Window
         if (_mode == NotchDisplayMode.Hidden && !HasTray) ShowSettings();
     }
 
+    public bool MoveToCursorDisplay()
+    {
+        if (!OperatingSystem.IsWindows() || !GetCursorPos(out var cursor))
+            return false;
+
+        var screens = Screens.All;
+        var screen = Screens.ScreenFromPoint(new PixelPoint(cursor.X, cursor.Y));
+        if (screen is null || screens.Count == 0)
+            return false;
+
+        var handle = screen.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        var index = -1;
+        for (var candidate = 0; candidate < screens.Count; candidate++)
+        {
+            var candidateHandle = screens[candidate].TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            if (ReferenceEquals(screens[candidate], screen) ||
+                (handle != IntPtr.Zero && candidateHandle == handle) ||
+                screens[candidate].Bounds == screen.Bounds)
+            {
+                index = candidate;
+                break;
+            }
+        }
+
+        if (index < 0)
+            return false;
+
+        var displays = DisplaySnapshot.FromScreens(screens);
+        return MoveToResolvedDisplay(
+            screens,
+            displays,
+            index,
+            DisplayTargetResolver.Capture(displays[index], displays));
+    }
+
+    internal IReadOnlyList<DisplayMenuOption> DisplayMenuOptions() =>
+        DisplayRecovery.MenuOptions(CurrentDisplays(), _displayTarget);
+
+    public bool MoveToDisplay(DisplayTarget? requestedTarget)
+    {
+        var screens = Screens.All;
+        if (screens.Count == 0)
+            return false;
+
+        var displays = DisplaySnapshot.FromScreens(screens);
+        var resolution = DisplayTargetResolver.Resolve(displays, requestedTarget);
+        if (resolution is null || resolution.Index < 0 || resolution.Index >= screens.Count)
+            return false;
+
+        var persistedTarget = requestedTarget is null
+            ? null
+            : DisplayTargetResolver.Capture(displays[resolution.Index], displays);
+        return MoveToResolvedDisplay(screens, displays, resolution.Index, persistedTarget);
+    }
+
+    private bool MoveToResolvedDisplay(IReadOnlyList<Screen> screens,
+        IReadOnlyList<DisplaySnapshot> displays, int index, DisplayTarget? persistedTarget)
+    {
+        if (index < 0 || index >= screens.Count || index >= displays.Count)
+            return false;
+
+        // This is an explicit recovery action. If the panel was fully hidden, make the result
+        // visible and usable instead of silently persisting a new off-screen location.
+        var preferences = DisplayRecovery.RevealOn(Preferences, persistedTarget);
+        try
+        {
+            SavePreferences?.Invoke(preferences);
+            ApplyPreferences(preferences);
+
+            if (!IsVisible)
+                return false;
+
+            var screen = screens[index];
+            var position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
+            Position = position;
+
+            if (!WindowsWindowPlacement.TryMoveAndVerify(this, position, screen.Bounds))
+                return false;
+
+            _windowsInputOverlay?.Sync(new Size(Width, Height), position);
+            if (!UpdatePlatformInputRegion())
+                return false;
+
+            _lastDisplays = displays.ToArray();
+            _settingsWindow?.UpdateDisplays(displays);
+            RevealRecoveryMove();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or
+                                   System.Security.SecurityException)
+        {
+            System.Diagnostics.Trace.WriteLine(ex);
+            return false;
+        }
+    }
+
+    private void RevealRecoveryMove()
+    {
+        if (_mode != NotchDisplayMode.Hover)
+            return;
+
+        _recoveryPreviewTimer.Stop();
+        _expanded = true;
+        SetHoveredMetric(null);
+        StartMotion(1);
+        _recoveryPreviewTimer.Start();
+    }
+
     public void ShowSettings(string? warning = null)
     {
         if (_settingsWindow is not null)
@@ -733,7 +888,7 @@ public sealed class EdgeWindow : Window
         }
         CancelFold();
         _settingsWindow = new SettingsWindow(Preferences, ApplyPreferences, warning,
-            drives: _latestSnapshot?.Drives, savePreferences: SavePreferences,
+            drives: _latestSnapshot?.Drives, displays: CurrentDisplays(), savePreferences: SavePreferences,
             exit: RequestExit, hasTray: HasTray, reopen: () => Dispatcher.UIThread.Post(() => ShowSettings()));
         _settingsWindow.Closed += (_, _) =>
         {
@@ -815,12 +970,15 @@ public sealed class EdgeWindow : Window
         return NotchLayout.ToScreen(new Rect(WindowWidth - depth, (WindowHeight - length) / 2, depth, length), _edge);
     }
 
-    private Rect[] ShapeInputRects()
+    private Rect[] ShapeInputRects() => ShapeInputRectsInside(0);
+
+    private Rect[] ShapeInputRectsInside(double contourInset)
     {
         var p = Math.Clamp(_expansion, 0, 1.025);
         var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
         var length = Lerp(CollapsedLength, ExpandedLength, p);
-        return EdgeNotchGeometry.BuildInputStripsRight(WindowWidth, WindowHeight, depth, length)
+        return EdgeNotchGeometry.BuildInputStripsRight(
+                WindowWidth, WindowHeight, depth, length, contourInset)
             .Select(rect => NotchLayout.ToScreen(rect, _edge))
             .ToArray();
     }
@@ -881,7 +1039,7 @@ public sealed class EdgeWindow : Window
         if (_mode == NotchDisplayMode.Hidden)
             return [];
 
-        var shape = ShapeInputRects();
+        var shape = ShapeInputRectsInside(NativeInputContourInset);
         var regions = new List<Rect>(shape.Length + 180);
         regions.AddRange(shape);
 
@@ -890,6 +1048,37 @@ public sealed class EdgeWindow : Window
             regions.AddRange(RoundedRectStrips(tooltip, 14));
 
         return regions.ToArray();
+    }
+
+    private Rect[] VisibleWindowRects()
+    {
+        if (_mode == NotchDisplayMode.Hidden)
+            return [];
+
+        // The visible HWND remains render-only, but constraining its native bounds is a second
+        // line of defence if a driver/compositor ever stops honouring WS_EX_TRANSPARENT. A small
+        // outward bleed keeps the antialiased Mica/Acrylic contour wholly inside the HWND region.
+        var visible = new List<Rect>(ShapeInputRectsInside(-NativeVisualContourBleed));
+        var tooltip = TooltipLiveRect();
+        if (tooltip.Width > 0 && tooltip.Height > 0)
+            visible.AddRange(RoundedRectStrips(tooltip, 14 - NativeVisualContourBleed));
+
+        var windowBounds = new Rect(new Size(Width, Height));
+        return visible
+            .Select(rect => Intersect(rect, windowBounds))
+            .Where(rect => rect.Width > 0 && rect.Height > 0)
+            .ToArray();
+    }
+
+    private static Rect Intersect(Rect first, Rect second)
+    {
+        var left = Math.Max(first.Left, second.Left);
+        var top = Math.Max(first.Top, second.Top);
+        var right = Math.Min(first.Right, second.Right);
+        var bottom = Math.Min(first.Bottom, second.Bottom);
+        return right > left && bottom > top
+            ? new Rect(left, top, right - left, bottom - top)
+            : default;
     }
 
     private static Rect[] RoundedRectStrips(Rect rect, double radius)
@@ -937,9 +1126,20 @@ public sealed class EdgeWindow : Window
         bool applied;
         if (OperatingSystem.IsWindows())
         {
-            if (!_windowsVisualClickThroughReady || _windowsInputOverlay is null)
+            // The managed Window can survive a native HWND replacement. Re-check the style here
+            // as well as on Opened so a recreated visual surface never becomes input-owning.
+            _windowsVisualClickThroughReady = WindowsVisualClickThrough.TryEnable(this);
+            if (!_windowsVisualClickThroughReady || _windowsVisualRegion is null ||
+                _windowsInputOverlay is null)
             {
                 DisableEdgeSurface("EdgePilot could not initialize the Windows input overlay.");
+                return false;
+            }
+
+            if (!_windowsVisualRegion.TryApply(
+                    VisibleWindowRects(), RenderScaling, new Size(Width, Height)))
+            {
+                DisableEdgeSurface("EdgePilot could not constrain the Windows visual surface.");
                 return false;
             }
 
@@ -984,13 +1184,45 @@ public sealed class EdgeWindow : Window
 
     private void Relocate()
     {
+        var screens = Screens.All;
+        var displays = DisplaySnapshot.FromScreens(screens);
+        _lastDisplays = displays;
+        Relocate(screens, displays);
+    }
+
+    private void Relocate(IReadOnlyList<Screen> screens, IReadOnlyList<DisplaySnapshot> displays)
+    {
         if (!IsVisible) return;
-        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var resolution = DisplayTargetResolver.Resolve(displays, _displayTarget);
+        var screen = resolution is not null && resolution.Index < screens.Count
+            ? screens[resolution.Index]
+            : Screens.Primary;
         if (screen is null) return;
+
+        if (_displayTarget is not null && resolution is not null &&
+            resolution.MatchKind != DisplayMatchKind.FallbackPrimary &&
+            DisplaySnapshot.Normalize(resolution.Display.StableId) is { } stableId)
+            _displayTarget = _displayTarget with { StableId = stableId };
 
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
         _windowsInputOverlay?.Sync(new Size(Width, Height), Position);
     }
+
+    private void ReconcileDisplays(bool force = false)
+    {
+        var screens = Screens.All;
+        var displays = DisplaySnapshot.FromScreens(screens);
+        if (!force && _lastDisplays.SequenceEqual(displays))
+            return;
+
+        _lastDisplays = displays;
+        Relocate(screens, displays);
+        UpdatePlatformInputRegion();
+        _settingsWindow?.UpdateDisplays(displays);
+    }
+
+    private IReadOnlyList<DisplaySnapshot> CurrentDisplays() =>
+        DisplaySnapshot.FromScreens(Screens.All);
 
     private static TextBlock Text(string value, double size, FontWeight weight, string color) => new()
     {
