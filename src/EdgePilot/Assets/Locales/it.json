@@ -153,7 +153,7 @@
   "edge.displayLabel": "Monitor",
   "edge.displayDescription": "Automatico segue il monitor principale. Un monitor specifico viene ricordato tra i riavvii e le disconnessioni temporanee.",
   "display.automatic": "Automatico (monitor principale)",
-  "display.unnamed": "Monitor senza nome",
+  "display.fallbackName": "Monitor {0}",
   "display.primarySuffix": " · Principale",
   "display.caption": "{0} — {1} × {2} · {3}×{4}",
   "display.numberedCaption": "{0} · Monitor {1}",

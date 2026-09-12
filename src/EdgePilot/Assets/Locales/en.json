@@ -153,7 +153,7 @@
   "edge.displayLabel": "Display",
   "edge.displayDescription": "Automatic follows the primary display. A specific display is remembered across restarts and temporary disconnects.",
   "display.automatic": "Automatic (primary display)",
-  "display.unnamed": "Unnamed display",
+  "display.fallbackName": "Display {0}",
   "display.primarySuffix": " · Primary",
   "display.caption": "{0} — {1} × {2} · {3}×{4}",
   "display.numberedCaption": "{0} · Display {1}",

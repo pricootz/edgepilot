@@ -8,6 +8,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Platform;
 using EdgePilot.Core;
+using EdgePilot.Platform;
 
 namespace EdgePilot.UI;
 
@@ -21,9 +22,14 @@ public sealed record DisplayRect(int X, int Y, int Width, int Height)
 
 public sealed record DisplayTarget(string? SessionId, string? Name, DisplayRect WorkingArea, double Scaling)
 {
+    // The Windows CCD monitor device path survives HMONITOR changes and display rearrangements.
+    public string? StableId { get; init; }
+
     // Prevents one of two identical monitors from being mistaken for the other after unplugging.
     public bool NameWasUnique { get; init; }
 }
+
+public enum DisplayAvailability { Unknown, Available, Unavailable }
 
 public sealed record DisplaySnapshot(
     string? SessionId,
@@ -33,22 +39,56 @@ public sealed record DisplaySnapshot(
     double Scaling,
     bool IsPrimary)
 {
+    public string? StableId { get; init; }
+    public string? ConnectorName { get; init; }
+    public int? ConnectorNumber { get; init; }
+    public DisplayAvailability Availability { get; init; }
+
     public bool IsValid => Bounds.IsValid && WorkingArea.IsValid && double.IsFinite(Scaling) && Scaling > 0;
+    public bool IsAvailable => Availability != DisplayAvailability.Unavailable;
 
     public static DisplaySnapshot FromScreen(Screen screen)
     {
-        var handle = screen.TryGetPlatformHandle();
-        var sessionId = handle is null || handle.Handle == IntPtr.Zero
-            ? null
-            : $"{handle.HandleDescriptor}:{handle.Handle.ToInt64():X}";
+        var screens = new[] { screen };
+        return FromScreens(screens)[0];
+    }
 
-        return new DisplaySnapshot(
-            sessionId,
-            Normalize(screen.DisplayName),
-            DisplayRect.FromPixelRect(screen.Bounds),
-            DisplayRect.FromPixelRect(screen.WorkingArea),
-            screen.Scaling,
-            screen.IsPrimary);
+    public static IReadOnlyList<DisplaySnapshot> FromScreens(IReadOnlyList<Screen> screens)
+    {
+        var handles = screens.Select(screen => screen.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero).ToArray();
+        var windows = WindowsDisplayDiscovery.Capture(handles);
+        var result = new DisplaySnapshot[screens.Count];
+
+        for (var index = 0; index < screens.Count; index++)
+        {
+            var screen = screens[index];
+            var handle = screen.TryGetPlatformHandle();
+            var sessionId = handle is null || handle.Handle == IntPtr.Zero
+                ? null
+                : $"{handle.HandleDescriptor}:{handle.Handle.ToInt64():X}";
+            windows.TryGetValue(handles[index], out var metadata);
+
+            result[index] = new DisplaySnapshot(
+                sessionId,
+                Normalize(metadata?.FriendlyName) ?? Normalize(screen.DisplayName),
+                DisplayRect.FromPixelRect(screen.Bounds),
+                DisplayRect.FromPixelRect(screen.WorkingArea),
+                screen.Scaling,
+                screen.IsPrimary)
+            {
+                StableId = Normalize(metadata?.StableId),
+                ConnectorName = Normalize(metadata?.ConnectorName),
+                ConnectorNumber = metadata?.ConnectorNumber,
+                Availability = metadata?.IsAvailable switch
+                {
+                    true => DisplayAvailability.Available,
+                    false => DisplayAvailability.Unavailable,
+                    _ => DisplayAvailability.Unknown
+                }
+            };
+        }
+
+        return result;
     }
 
     internal static string? Normalize(string? value) =>
@@ -58,6 +98,7 @@ public sealed record DisplaySnapshot(
 public enum DisplayMatchKind
 {
     AutomaticPrimary,
+    StableId,
     SessionId,
     Name,
     Geometry,
@@ -79,6 +120,7 @@ public static class DisplayTargetResolver
             string.Equals(DisplaySnapshot.Normalize(candidate.Name), name, StringComparison.OrdinalIgnoreCase)) == 1;
         return new DisplayTarget(display.SessionId, name, display.WorkingArea, display.Scaling)
         {
+            StableId = NormalizeId(display.StableId),
             NameWasUnique = nameWasUnique
         };
     }
@@ -91,11 +133,26 @@ public static class DisplayTargetResolver
             .ToArray();
         if (valid.Length == 0) return null;
 
+        // If CCD can positively identify at least one usable target, exclude targets Windows has
+        // retained in the topology after power-off. If every status is unavailable, keep the full
+        // Avalonia topology as a fail-safe against a transient/native-query anomaly.
+        var available = valid.Where(entry => entry.Display.IsAvailable).ToArray();
+        if (available.Length > 0)
+            valid = available;
+
         var primary = valid.FirstOrDefault(entry => entry.Display.IsPrimary);
         if (primary == default) primary = valid[0];
 
         if (target is null)
             return Result(primary, DisplayMatchKind.AutomaticPrimary);
+
+        var stableId = NormalizeId(target.StableId);
+        if (stableId is not null)
+        {
+            var stable = valid.FirstOrDefault(entry =>
+                string.Equals(NormalizeId(entry.Display.StableId), stableId, StringComparison.OrdinalIgnoreCase));
+            if (stable != default) return Result(stable, DisplayMatchKind.StableId);
+        }
 
         var sessionId = DisplaySnapshot.Normalize(target.SessionId);
         if (sessionId is not null)
@@ -151,6 +208,8 @@ public static class DisplayTargetResolver
 
     private static bool Near(int current, int saved) => Math.Abs(current - saved) <= GeometryTolerance;
 
+    private static string? NormalizeId(string? value) => DisplaySnapshot.Normalize(value);
+
     private static long GeometryDistance(DisplayRect current, DisplayRect saved) =>
         Math.Abs((long)current.X - saved.X) +
         Math.Abs((long)current.Y - saved.Y) +
@@ -173,7 +232,7 @@ internal static class DisplaySelection
     public static DisplayOptions Build(IReadOnlyList<DisplaySnapshot> displays, DisplayTarget? selected)
     {
         var valid = displays
-            .Where(display => display.IsValid)
+            .Where(display => display.IsValid && display.IsAvailable)
             .OrderByDescending(display => display.IsPrimary)
             .ThenBy(display => display.Bounds.X)
             .ThenBy(display => display.Bounds.Y)
@@ -181,7 +240,17 @@ internal static class DisplaySelection
 
         var automatic = new DisplayChoice(null, Localization.T("display.automatic"), true);
         var choices = new List<DisplayChoice> { automatic };
-        var captions = valid.Select(Caption).ToArray();
+        var names = valid.Select((display, index) => Name(display, index + 1)).ToArray();
+        var nameCounts = names.GroupBy(name => name, StringComparer.CurrentCultureIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.CurrentCultureIgnoreCase);
+        var captions = valid.Select((display, index) =>
+        {
+            var name = names[index];
+            if (nameCounts[name] > 1)
+                name = Localization.T("display.numberedCaption", name,
+                    display.ConnectorNumber ?? index + 1);
+            return Caption(display, name);
+        }).ToArray();
         var captionCounts = captions.GroupBy(caption => caption, StringComparer.CurrentCultureIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.CurrentCultureIgnoreCase);
         var captionOrdinals = new Dictionary<string, int>(StringComparer.CurrentCultureIgnoreCase);
@@ -210,9 +279,11 @@ internal static class DisplaySelection
         return new DisplayOptions(choices, unavailable);
     }
 
-    private static string Caption(DisplaySnapshot display)
+    private static string Name(DisplaySnapshot display, int fallbackNumber) =>
+        display.Name ?? Localization.T("display.fallbackName", display.ConnectorNumber ?? fallbackNumber);
+
+    private static string Caption(DisplaySnapshot display, string name)
     {
-        var name = display.Name ?? Localization.T("display.unnamed");
         var primary = display.IsPrimary ? Localization.T("display.primarySuffix") : "";
         return Localization.T(
             "display.caption",

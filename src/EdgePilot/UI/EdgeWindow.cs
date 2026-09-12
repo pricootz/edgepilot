@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using Path = Avalonia.Controls.Shapes.Path;
 using EdgePilot.Core;
@@ -24,6 +25,7 @@ public sealed class EdgeWindow : Window
     private const double ContentLengthPadding = 24;
     private const double VerticalContentDepthPadding = 12;
     private const double HorizontalContentDepthPadding = 8;
+    private const double NativeInputContourInset = 2;
     private double ExpandedLength => StackHeight + ExpandedFlare * 2 + ContentLengthPadding * 2;
     private double ExpandedContentTop =>
         (WindowHeight - ExpandedLength) / 2 + ExpandedFlare + ContentLengthPadding;
@@ -45,6 +47,7 @@ public sealed class EdgeWindow : Window
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer _cursorTimer;
     private readonly DispatcherTimer _screenChangeTimer = new();
+    private readonly DispatcherTimer _displayHealthTimer = new();
 
     private readonly ExperimentalAcrylicBorder _notchAcrylicSurface;
     private readonly Path _notchShape;
@@ -73,6 +76,7 @@ public sealed class EdgeWindow : Window
     private bool _screensSubscribed;
     private bool _started;
     private bool _windowsVisualClickThroughReady;
+    private IReadOnlyList<DisplaySnapshot> _lastDisplays = Array.Empty<DisplaySnapshot>();
     private NotchDisplayMode _mode;
     private SettingsBackdrop _backdrop = SettingsBackdrop.Flat;
     private SettingsThemePreference _settingsTheme = SettingsThemePreference.System;
@@ -223,10 +227,14 @@ public sealed class EdgeWindow : Window
         _screenChangeTimer.Tick += (_, _) =>
         {
             _screenChangeTimer.Stop();
-            Relocate();
-            UpdatePlatformInputRegion();
-            _settingsWindow?.UpdateDisplays(CurrentDisplays());
+            ReconcileDisplays(force: true);
         };
+
+        // Some displays remain in Avalonia/Win32 screen enumeration after their power button is
+        // pressed and Windows emits no topology event. Poll CCD at a deliberately low cadence so
+        // targetAvailable can trigger fallback and later restore the user's selected monitor.
+        _displayHealthTimer.Interval = TimeSpan.FromMilliseconds(1500);
+        _displayHealthTimer.Tick += (_, _) => ReconcileDisplays();
 
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
         _monitor.CaptureFailed += OnCaptureFailed;
@@ -277,6 +285,7 @@ public sealed class EdgeWindow : Window
             }
 
             _windowsInputOverlay ??= new EdgeInputOverlayWindow(HandlePointerPressed);
+            _displayHealthTimer.Start();
         }
 
         if (_mode == NotchDisplayMode.Hidden)
@@ -297,6 +306,7 @@ public sealed class EdgeWindow : Window
         _foldTimer.Stop();
         _motionTimer.Stop();
         _screenChangeTimer.Stop();
+        _displayHealthTimer.Stop();
         _lifetime.Cancel();
         _settingsWindow?.Close();
         if (_screensSubscribed) Screens.Changed -= OnScreensChanged;
@@ -831,12 +841,15 @@ public sealed class EdgeWindow : Window
         return NotchLayout.ToScreen(new Rect(WindowWidth - depth, (WindowHeight - length) / 2, depth, length), _edge);
     }
 
-    private Rect[] ShapeInputRects()
+    private Rect[] ShapeInputRects() => ShapeInputRectsInside(0);
+
+    private Rect[] ShapeInputRectsInside(double contourInset)
     {
         var p = Math.Clamp(_expansion, 0, 1.025);
         var depth = Lerp(CollapsedDepth, ExpandedDepth, p);
         var length = Lerp(CollapsedLength, ExpandedLength, p);
-        return EdgeNotchGeometry.BuildInputStripsRight(WindowWidth, WindowHeight, depth, length)
+        return EdgeNotchGeometry.BuildInputStripsRight(
+                WindowWidth, WindowHeight, depth, length, contourInset)
             .Select(rect => NotchLayout.ToScreen(rect, _edge))
             .ToArray();
     }
@@ -897,7 +910,7 @@ public sealed class EdgeWindow : Window
         if (_mode == NotchDisplayMode.Hidden)
             return [];
 
-        var shape = ShapeInputRects();
+        var shape = ShapeInputRectsInside(NativeInputContourInset);
         var regions = new List<Rect>(shape.Length + 180);
         regions.AddRange(shape);
 
@@ -1000,21 +1013,45 @@ public sealed class EdgeWindow : Window
 
     private void Relocate()
     {
-        if (!IsVisible) return;
         var screens = Screens.All;
-        var displays = screens.Select(DisplaySnapshot.FromScreen).ToArray();
+        var displays = DisplaySnapshot.FromScreens(screens);
+        _lastDisplays = displays;
+        Relocate(screens, displays);
+    }
+
+    private void Relocate(IReadOnlyList<Screen> screens, IReadOnlyList<DisplaySnapshot> displays)
+    {
+        if (!IsVisible) return;
         var resolution = DisplayTargetResolver.Resolve(displays, _displayTarget);
         var screen = resolution is not null && resolution.Index < screens.Count
             ? screens[resolution.Index]
             : Screens.Primary;
         if (screen is null) return;
 
+        if (_displayTarget is not null && resolution is not null &&
+            resolution.MatchKind != DisplayMatchKind.FallbackPrimary &&
+            DisplaySnapshot.Normalize(resolution.Display.StableId) is { } stableId)
+            _displayTarget = _displayTarget with { StableId = stableId };
+
         Position = EdgePlacement.Calculate(screen, _edge, new Size(Width, Height));
         _windowsInputOverlay?.Sync(new Size(Width, Height), Position);
     }
 
+    private void ReconcileDisplays(bool force = false)
+    {
+        var screens = Screens.All;
+        var displays = DisplaySnapshot.FromScreens(screens);
+        if (!force && _lastDisplays.SequenceEqual(displays))
+            return;
+
+        _lastDisplays = displays;
+        Relocate(screens, displays);
+        UpdatePlatformInputRegion();
+        _settingsWindow?.UpdateDisplays(displays);
+    }
+
     private IReadOnlyList<DisplaySnapshot> CurrentDisplays() =>
-        Screens.All.Select(DisplaySnapshot.FromScreen).ToArray();
+        DisplaySnapshot.FromScreens(Screens.All);
 
     private static TextBlock Text(string value, double size, FontWeight weight, string color) => new()
     {

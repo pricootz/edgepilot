@@ -76,8 +76,14 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
     // keeps Hover working without stealing clicks from applications behind EdgePilot.
     var visibleCollapsed = VisibleInputRegions(window);
     var hotOnly = FindPoint(hot, point => !collapsedShape.Any(rect => rect.Contains(point)));
-    Check(visibleCollapsed.Length == collapsedShape.Length,
-        $"Windows collapsed input overlay contains only visible notch strips on {edge}");
+    Check(visibleCollapsed.Length > 0 && visibleCollapsed.Length <= collapsedShape.Length &&
+          visibleCollapsed.All(rect => collapsedShape.Any(shapeRect => shapeRect.Contains(rect))),
+        $"Windows collapsed input overlay stays conservatively inside notch strips on {edge}");
+    var contourOnly = FindPoint(shapeBounds, point =>
+        collapsedShape.Any(rect => rect.Contains(point)) &&
+        !visibleCollapsed.Any(rect => rect.Contains(point)));
+    Check(contourOnly is not null,
+        $"Windows collapsed input overlay leaves a two-DIP contour safety margin on {edge}");
     Check(hotOnly is not null, $"collapsed hover has an invisible hot-zone sample on {edge}");
     Check(hotOnly is { } hotPoint && !visibleCollapsed.Any(rect => rect.Contains(hotPoint)),
         $"Windows input overlay excludes invisible hover hot-zone on {edge}");
@@ -132,8 +138,10 @@ foreach (var edge in Enum.GetValues<EdgeSide>())
         $"always mode exposes only the exact current notch without tooltip on {edge}");
     Check(always.All(windowRect.Contains), $"always region stays inside window on {edge}");
     Check(!Interactive(window, windowRect.Center), $"always mode transparent area passes through on {edge}");
-    Check(VisibleInputRegions(window).Length == alwaysShape.Length,
-        $"Windows always-mode overlay matches the exact visible notch on {edge}");
+    var visibleAlways = VisibleInputRegions(window);
+    Check(visibleAlways.Length > 0 && visibleAlways.Length <= alwaysShape.Length &&
+          visibleAlways.All(rect => alwaysShape.Any(shapeRect => shapeRect.Contains(rect))),
+        $"Windows always-mode overlay stays inside the visible notch on {edge}");
 
     // This point is inside the expanded notch's old rectangular bounds, but outside its curved
     // shoulder. It must never become an invisible input blocker.

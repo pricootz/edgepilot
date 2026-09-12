@@ -153,7 +153,7 @@
   "edge.displayLabel": "Écran",
   "edge.displayDescription": "Automatique suit l’écran principal. Un écran précis est mémorisé après un redémarrage ou une déconnexion temporaire.",
   "display.automatic": "Automatique (écran principal)",
-  "display.unnamed": "Écran sans nom",
+  "display.fallbackName": "Écran {0}",
   "display.primarySuffix": " · Principal",
   "display.caption": "{0} — {1} × {2} · {3}×{4}",
   "display.numberedCaption": "{0} · Écran {1}",

@@ -22,10 +22,10 @@ The appearance setting applies to the Settings window. The edge/notch retains it
 Controls where EdgePilot lives and how it appears.
 
 - **Position:** right, left, top or bottom edge, with a live visual preview.
-- **Display:** Automatic follows the primary display, or choose one connected display explicitly. Labels include resolution, scale and the primary-display marker.
+- **Display:** Automatic follows the primary available display, or choose one connected display explicitly. On Windows, labels use the monitor's EDID model name when available and otherwise fall back to `Display 1`, `Display 2`, and so on; every label also includes resolution, scale and the primary-display marker.
 - **Panel behavior:** on hover, always visible or hidden.
 
-An explicit display is matched across restarts using its current session identity, friendly name, working area and scale. If it is disconnected, EdgePilot temporarily uses the primary display but keeps the explicit choice; reconnecting it restores the target automatically. EdgePilot still creates one surface total, not one independent surface per display.
+An explicit display is matched across restarts using its stable Windows device identity when available, then its current session identity, unique friendly name, working area and scale. If it is disconnected or Windows reports the target unavailable after power-off, EdgePilot temporarily uses an available display but keeps the explicit choice; reconnecting or powering it on restores the target automatically. A low-frequency Windows check covers hardware that changes availability without emitting a normal screen-topology event. EdgePilot still creates one surface total, not one independent surface per display.
 
 ## Monitor
 

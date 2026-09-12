@@ -75,6 +75,16 @@ var studioTarget = DisplayTargetResolver.Capture(displays[1]);
 var exactDisplay = DisplayTargetResolver.Resolve(displays, studioTarget);
 Check(exactDisplay?.Index == 1 && exactDisplay.MatchKind == DisplayMatchKind.SessionId,
     "session display identity wins");
+var stableStudio = displays[1] with { StableId = "monitor#studio" };
+var stableTarget = DisplayTargetResolver.Capture(stableStudio, [displays[0], stableStudio]);
+var stableRestart = DisplayTargetResolver.Resolve(
+    [displays[0], stableStudio with
+    {
+        SessionId = "win:restarted", Name = "Renamed by driver",
+        WorkingArea = new DisplayRect(-4000, 100, 2560, 1400)
+    }], stableTarget);
+Check(stableRestart?.Index == 1 && stableRestart.MatchKind == DisplayMatchKind.StableId,
+    "stable display identity survives handle name and geometry changes");
 var restartedDisplays = new[]
 {
     displays[0] with { SessionId = "win:101" },
@@ -120,6 +130,41 @@ var missingTarget = new DisplayTarget("gone", "Projector", new DisplayRect(9000,
 var missingDisplay = DisplayTargetResolver.Resolve(displays, missingTarget);
 Check(missingDisplay?.Index == 0 && missingDisplay.MatchKind == DisplayMatchKind.FallbackPrimary,
     "missing selected display falls back to primary");
+var unavailableDisplays = new[]
+{
+    displays[0],
+    displays[1] with { Availability = DisplayAvailability.Unavailable }
+};
+var poweredOffDisplay = DisplayTargetResolver.Resolve(unavailableDisplays, studioTarget);
+Check(poweredOffDisplay?.Index == 0 && poweredOffDisplay.MatchKind == DisplayMatchKind.FallbackPrimary,
+    "powered-off selected display falls back to available primary");
+var restoredDisplay = DisplayTargetResolver.Resolve(displays, studioTarget);
+Check(restoredDisplay?.Index == 1, "selected display is restored when it becomes available again");
+var unavailablePrimary = new[]
+{
+    displays[0] with { Availability = DisplayAvailability.Unavailable },
+    displays[1] with { Availability = DisplayAvailability.Available }
+};
+Check(DisplayTargetResolver.Resolve(unavailablePrimary, null)?.Index == 1,
+    "automatic display avoids an unavailable primary");
+var unnamedDisplays = new[]
+{
+    Display("win:1", null!, 0, 0, 1920, 1080, primary: true) with { ConnectorNumber = 1 },
+    Display("win:2", null!, 1920, 0, 1920, 1080) with { ConnectorNumber = 2 }
+};
+var unnamedOptions = DisplaySelection.Build(unnamedDisplays, null);
+Check(unnamedOptions.Choices[1].Caption.Contains(Localization.T("display.fallbackName", 1)) &&
+      unnamedOptions.Choices[2].Caption.Contains(Localization.T("display.fallbackName", 2)) &&
+      unnamedOptions.Choices[1].Caption != unnamedOptions.Choices[2].Caption,
+    "unnamed displays receive useful numbered labels");
+var unavailableOptions = DisplaySelection.Build(unavailableDisplays, studioTarget);
+Check(!unavailableOptions.Selected.IsAvailable && unavailableOptions.Choices.Count == 3,
+    "powered-off selected display is retained as unavailable without a duplicate choice");
+Check(WindowsDisplayDiscovery.ConnectorNumber(@"\\.\DISPLAY12") == 12 &&
+      WindowsDisplayDiscovery.ConnectorNumber("connector") is null,
+    "Windows connector number parsing is defensive");
+Check(WindowsDisplayDiscovery.InteropLayoutIsExpected,
+    "Windows display-discovery interop layout matches Win32 structures");
 Check(DisplayTargetResolver.Resolve(Array.Empty<DisplaySnapshot>(), studioTarget) is null,
     "empty display topology is safe");
 _ = AppIcon.Load();
@@ -133,6 +178,9 @@ Check(ProductVersion.Value == informationalVersion && ProductVersion.Label == $"
 var window = new EdgeWindow();
 var screenChangeTimer = (DispatcherTimer)Field(window, "_screenChangeTimer")!;
 Check(screenChangeTimer.Interval == TimeSpan.FromMilliseconds(600), "display topology debounce interval is stable");
+var displayHealthTimer = (DispatcherTimer)Field(window, "_displayHealthTimer")!;
+Check(displayHealthTimer.Interval == TimeSpan.FromMilliseconds(1500),
+    "Windows display availability polling stays low-frequency");
 Call(window, "OnScreensChanged", null!, EventArgs.Empty);
 Check(screenChangeTimer.IsEnabled, "display topology change is debounced");
 screenChangeTimer.Stop();

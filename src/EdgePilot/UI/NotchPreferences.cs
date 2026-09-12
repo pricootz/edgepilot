@@ -79,7 +79,8 @@ public static class PreferenceStore
         if (value.Display is { } display &&
             (display.WorkingArea is null || !display.WorkingArea.IsValid ||
              !double.IsFinite(display.Scaling) || display.Scaling is < 0.25 or > 8 ||
-             display.SessionId?.Length > 512 || display.Name?.Length > 512))
+             display.SessionId?.Length > 512 || display.StableId?.Length > 2048 ||
+             display.Name?.Length > 512))
             throw new InvalidDataException(Localization.T("prefs.invalidDisplay"));
     }
 

@@ -153,7 +153,7 @@
   "edge.displayLabel": "Pantalla",
   "edge.displayDescription": "Automático sigue la pantalla principal. Una pantalla específica se recuerda tras reinicios y desconexiones temporales.",
   "display.automatic": "Automático (pantalla principal)",
-  "display.unnamed": "Pantalla sin nombre",
+  "display.fallbackName": "Pantalla {0}",
   "display.primarySuffix": " · Principal",
   "display.caption": "{0} — {1} × {2} · {3}×{4}",
   "display.numberedCaption": "{0} · Pantalla {1}",
