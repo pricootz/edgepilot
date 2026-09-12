@@ -20,6 +20,8 @@ Linux desktop-entry comments are generated for every shipped locale so desktop m
 
 `EdgeWindow` owns interaction state and rendering. `EdgeNotchGeometry` supplies the shared silhouette and clip; `NotchLayout` maps geometry and hit targets to all four edges while preserving upright text. `NotchSpring` retains motion continuity when a transition reverses. `MetricRing` and `DisplayFormat` present snapshots.
 
+Placement uses Avalonia's screen containing the Edge window, falling back to the primary screen, and recalculates when the desktop screen collection changes. v0.2 does not persist a display identity or expose selectable multi-monitor targeting.
+
 `SettingsWindow` owns Settings state and navigation. Page composition lives under `UI/Settings`, keeping General, Edge, Monitor, Behavior, Startup and About separate from reusable controls.
 
 `NotchPreferences` stores persisted interface state including edge, display mode, visible metrics, refresh, hover sensitivity, selected disk, language and Settings theme. `PreferenceStore` saves atomically and preserves compatibility with the original v0.2 language values.

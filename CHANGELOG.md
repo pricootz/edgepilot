@@ -1,6 +1,23 @@
 # Changelog
 
-## 0.2.0-preview.1 — 2026-09-11
+## 0.2.0-preview.2 — 2026-09-12
+
+A focused stabilization update for the v0.2 preview. It does not add a new product module.
+
+### Fixed
+
+- The packaged `--version` diagnostic reports the full preview identity instead of dropping the prerelease suffix.
+
+### Verification and documentation
+
+- Package CI now verifies that the version reported by Windows and Linux executables exactly matches the project version.
+- Settings regression coverage now includes the supported minimum window size and both responsive layout modes.
+- Native input-region coverage now explicitly runs at 100%, 125%, 150% and 200% scaling.
+- Documentation distinguishes basic display-topology awareness from selectable multi-monitor targeting, which is not implemented yet.
+- The screenshot inventory now identifies the Settings/overview captures that predate the v0.2 redesign instead of presenting them as current.
+- The publication review records the current public-release state and the remaining GitHub-managed historical attribution follow-up.
+
+## 0.2.0-preview.1 — 2026-09-12
 
 The v0.2 preview turns the initial system-monitor settings panel into a more coherent EdgePilot product surface and establishes localization as a first-class capability.
 

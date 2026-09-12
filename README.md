@@ -14,9 +14,9 @@
 No account, server or telemetry uploader is required. The interface ships in **Italian, English, French and Spanish**, follows the system language automatically, and can be extended with additional locale files.
 
 <p align="center">
-  <img src="docs/assets/windows11-notch.png" width="150" alt="Expanded EdgePilot notch showing system metrics on Windows 11">
+  <img src="docs/assets/windows11-notch.png" width="150" alt="Expanded EdgePilot Flat notch showing system metrics on Windows 11">
 </p>
-<p align="center">The current System module running from the screen edge.</p>
+<p align="center">The System module using the Flat surface from the screen edge.</p>
 
 ## v0.2 at a glance
 
@@ -96,7 +96,7 @@ python scripts/check_repository.py
 - Current packages target **x64**. macOS, ARM packages and headless SSH sessions are not supported targets.
 - Linux transparency, positioning and tray visibility depend on the desktop/compositor. A GNOME AppIndicator extension may be needed.
 - The current Linux desktop path uses X11/XWayland input regions; Avalonia's native Wayland backend is not enabled by this project.
-- Display scaling, multiple monitors and login behavior still need broader real-desktop testing.
+- Display scaling, display-topology changes and login behavior still need broader real-desktop testing. Selectable multi-monitor targeting is not implemented yet.
 - Disk selection follows a drive letter or mount path, not a hardware serial number.
 - Network interface selection is automatic. Temperatures, GPU and fan readings are not implemented.
 - Packages are unsigned and updates are manual. This is not yet a stable release.

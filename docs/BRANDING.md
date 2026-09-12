@@ -20,13 +20,13 @@ CI regenerates the derived assets on Ubuntu and fails if the committed ICO or re
 
 ## Screenshots
 
-The Windows 11 screenshots are maintainer-supplied, unaltered application captures of the current preview:
+The Windows 11 gallery was captured for the initial v0.1 preview. It remains useful as a visual baseline, but it is not a complete representation of v0.2:
 
-- [Settings and expanded notch](assets/windows11-overview.png)
-- [Complete settings](assets/windows11-settings.png), including disk selection and start at login
-- [Expanded notch](assets/windows11-notch.png), with CPU, memory and disk enabled
-- [Collapsed pill](assets/windows11-pill.png)
+- [Settings and expanded notch](assets/windows11-overview.png) predates the v0.2 multi-page Settings redesign.
+- [Complete settings](assets/windows11-settings.png) predates the v0.2 multi-page Settings redesign.
+- [Expanded notch](assets/windows11-notch.png) still illustrates the supported Flat System surface.
+- [Collapsed pill](assets/windows11-pill.png) still illustrates the supported Flat System surface.
 
-The interface remains Italian. These captures replace the earlier Windows settings image.
+Do not use the old Settings/overview captures to claim the current v0.2 or Windows Glass appearance. Replace them with real unaltered captures of the redesigned Settings window under relevant Flat/Mica/Acrylic and Light/Dark combinations.
 
 Add Ubuntu captures when available, including light/dark settings themes and a collapsed/expanded notch pair. Avoid private hostnames and drive labels. A checked startup option in a screenshot does not replace verification after an actual login.
